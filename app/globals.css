@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  /* Paleta — Niara Register: sóbria, cartorial, sem gradiente */
+  --color-ink: #0F1B2B;        /* azul-marinho quase preto — texto principal */
+  --color-bone: #F7F6F2;       /* branco-osso — fundo base */
+  --color-deep: #1C2E44;       /* azul profundo — superfícies elevadas */
+  --color-brass: #8A6D3B;      /* bronze/latão — único accent, só em "prova" */
+  --color-slate: #4A5568;      /* cinza-ardósia — texto secundário, bordas */
+  --color-moss: #2D5F4C;       /* verde-musgo — status confirmado on-chain */
+
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-bone);
+    color: var(--color-ink);
+  }
+
+  body {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background-color: var(--color-brass);
+    color: var(--color-bone);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brass);
+    outline-offset: 2px;
+  }
+}
+
+/* régua cronológica à esquerda das entradas do livro-razão */
+.ledger-rule {
+  border-left: 1px solid color-mix(in srgb, var(--color-slate) 35%, transparent);
+}
