@@ -61,42 +61,61 @@ function descreverEvento(
 }
 
 async function processarRangeDeBlocos(fromBlock: number, toBlock: number): Promise<void> {
-  for (const oferta of config.ofertas) {
-    const logs = await provider.getLogs({
-      address: oferta.endereco,
-      fromBlock,
-      toBlock,
+  // Uma chamada só para todas as ofertas — eth_getLogs aceita uma lista de
+  // endereços. Evita 11 chamadas por range de blocos (uma por oferta), o que
+  // no plano gratuito da Alchemy (10 blocos por chamada) tornaria o backfill
+  // 11x mais lento e mais sujeito a limite de requisições por segundo.
+  const enderecoParaOferta = new Map(config.ofertas.map((o) => [o.endereco.toLowerCase(), o]));
+
+  // Vários logs costumam cair no mesmo bloco — busca o timestamp uma vez por
+  // bloco, não uma vez por log. O cache é local ao range para não crescer sem
+  // limite ao longo de um backfill longo; timestamp de bloco minerado nunca muda.
+  const timestampPorBloco = new Map<number, number>();
+  async function timestampDoBloco(numeroDoBloco: number): Promise<number> {
+    const emCache = timestampPorBloco.get(numeroDoBloco);
+    if (emCache !== undefined) return emCache;
+    const bloco = await provider.getBlock(numeroDoBloco);
+    const timestamp = bloco?.timestamp ?? 0;
+    timestampPorBloco.set(numeroDoBloco, timestamp);
+    return timestamp;
+  }
+
+  const logs = await provider.getLogs({
+    address: config.ofertas.map((o) => o.endereco),
+    fromBlock,
+    toBlock,
+  });
+
+  for (const log of logs) {
+    const oferta = enderecoParaOferta.get(log.address.toLowerCase());
+    if (!oferta) continue; // não deveria acontecer, mas não confia cegamente no retorno do RPC
+
+    let parsed: ethers.LogDescription | null;
+    try {
+      parsed = interfaceOferta.parseLog(log);
+    } catch {
+      continue; // log de um evento fora da nossa ABI mínima — ignora
+    }
+    if (!parsed) continue;
+
+    const ocorridoEm = new Date((await timestampDoBloco(log.blockNumber)) * 1000).toISOString();
+    const { tipoEvento, descricao } = descreverEvento(parsed, oferta);
+
+    await gravarRegistro({
+      fonte: FONTE,
+      tipo_evento: tipoEvento,
+      descricao,
+      tx_hash: log.transactionHash,
+      log_index: log.index,
+      endereco_contrato: oferta.endereco,
+      bloco: log.blockNumber,
+      ocorrido_em: ocorridoEm,
+      confirmado: true, // só chegamos aqui com o log já minerado (getLogs, não pending)
     });
 
-    for (const log of logs) {
-      let parsed: ethers.LogDescription | null;
-      try {
-        parsed = interfaceOferta.parseLog(log);
-      } catch {
-        continue; // log de um evento fora da nossa ABI mínima — ignora
-      }
-      if (!parsed) continue;
-
-      const bloco = await provider.getBlock(log.blockNumber);
-      const ocorridoEm = new Date((bloco?.timestamp ?? 0) * 1000).toISOString();
-      const { tipoEvento, descricao } = descreverEvento(parsed, oferta);
-
-      await gravarRegistro({
-        fonte: FONTE,
-        tipo_evento: tipoEvento,
-        descricao,
-        tx_hash: log.transactionHash,
-        log_index: log.index,
-        endereco_contrato: oferta.endereco,
-        bloco: log.blockNumber,
-        ocorrido_em: ocorridoEm,
-        confirmado: true, // só chegamos aqui com o log já minerado (getLogs, não pending)
-      });
-
-      console.log(
-        `[indexer] ${tipoEvento} — ${oferta.apelido} — bloco ${log.blockNumber} — ${log.transactionHash}`,
-      );
-    }
+    console.log(
+      `[indexer] ${tipoEvento} — ${oferta.apelido} — bloco ${log.blockNumber} — ${log.transactionHash}`,
+    );
   }
 }
 
