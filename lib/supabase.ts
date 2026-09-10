@@ -30,6 +30,7 @@ export type RegistroTransacao = {
   tipo_evento: string;
   descricao: string;
   tx_hash: string;
+  log_index: number;
   endereco_contrato: string;
   bloco: number;
   ocorrido_em: string;
