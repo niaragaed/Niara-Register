@@ -40,9 +40,13 @@ export type RegistroTransacao = {
 export type RegistroAssinatura = {
   id: string;
   documento_nome: string;
+  tipo_documento: string | null;
   hash_sha256: string;
   assinante_endereco: string;
   tx_hash: string | null;
+  log_index: number | null;
+  endereco_contrato: string | null;
+  bloco: number | null;
   assinado_em: string | null;
   status: "pendente" | "assinado_onchain";
 };
