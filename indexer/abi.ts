@@ -13,3 +13,8 @@ export const OFERTA_CAPTACAO_ABI = [
 
 // enum Estado { Aberta, EncerradaSucesso, EncerradaFalha } — em OfertaCaptacao.sol
 export const ESTADO_LABELS = ["Aberta", "EncerradaSucesso", "EncerradaFalha"] as const;
+
+// De niaragaed/niara-contracts-Register, src/registro/RegistroAssinaturas.sol
+export const REGISTRO_ASSINATURAS_ABI = [
+  "event DocumentoRegistrado(bytes32 indexed hashDocumento, address indexed assinante, string nomeDocumento, string tipoDocumento, uint256 timestamp)",
+];

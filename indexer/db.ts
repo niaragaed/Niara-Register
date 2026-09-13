@@ -30,6 +30,32 @@ export async function gravarRegistro(registro: NovoRegistro): Promise<void> {
   }
 }
 
+export type NovaAssinatura = {
+  documento_nome: string;
+  tipo_documento: string;
+  hash_sha256: string;
+  assinante_endereco: string;
+  tx_hash: string;
+  log_index: number;
+  endereco_contrato: string;
+  bloco: number;
+  assinado_em: string;
+  status: "assinado_onchain";
+};
+
+// onConflict em hash_sha256 — o próprio contrato só deixa registrar cada hash
+// uma vez, então essa trava replica a mesma garantia no banco (evita duplicar
+// se o indexer reprocessar o mesmo range de blocos depois de reiniciar).
+export async function gravarAssinatura(registro: NovaAssinatura): Promise<void> {
+  const { error } = await supabase
+    .from("registro_assinaturas")
+    .upsert(registro, { onConflict: "hash_sha256", ignoreDuplicates: true });
+
+  if (error) {
+    throw new Error(`Falha ao gravar assinatura (${registro.hash_sha256}): ${error.message}`);
+  }
+}
+
 export async function lerCheckpoint(fonte: string, fallback: number): Promise<number> {
   const { data, error } = await supabase
     .from("registro_checkpoints")

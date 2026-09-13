@@ -1,18 +1,43 @@
 import { ethers } from "ethers";
 import { config, type OfertaMonitorada } from "./config";
-import { OFERTA_CAPTACAO_ABI, ESTADO_LABELS } from "./abi";
-import { gravarRegistro, lerCheckpoint, salvarCheckpoint } from "./db";
+import { OFERTA_CAPTACAO_ABI, REGISTRO_ASSINATURAS_ABI, ESTADO_LABELS } from "./abi";
+import {
+  gravarRegistro,
+  gravarAssinatura,
+  lerCheckpoint,
+  salvarCheckpoint,
+} from "./db";
 
-const FONTE = "pmes";
+const FONTE_PMES = "pmes";
+const FONTE_ASSINATURAS = "assinaturas";
 
 const provider = new ethers.JsonRpcProvider(config.rpcUrl);
 const interfaceOferta = new ethers.Interface(OFERTA_CAPTACAO_ABI);
+const interfaceAssinaturas = new ethers.Interface(REGISTRO_ASSINATURAS_ABI);
 
 function enderecoCurto(endereco: string): string {
   return `${endereco.slice(0, 6)}...${endereco.slice(-4)}`;
 }
 
-function descreverEvento(
+// Cache local ao range de blocos sendo processado — timestamp de bloco
+// minerado nunca muda, então evita reconsultar o RPC pra cada log do mesmo
+// bloco. Escopo local (não global ao processo) mantém o consumo de memória
+// limitado ao tamanho do pedaço (BLOCK_RANGE_CHUNK), mesmo em backfills
+// longos de milhares de blocos.
+async function timestampDoBloco(
+  numeroBloco: number,
+  cache: Map<number, number>,
+): Promise<number> {
+  const emCache = cache.get(numeroBloco);
+  if (emCache !== undefined) return emCache;
+
+  const bloco = await provider.getBlock(numeroBloco);
+  const timestamp = bloco?.timestamp ?? 0;
+  cache.set(numeroBloco, timestamp);
+  return timestamp;
+}
+
+function descreverEventoPmes(
   parsed: ethers.LogDescription,
   oferta: OfertaMonitorada,
 ): { tipoEvento: string; descricao: string } {
@@ -60,25 +85,13 @@ function descreverEvento(
   }
 }
 
-async function processarRangeDeBlocos(fromBlock: number, toBlock: number): Promise<void> {
+async function processarRangeDeBlocosPmes(fromBlock: number, toBlock: number): Promise<void> {
   // Uma chamada só para todas as ofertas — eth_getLogs aceita uma lista de
-  // endereços. Evita 11 chamadas por range de blocos (uma por oferta), o que
+  // endereços. Evita N chamadas por range de blocos (uma por oferta), o que
   // no plano gratuito da Alchemy (10 blocos por chamada) tornaria o backfill
-  // 11x mais lento e mais sujeito a limite de requisições por segundo.
+  // N vezes mais lento e mais sujeito a limite de requisições por segundo.
   const enderecoParaOferta = new Map(config.ofertas.map((o) => [o.endereco.toLowerCase(), o]));
-
-  // Vários logs costumam cair no mesmo bloco — busca o timestamp uma vez por
-  // bloco, não uma vez por log. O cache é local ao range para não crescer sem
-  // limite ao longo de um backfill longo; timestamp de bloco minerado nunca muda.
-  const timestampPorBloco = new Map<number, number>();
-  async function timestampDoBloco(numeroDoBloco: number): Promise<number> {
-    const emCache = timestampPorBloco.get(numeroDoBloco);
-    if (emCache !== undefined) return emCache;
-    const bloco = await provider.getBlock(numeroDoBloco);
-    const timestamp = bloco?.timestamp ?? 0;
-    timestampPorBloco.set(numeroDoBloco, timestamp);
-    return timestamp;
-  }
+  const cacheTimestamp = new Map<number, number>();
 
   const logs = await provider.getLogs({
     address: config.ofertas.map((o) => o.endereco),
@@ -98,11 +111,12 @@ async function processarRangeDeBlocos(fromBlock: number, toBlock: number): Promi
     }
     if (!parsed) continue;
 
-    const ocorridoEm = new Date((await timestampDoBloco(log.blockNumber)) * 1000).toISOString();
-    const { tipoEvento, descricao } = descreverEvento(parsed, oferta);
+    const timestamp = await timestampDoBloco(log.blockNumber, cacheTimestamp);
+    const ocorridoEm = new Date(timestamp * 1000).toISOString();
+    const { tipoEvento, descricao } = descreverEventoPmes(parsed, oferta);
 
     await gravarRegistro({
-      fonte: FONTE,
+      fonte: FONTE_PMES,
       tipo_evento: tipoEvento,
       descricao,
       tx_hash: log.transactionHash,
@@ -119,24 +133,113 @@ async function processarRangeDeBlocos(fromBlock: number, toBlock: number): Promi
   }
 }
 
+async function processarRangeDeBlocosAssinaturas(
+  fromBlock: number,
+  toBlock: number,
+): Promise<void> {
+  const cacheTimestamp = new Map<number, number>();
+
+  const logs = await provider.getLogs({
+    address: config.registroAssinaturasEndereco,
+    fromBlock,
+    toBlock,
+  });
+
+  for (const log of logs) {
+    let parsed: ethers.LogDescription | null;
+    try {
+      parsed = interfaceAssinaturas.parseLog(log);
+    } catch {
+      continue;
+    }
+    if (!parsed || parsed.name !== "DocumentoRegistrado") continue;
+
+    const timestamp = await timestampDoBloco(log.blockNumber, cacheTimestamp);
+    const assinadoEm = new Date(timestamp * 1000).toISOString();
+
+    await gravarAssinatura({
+      documento_nome: parsed.args.nomeDocumento as string,
+      tipo_documento: parsed.args.tipoDocumento as string,
+      hash_sha256: parsed.args.hashDocumento as string,
+      assinante_endereco: parsed.args.assinante as string,
+      tx_hash: log.transactionHash,
+      log_index: log.index,
+      endereco_contrato: config.registroAssinaturasEndereco,
+      bloco: log.blockNumber,
+      assinado_em: assinadoEm,
+      status: "assinado_onchain",
+    });
+
+    console.log(
+      `[indexer] Documento registrado — "${parsed.args.nomeDocumento}" (${parsed.args.tipoDocumento}) — assinante ${enderecoCurto(parsed.args.assinante as string)} — bloco ${log.blockNumber} — ${log.transactionHash}`,
+    );
+  }
+}
+
+// Avança uma fonte (checkpoint independente) em pedaços de config.blockRangeChunk,
+// do último bloco processado até blocoAtual. Genérico o suficiente para PMEs e
+// Assinaturas — e para uma futura terceira fonte (Exchange), quando existir.
+async function avancarFonte(
+  fonte: string,
+  blocoAtual: number,
+  ultimoProcessado: number,
+  processar: (de: number, ate: number) => Promise<void>,
+): Promise<number> {
+  let atual = ultimoProcessado;
+  let de = atual + 1;
+
+  while (de <= blocoAtual) {
+    const ate = Math.min(de + config.blockRangeChunk - 1, blocoAtual);
+    await processar(de, ate);
+    await salvarCheckpoint(fonte, ate);
+    atual = ate;
+    de = ate + 1;
+  }
+
+  return atual;
+}
+
 async function loop(): Promise<void> {
-  let ultimoProcessado = await lerCheckpoint(FONTE, config.startBlock);
-  console.log(`[indexer] Niara-Register — fonte "${FONTE}" — retomando a partir do bloco ${ultimoProcessado}`);
-  console.log(`[indexer] monitorando ${config.ofertas.length} oferta(s):`, config.ofertas.map((o) => o.endereco));
+  let ultimoPmes = await lerCheckpoint(FONTE_PMES, config.startBlock);
+  let ultimoAssinaturas = await lerCheckpoint(
+    FONTE_ASSINATURAS,
+    config.startBlockAssinaturas,
+  );
+
+  console.log(
+    `[indexer] Niara-Register — fonte "${FONTE_PMES}" — retomando a partir do bloco ${ultimoPmes}`,
+  );
+  console.log(
+    `[indexer] monitorando ${config.ofertas.length} oferta(s):`,
+    config.ofertas.map((o) => o.endereco),
+  );
+  console.log(
+    `[indexer] Niara-Register — fonte "${FONTE_ASSINATURAS}" — retomando a partir do bloco ${ultimoAssinaturas}`,
+  );
+  console.log(
+    `[indexer] monitorando RegistroAssinaturas em ${config.registroAssinaturasEndereco}`,
+  );
 
   while (true) {
     try {
       const blocoAtual = await provider.getBlockNumber();
 
-      if (blocoAtual > ultimoProcessado) {
-        let de = ultimoProcessado + 1;
-        while (de <= blocoAtual) {
-          const ate = Math.min(de + config.blockRangeChunk - 1, blocoAtual);
-          await processarRangeDeBlocos(de, ate);
-          await salvarCheckpoint(FONTE, ate);
-          ultimoProcessado = ate;
-          de = ate + 1;
-        }
+      if (blocoAtual > ultimoPmes) {
+        ultimoPmes = await avancarFonte(
+          FONTE_PMES,
+          blocoAtual,
+          ultimoPmes,
+          processarRangeDeBlocosPmes,
+        );
+      }
+
+      if (blocoAtual > ultimoAssinaturas) {
+        ultimoAssinaturas = await avancarFonte(
+          FONTE_ASSINATURAS,
+          blocoAtual,
+          ultimoAssinaturas,
+          processarRangeDeBlocosAssinaturas,
+        );
       }
     } catch (erro) {
       // Nunca derruba o processo por um erro de rede/RPC pontual — o checkpoint
