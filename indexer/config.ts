@@ -64,6 +64,16 @@ export const config = {
   // por vez em alguns planos, ou milhares em outros) — processamos em pedaços pra nunca
   // estourar o limite, independente do plano.
   blockRangeChunk: Number(process.env.BLOCK_RANGE_CHUNK ?? 500),
+
+  // Contrato próprio do Register (não do PMEs) — endereço fixo, deployado em
+  // niaragaed/niara-contracts-Register. Diferente de OFERTAS_ONCHAIN, este não
+  // muda por configuração externa, então fica com valor padrão aqui; a env var
+  // só existe para o caso raro de um redeploy do contrato.
+  registroAssinaturasEndereco: (process.env.REGISTRO_ASSINATURAS_ENDERECO ??
+    "0x5627857ee73f37d6da96530ed08c07339dd9d93a") as `0x${string}`,
+  // Bloco do deploy do RegistroAssinaturas na Sepolia (ver
+  // niara-contracts-Register/broadcast/DeployRegistro.s.sol/11155111/run-latest.json).
+  startBlockAssinaturas: Number(process.env.START_BLOCK_ASSINATURAS ?? 11691290),
 };
 
 if (config.ofertas.length === 0) {
