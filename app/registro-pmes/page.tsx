@@ -1,7 +1,7 @@
 import { LedgerEntry } from "@/components/ledger-entry";
 import { supabase, supabaseConfigurado } from "@/lib/supabase";
 import type { RegistroTransacao } from "@/lib/supabase";
-
+export const dynamic = "force-dynamic";
 export default async function RegistroPmesPage() {
   // Lê direto da tabela indexada pelo Register — nunca gerada na hora.
   // Se as variáveis de ambiente do Supabase ainda não estiverem configuradas
