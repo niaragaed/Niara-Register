@@ -2,7 +2,7 @@ import { VerificadorDeDocumento } from "./verificador";
 import { AssinaturaEntry } from "@/components/assinatura-entry";
 import { supabase, supabaseConfigurado } from "@/lib/supabase";
 import type { RegistroAssinatura } from "@/lib/supabase";
-
+export const dynamic = "force-dynamic";
 export default async function AssinaturaPage() {
   // Mesmo princípio do /registro-pmes: lê direto da tabela indexada, nunca
   // gera dado na hora. Se o Supabase não estiver configurado nesta instância,
