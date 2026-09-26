@@ -7,6 +7,8 @@ import {
   lerCheckpoint,
   salvarCheckpoint,
 } from "./db";
+import { Decimais } from "./decimais";
+import { montarDados } from "./eventos";
 
 const FONTE_PMES = "pmes";
 const FONTE_ASSINATURAS = "assinaturas";
@@ -14,6 +16,9 @@ const FONTE_ASSINATURAS = "assinaturas";
 const provider = new ethers.JsonRpcProvider(config.rpcUrl);
 const interfaceOferta = new ethers.Interface(OFERTA_CAPTACAO_ABI);
 const interfaceAssinaturas = new ethers.Interface(REGISTRO_ASSINATURAS_ABI);
+
+// Vive pelo processo inteiro: cada token é consultado uma vez só.
+const decimais = new Decimais(provider);
 
 function enderecoCurto(endereco: string): string {
   return `${endereco.slice(0, 6)}...${endereco.slice(-4)}`;
@@ -37,13 +42,22 @@ async function timestampDoBloco(
   return timestamp;
 }
 
-function descreverEventoPmes(
+// O texto gerado aqui é exatamente o de antes. O que mudou é a origem do número
+// de casas decimais: vem de decimals() do próprio token, não de um 18 fixo.
+// Como MockBRL e os 11 ParticipacaoToken usam 18, a saída é idêntica hoje — a
+// diferença só apareceria num token futuro com outra precisão, que antes seria
+// formatado errado em silêncio.
+async function descreverEventoPmes(
   parsed: ethers.LogDescription,
   oferta: OfertaMonitorada,
-): { tipoEvento: string; descricao: string } {
+  decimais: Decimais,
+): Promise<{ tipoEvento: string; descricao: string }> {
+  const emMoeda = async (v: unknown) =>
+    ethers.formatUnits(v as bigint, await decimais.daMoeda(oferta.endereco));
+
   switch (parsed.name) {
     case "Aporte": {
-      const valor = ethers.formatUnits(parsed.args.valor as bigint, 18);
+      const valor = await emMoeda(parsed.args.valor);
       return {
         tipoEvento: "Aporte",
         descricao: `${oferta.apelido} — investidor ${enderecoCurto(parsed.args.investidor as string)} aportou ${valor} MockBRL`,
@@ -51,7 +65,7 @@ function descreverEventoPmes(
     }
     case "OfertaEncerrada": {
       const resultado = ESTADO_LABELS[Number(parsed.args.resultado)] ?? "Desconhecido";
-      const total = ethers.formatUnits(parsed.args.totalArrecadado as bigint, 18);
+      const total = await emMoeda(parsed.args.totalArrecadado);
       return {
         tipoEvento: "Oferta encerrada",
         descricao: `${oferta.apelido} — encerrada (${resultado}), total arrecadado ${total} MockBRL`,
@@ -60,21 +74,22 @@ function descreverEventoPmes(
     case "OfertaCancelada":
       return { tipoEvento: "Oferta cancelada", descricao: `${oferta.apelido} — oferta cancelada` };
     case "CotasResgatadas": {
-      const cotas = ethers.formatUnits(parsed.args.cotas as bigint, 18);
+      const casas = await decimais.doTokenDeCotas(oferta.endereco, oferta.token);
+      const cotas = ethers.formatUnits(parsed.args.cotas as bigint, casas);
       return {
         tipoEvento: "Resgate de cotas",
         descricao: `${oferta.apelido} — investidor ${enderecoCurto(parsed.args.investidor as string)} resgatou ${cotas} cotas`,
       };
     }
     case "RecursosLiberados": {
-      const valorEmissor = ethers.formatUnits(parsed.args.valorEmissor as bigint, 18);
+      const valorEmissor = await emMoeda(parsed.args.valorEmissor);
       return {
         tipoEvento: "Recursos liberados",
         descricao: `${oferta.apelido} — ${valorEmissor} MockBRL liberados ao emissor`,
       };
     }
     case "Reembolso": {
-      const valor = ethers.formatUnits(parsed.args.valor as bigint, 18);
+      const valor = await emMoeda(parsed.args.valor);
       return {
         tipoEvento: "Reembolso",
         descricao: `${oferta.apelido} — investidor ${enderecoCurto(parsed.args.investidor as string)} reembolsado em ${valor} MockBRL`,
@@ -113,7 +128,8 @@ async function processarRangeDeBlocosPmes(fromBlock: number, toBlock: number): P
 
     const timestamp = await timestampDoBloco(log.blockNumber, cacheTimestamp);
     const ocorridoEm = new Date(timestamp * 1000).toISOString();
-    const { tipoEvento, descricao } = descreverEventoPmes(parsed, oferta);
+    const { tipoEvento, descricao } = await descreverEventoPmes(parsed, oferta, decimais);
+    const dados = await montarDados(parsed, oferta, decimais);
 
     await gravarRegistro({
       fonte: FONTE_PMES,
@@ -125,6 +141,7 @@ async function processarRangeDeBlocosPmes(fromBlock: number, toBlock: number): P
       bloco: log.blockNumber,
       ocorrido_em: ocorridoEm,
       confirmado: true, // só chegamos aqui com o log já minerado (getLogs, não pending)
+      dados,
     });
 
     console.log(

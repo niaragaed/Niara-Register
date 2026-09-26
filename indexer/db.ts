@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { config } from "./config";
+import type { DadosEvento } from "./eventos";
 
 // Client com a service role key — o indexer precisa gravar direto no Postgres,
 // contornando qualquer RLS que exista pro client público do site. Nunca reusar
@@ -16,6 +17,12 @@ export type NovoRegistro = {
   bloco: number;
   ocorrido_em: string;
   confirmado: boolean;
+  /**
+   * Forma estruturada do evento (ver eventos.ts). Null para evento fora da ABI
+   * mínima — a exibição tem fallback. A `descricao` continua sendo gravada do
+   * mesmo jeito, em paralelo.
+   */
+  dados: DadosEvento | null;
 };
 
 // onConflict em (tx_hash, log_index) — garante idempotência: se o indexer cair e

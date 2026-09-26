@@ -19,8 +19,46 @@ function required(name: string): string {
 export type OfertaMonitorada = {
   endereco: `0x${string}`;
   token: `0x${string}` | null;
+  /**
+   * Número da oferta, vindo do mapa explícito abaixo — NÃO da posição em
+   * OFERTAS_ONCHAIN. `null` para endereço fora do mapa.
+   */
+  numero: number | null;
   apelido: string;
 };
+
+/**
+ * Número de cada oferta, fixado por endereço.
+ *
+ * Antes o número saía da posição em OFERTAS_ONCHAIN, o que tornava a numeração
+ * refém da ordem de uma variável de ambiente: reordenar a env var renumeraria
+ * ofertas já gravadas no ledger e faria as linhas antigas apontarem para a
+ * oferta errada. Com o mapa explícito o número é uma propriedade do endereço.
+ *
+ * Os números aqui são exatamente os que já aparecem nas descrições gravadas
+ * (oferta-1 … oferta-11), então nada muda no que já está no banco.
+ *
+ * Endereço novo que ainda não esteja aqui: `numero` fica null, `dados` grava
+ * ofertaNumero null e a exibição lida com isso — nada quebra. Ao adicionar uma
+ * oferta, acrescente a linha aqui também.
+ */
+const NUMERO_POR_OFERTA: Record<string, number> = {
+  "0xd4ac69a4c7bfdc5e85c0e0da76ce12a1552b2704": 1,
+  "0xcb5b8d945996114f781dd729f229638192d18258": 2,
+  "0xdd9a14c221c6d9e2cf33c56d8a4bf7c8bdfaf938": 3,
+  "0x29f10569644871bcd57e442e8802434d963688d9": 4,
+  "0xfaa7946221f4a1d66c1b172bed79cf37ca003261": 5,
+  "0xa60119428905fdf66bf967de90a2f892985d99b2": 6,
+  "0xe4e7c347823f648abba73b31855e2fc1d7fe2fb1": 7,
+  "0x4378e93588603385b1a51b74c06c0a9fcfc66a16": 8,
+  "0xd720e3e0f53b7ba278a2bee99da7f0edd1f14b9c": 9,
+  "0xaef8c045caabe0f283bd92893031f4f2644d534f": 10,
+  "0x7ea155f38acb1b7c119769a21988feeb21388e57": 11,
+};
+
+export function numeroDaOferta(endereco: string): number | null {
+  return NUMERO_POR_OFERTA[endereco.toLowerCase()] ?? null;
+}
 
 // Mesmo formato usado pelo niara-PMEs: "token1:oferta1;token2:oferta2;...".
 // Aceita também só o endereço da oferta sozinho ("oferta1;oferta2"), caso você
@@ -42,10 +80,18 @@ function parseOfertas(value: string): OfertaMonitorada[] {
         throw new Error(`Endereço de token inválido em OFERTAS_ONCHAIN: "${par}"`);
       }
 
+      // O apelido (que vai para a descricao) passa a seguir o mapa também, para
+      // descricao e dados nunca divergirem. Hoje o mapa tem exatamente os mesmos
+      // números das posições, então o texto gravado continua idêntico; a posição
+      // só é usada como último recurso, para endereço fora do mapa.
+      const numero = numeroDaOferta(oferta);
+      const curto = `${oferta.slice(0, 6)}...${oferta.slice(-4)}`;
+
       return {
         endereco: oferta as `0x${string}`,
         token: (token as `0x${string}`) ?? null,
-        apelido: `oferta-${i + 1} (${oferta.slice(0, 6)}...${oferta.slice(-4)})`,
+        numero,
+        apelido: `oferta-${numero ?? i + 1} (${curto})`,
       };
     });
 }
