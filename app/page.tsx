@@ -1,33 +1,43 @@
 import Link from "next/link";
+import { NiaraGlobe } from "@/components/niara-globe";
 
 export default function HomePage() {
   return (
     <div className="mx-auto max-w-5xl px-6">
       <section className="border-b border-slate/15 py-20">
-        <p className="font-mono text-xs uppercase tracking-wide text-slate">
-          Niara Register
-        </p>
-        <h1 className="mt-4 max-w-2xl font-display text-4xl leading-[1.15] text-ink sm:text-5xl">
-          O livro de registros da Niara. Aberto, verificável, imutável.
-        </h1>
-        <p className="mt-5 max-w-xl font-body text-base leading-relaxed text-slate">
-          Cada transação e cada assinatura de documento dos produtos Niara
-          fica registrada na blockchain e espelhada aqui — com o hash e o
-          link para conferência independente no explorador da rede.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            href="/registro-pmes"
-            className="border border-ink bg-ink px-5 py-2.5 font-body text-sm text-bone transition-opacity hover:opacity-85"
-          >
-            Consultar registro do Niara-PMEs
-          </Link>
-          <Link
-            href="/assinatura"
-            className="border border-ink px-5 py-2.5 font-body text-sm text-ink transition-colors hover:bg-ink hover:text-bone"
-          >
-            Verificar uma assinatura
-          </Link>
+        <div className="lg:grid lg:grid-cols-12 lg:items-center lg:gap-8">
+          <div className="lg:col-span-7">
+            <p className="font-mono text-xs uppercase tracking-wide text-slate">
+              Niara Register
+            </p>
+            <h1 className="mt-4 max-w-2xl font-display text-4xl leading-[1.15] text-ink sm:text-5xl lg:text-[2.5rem]">
+              O livro de registros da Niara.{" "}
+              <span className="lg:block">Aberto, verificável, imutável.</span>
+            </h1>
+            <p className="mt-5 max-w-xl font-body text-base leading-relaxed text-slate">
+              Cada transação e cada assinatura de documento dos produtos Niara
+              fica registrada na blockchain e espelhada aqui — com o hash e o
+              link para conferência independente no explorador da rede.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/registro-pmes"
+                className="border border-ink bg-ink px-5 py-2.5 font-body text-sm text-bone transition-opacity hover:opacity-85"
+              >
+                Consultar registro do Niara-PMEs
+              </Link>
+              <Link
+                href="/assinatura"
+                className="border border-ink px-5 py-2.5 font-body text-sm text-ink transition-colors hover:bg-ink hover:text-bone"
+              >
+                Verificar uma assinatura
+              </Link>
+            </div>
+          </div>
+
+          <div className="hidden lg:col-span-5 lg:flex lg:items-center lg:justify-center">
+            <NiaraGlobe />
+          </div>
         </div>
       </section>
 

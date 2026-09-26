@@ -45,3 +45,15 @@
 .ledger-rule {
   border-left: 1px solid color-mix(in srgb, var(--color-slate) 35%, transparent);
 }
+
+/* ─── globo do hero (components/niara-globe.tsx) ─────────────────────────────
+   O vídeo tem fundo branco, herdado do GIF de marca. O multiply faz o branco
+   virar exatamente o bone do fundo (branco x bone = bone), então o quadro some
+   e sobra só o globo. Sob prefers-reduced-motion o elemento fica sem <source>
+   e exibe apenas o poster — a troca acontece no componente, não aqui. */
+.niara-globe__video {
+  display: block;
+  width: 340px;
+  height: 340px;
+  mix-blend-mode: multiply;
+}

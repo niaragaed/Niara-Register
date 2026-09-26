@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# arquivos de referência de marca (GIF/PNG usados só como base de design, não vão para produção)
+public/brand/*-ref.*
