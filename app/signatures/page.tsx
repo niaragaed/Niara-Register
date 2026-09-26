@@ -2,9 +2,14 @@ import { VerificadorDeDocumento } from "./verificador";
 import { AssinaturaEntry } from "@/components/assinatura-entry";
 import { supabase, supabaseConfigurado } from "@/lib/supabase";
 import type { RegistroAssinatura } from "@/lib/supabase";
+import { dictionaries } from "@/lib/i18n/dictionaries";
+import { getLocale } from "@/lib/i18n/get-locale";
 export const dynamic = "force-dynamic";
 export default async function AssinaturaPage() {
-  // Mesmo princípio do /registro-pmes: lê direto da tabela indexada, nunca
+  const locale = await getLocale();
+  const t = dictionaries[locale];
+
+  // Mesmo princípio do /sme-registry: lê direto da tabela indexada, nunca
   // gera dado na hora. Se o Supabase não estiver configurado nesta instância,
   // cai no estado vazio abaixo em vez de mostrar erro cru.
   const { data, error } = supabaseConfigurado
@@ -22,49 +27,62 @@ export default async function AssinaturaPage() {
     <div className="mx-auto max-w-5xl px-6 py-14">
       <header className="border-b border-slate/15 pb-8">
         <p className="font-mono text-xs uppercase tracking-wide text-slate">
-          Assinatura de documentos
+          {t.assinatura.eyebrow}
         </p>
         <h1 className="mt-3 font-display text-3xl text-ink">
-          Prove que um documento é original
+          {t.assinatura.title}
         </h1>
         <p className="mt-3 max-w-xl font-body text-sm leading-relaxed text-slate">
-          Calcule o hash SHA-256 de um documento e registre-o on-chain como
-          prova de existência e autoria. O documento nunca sai do seu
-          navegador — só o hash é registrado.
+          {t.assinatura.lede}
         </p>
       </header>
 
       <div className="mt-10">
-        <VerificadorDeDocumento />
+        {/* O verificador é o único client component que precisa de textos.
+            Recebe só a sua fatia do dicionário por props — com um consumidor
+            só, um provider de contexto seria peso sem ganho. */}
+        <VerificadorDeDocumento t={t.verificador} locale={locale} />
       </div>
 
       <div className="mt-6 border border-dashed border-moss/40 px-6 py-6">
         <p className="font-body text-sm text-slate">
-          O contrato de registro de assinaturas (<a href="https://sepolia.etherscan.io/address/0x5627857ee73f37d6da96530ed08c07339dd9d93a" target="_blank" rel="noreferrer" className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass">niara-contracts-Register</a>) está deployado e ativo na Sepolia. O hash é calculado no seu navegador e o registro on-chain acima é real — cada assinatura vira uma transação de verdade, verificável no Etherscan.
+          {t.assinatura.contratoPrefixo}
+          <a
+            href="https://sepolia.etherscan.io/address/0x5627857ee73f37d6da96530ed08c07339dd9d93a"
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            niara-contracts-Register
+          </a>
+          {t.assinatura.contratoSufixo}
         </p>
       </div>
 
       <div className="mt-14 border-t border-slate/15 pt-8">
         <h2 className="font-display text-xl text-ink">
-          Documentos já registrados
+          {t.assinatura.historicoTitulo}
         </h2>
         <p className="mt-2 max-w-xl font-body text-sm leading-relaxed text-slate">
-          Espelho de todos os documentos registrados via este contrato,
-          mais recentes primeiro.
+          {t.assinatura.historicoLede}
         </p>
 
         {registros.length > 0 ? (
           <div className="mt-6">
             {registros.map((registro) => (
-              <AssinaturaEntry key={registro.id} registro={registro} />
+              <AssinaturaEntry
+                key={registro.id}
+                registro={registro}
+                locale={locale}
+              />
             ))}
           </div>
         ) : (
           <div className="mt-6 border border-dashed border-slate/30 px-6 py-10">
             <p className="font-body text-sm text-slate">
               {indexadorDesconectado
-                ? "O indexador ainda não está conectado a um Postgres nesta instância. Isto não significa ausência de documentos — significa que a leitura ainda não foi ligada."
-                : "Nenhum documento registrado ainda."}
+                ? t.assinatura.desconectado
+                : t.assinatura.vazio}
             </p>
           </div>
         )}
