@@ -110,6 +110,33 @@ export const en = {
     verNaSepolia: "view on Sepolia",
   },
 
+  /**
+   * Frase de cada evento, montada a partir da coluna `dados`. Os marcadores
+   * {chave} são substituídos na exibição — endereços viram link truncado para o
+   * Etherscan, o resto entra como texto.
+   */
+  frases: {
+    investment:
+      "Investor {investidor} invested {valor} {moeda} in offering {oferta}",
+    offering_closed:
+      "Offering {oferta} {desfecho} — {totalArrecadado} {moeda} raised",
+    offering_cancelled: "Offering {oferta} was cancelled",
+    shares_redeemed:
+      "Investor {investidor} redeemed {cotas} shares in offering {oferta}",
+    funds_released:
+      "{valorEmissor} {moeda} released to issuer {emissor}, {taxa} {moeda} protocol fee ({protocolo}), in offering {oferta}",
+    refund:
+      "Investor {investidor} refunded {valor} {moeda} in offering {oferta}",
+  },
+
+  // Frase verbal inteira, não um adjetivo: as duas línguas constroem o
+  // encerramento de formas diferentes demais para um único molde.
+  desfechos: {
+    success: "closed successfully",
+    failure: "closed without reaching its target",
+    unknown: "closed with an undetermined outcome",
+  },
+
   entrada: {
     numeroPrefixo: "no.",
     confirmado: "confirmed on-chain",
@@ -297,6 +324,26 @@ export const pt: Dictionary = {
     erroJaRegistrado:
       "Esse hash já foi registrado por outra transação enquanto você preenchia o formulário.",
     verNaSepolia: "ver na Sepolia",
+  },
+
+  frases: {
+    investment:
+      "Investidor {investidor} aportou {valor} {moeda} na oferta {oferta}",
+    offering_closed:
+      "Oferta {oferta} {desfecho} — {totalArrecadado} {moeda} arrecadados",
+    offering_cancelled: "Oferta {oferta} foi cancelada",
+    shares_redeemed:
+      "Investidor {investidor} resgatou {cotas} cotas na oferta {oferta}",
+    funds_released:
+      "{valorEmissor} {moeda} liberados ao emissor {emissor}, {taxa} {moeda} de taxa do protocolo ({protocolo}), na oferta {oferta}",
+    refund:
+      "Investidor {investidor} reembolsado em {valor} {moeda} na oferta {oferta}",
+  },
+
+  desfechos: {
+    success: "encerrada com sucesso",
+    failure: "encerrada sem atingir a meta",
+    unknown: "encerrada com desfecho indeterminado",
   },
 
   entrada: {

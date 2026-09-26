@@ -2,6 +2,8 @@ import type { RegistroTransacao } from "@/lib/supabase";
 import { dictionaries, rotuloEvento } from "@/lib/i18n/dictionaries";
 import { formatarData } from "@/lib/i18n/formato";
 import type { Locale } from "@/lib/i18n/locale";
+import { lerDadosEvento } from "@/lib/dados-evento";
+import { FraseEvento } from "@/components/frase-evento";
 
 function truncarHash(hash: string) {
   if (hash.length <= 14) return hash;
@@ -17,15 +19,15 @@ export function LedgerEntry({
 }) {
   const t = dictionaries[locale];
 
-  // O rótulo vem do mapa por idioma. A `descricao` é gravada em português pelo
-  // indexer e nós não mexemos no banco, então ela só entra como fallback quando
-  // o tipo de evento não estiver mapeado.
-  const rotulo = rotuloEvento(t, registro.tipo_evento) ?? registro.descricao;
+  const rotulo = rotuloEvento(t, registro.tipo_evento) ?? registro.tipo_evento;
 
-  // Em português a descrição continua aparecendo ao lado do rótulo, que é o
-  // texto atual da página. Em inglês ela fica de fora: é texto em português
-  // vindo do banco e não há como traduzi-lo sem reescrever o indexer.
-  const detalhe = locale === "pt" ? registro.descricao : null;
+  // Caminho principal: a frase é montada a partir da coluna `dados`, em cada
+  // idioma, com valor, oferta e endereços. Fallback para as linhas anteriores à
+  // migration 003, que ainda têm `dados` nulo: em português sobra a `descricao`
+  // gravada pelo indexer; em inglês ela não serve (está em português), então
+  // fica só o rótulo do evento.
+  const dados = lerDadosEvento(registro.dados);
+  const detalhe = dados ? null : locale === "pt" ? registro.descricao : null;
 
   return (
     <div className="ledger-rule flex gap-5 py-5 pl-6">
@@ -37,6 +39,12 @@ export function LedgerEntry({
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <p className="font-body text-[15px] text-ink">
             {rotulo}
+            {dados && (
+              <span className="text-slate">
+                {" · "}
+                <FraseEvento dados={dados} locale={locale} />
+              </span>
+            )}
             {detalhe && <span className="text-slate"> · {detalhe}</span>}
           </p>
           <time className="font-mono text-xs text-slate">

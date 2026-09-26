@@ -35,6 +35,12 @@ export type RegistroTransacao = {
   bloco: number;
   ocorrido_em: string;
   confirmado: boolean;
+  /**
+   * Forma estruturada do evento, gravada pelo indexer (ver lib/dados-evento.ts).
+   * `unknown` porque vem de uma coluna jsonb: quem consome valida com
+   * `lerDadosEvento` antes de usar. Null nas linhas anteriores à migration 003.
+   */
+  dados: unknown;
 };
 
 export type RegistroAssinatura = {
