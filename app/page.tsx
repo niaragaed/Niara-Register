@@ -14,8 +14,11 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-6">
-      <section className="border-b border-slate/15 py-20">
-        <div className="lg:grid lg:grid-cols-12 lg:items-center lg:gap-8">
+      {/* py-10 abaixo de lg: com py-20 o CTA caía 31px abaixo da dobra em
+          360x800 (PT, o caso mais apertado). Reduzir o topo libera 40px e
+          mantém o globo nos 150px. A partir de lg o py-20 de sempre. */}
+      <section className="border-b border-slate/15 py-10 lg:py-20">
+        <div className="flex flex-col lg:grid lg:grid-cols-12 lg:items-center lg:gap-8">
           <div className="lg:col-span-7">
             <p className="font-mono text-xs uppercase tracking-wide text-slate">
               {t.home.eyebrow}
@@ -43,7 +46,10 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="hidden lg:col-span-5 lg:flex lg:items-center lg:justify-center">
+          {/* Um <video> só: abaixo de lg o `order-first` sobe o globo para cima
+              do título; a partir de lg o `lg:order-none` devolve a ordem do DOM
+              e ele volta para a coluna da direita. O tamanho muda só por CSS. */}
+          <div className="order-first mb-8 flex justify-center lg:order-none lg:col-span-5 lg:mb-0 lg:items-center">
             <NiaraGlobe />
           </div>
         </div>

@@ -51,9 +51,34 @@
    virar exatamente o bone do fundo (branco x bone = bone), então o quadro some
    e sobra só o globo. Sob prefers-reduced-motion o elemento fica sem <source>
    e exibe apenas o poster — a troca acontece no componente, não aqui. */
+/* Um único elemento em quatro tamanhos. 380px é o corte para os aparelhos mais
+   estreitos (360x800 e similares), onde o hero não fecha com o globo maior;
+   768 e 1024 são o md e o lg do Tailwind, que é onde o layout troca de coluna
+   única para o grid de 12. */
 .niara-globe__video {
   display: block;
-  width: 340px;
-  height: 340px;
+  width: 120px;
+  height: 120px;
   mix-blend-mode: multiply;
+}
+
+@media (min-width: 380px) {
+  .niara-globe__video {
+    width: 150px;
+    height: 150px;
+  }
+}
+
+@media (min-width: 768px) {
+  .niara-globe__video {
+    width: 220px;
+    height: 220px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .niara-globe__video {
+    width: 340px;
+    height: 340px;
+  }
 }
