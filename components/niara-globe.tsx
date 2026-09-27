@@ -17,13 +17,17 @@
  * O fundo branco do vídeo some no bone pelo mix-blend-mode em app/globals.css.
  */
 
+import { GloboAutoplay } from "@/components/globo-autoplay";
+
 const LADO = 340;
 
 const SEM_MOVIMENTO_REDUZIDO = "(prefers-reduced-motion: no-preference)";
 
 export function NiaraGlobe({ className }: { className?: string }) {
   return (
-    <div className={className}>
+    // O <video> abaixo é renderizado no servidor e entregue como children: o
+    // GloboAutoplay só pendura o efeito de autoplay do iOS em volta dele.
+    <GloboAutoplay className={className}>
       <video
         className="niara-globe__video"
         width={LADO}
@@ -36,17 +40,24 @@ export function NiaraGlobe({ className }: { className?: string }) {
         poster="/brand/niara-globe-poster.png"
         aria-hidden="true"
       >
-        <source
-          src="/brand/niara-globe.webm"
-          type="video/webm"
-          media={SEM_MOVIMENTO_REDUZIDO}
-        />
+        {/* MP4 PRIMEIRO, de propósito. O WebKit responde "probably" para
+            video/webm, escolhe essa fonte por ser a primeira e então trava sem
+            carregar — e o elemento não volta atrás para a fonte seguinte, então
+            sobrava o poster parado no iPhone. Com H.264 na frente todos os
+            navegadores pegam uma fonte que realmente toca. O webm fica como
+            reserva; custa 14 KB a menos, o que não paga o risco de ser o
+            primeiro. */}
         <source
           src="/brand/niara-globe.mp4"
           type="video/mp4"
           media={SEM_MOVIMENTO_REDUZIDO}
         />
+        <source
+          src="/brand/niara-globe.webm"
+          type="video/webm"
+          media={SEM_MOVIMENTO_REDUZIDO}
+        />
       </video>
-    </div>
+    </GloboAutoplay>
   );
 }
