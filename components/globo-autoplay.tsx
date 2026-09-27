@@ -18,6 +18,11 @@ import { useEffect, useRef, type ReactNode } from "react";
  * decodificado não pega. No recarregamento o vídeo vem do cache e por isso
  * funcionava — é a diferença que o relato descreve.
  *
+ * Também há uma rede de segurança para o `loop`: em alguns WebKit o vídeo chega
+ * ao fim e não reinicia sozinho, apesar do atributo. No evento `ended` a gente
+ * rebobina e manda tocar de novo. O atributo `loop` continua no elemento — ele
+ * resolve sozinho onde funciona, e quando funciona o `ended` nem dispara.
+ *
  * Sob prefers-reduced-motion o <video> não tem nenhum <source> que case, então
  * não há o que tocar: `play()` rejeita, o catch engole e o poster permanece.
  * Nada é baixado.
@@ -46,13 +51,22 @@ export function GloboAutoplay({
       void video.play().catch(() => {});
     };
 
+    // Rede de segurança do loop: só dispara onde o atributo `loop` falhou,
+    // porque num navegador que respeita o loop o `ended` não chega a ocorrer.
+    const reiniciar = () => {
+      video.currentTime = 0;
+      void video.play().catch(() => {});
+    };
+
     tentarTocar();
     video.addEventListener("loadeddata", tentarTocar);
     video.addEventListener("canplay", tentarTocar);
+    video.addEventListener("ended", reiniciar);
 
     return () => {
       video.removeEventListener("loadeddata", tentarTocar);
       video.removeEventListener("canplay", tentarTocar);
+      video.removeEventListener("ended", reiniciar);
     };
   }, []);
 
