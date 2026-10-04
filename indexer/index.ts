@@ -1,3 +1,4 @@
+import "./log-seguro";
 import { ethers } from "ethers";
 import { config, type OfertaMonitorada } from "./config";
 import { OFERTA_CAPTACAO_ABI, REGISTRO_ASSINATURAS_ABI, ESTADO_LABELS } from "./abi";
