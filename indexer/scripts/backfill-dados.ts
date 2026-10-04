@@ -14,6 +14,7 @@
  *   npx tsx scripts/backfill-dados.ts            # DRY-RUN, não grava nada
  *   npx tsx scripts/backfill-dados.ts --gravar   # grava de verdade
  */
+import "../log-seguro";
 import "dotenv/config";
 import { ethers } from "ethers";
 import { config, numeroDaOferta, type OfertaMonitorada } from "../config";
