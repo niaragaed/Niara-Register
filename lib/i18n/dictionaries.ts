@@ -48,6 +48,8 @@ export const en = {
     title: "Niara-SMEs transactions",
     lede:
       "A mirror of the transactions executed on the Niara-SMEs contracts on the Sepolia test network. Each entry points to a verifiable hash on Etherscan.",
+    notaNumeracao:
+      "Entries are numbered in the order the Register recorded them. Events indexed retroactively keep their original on-chain date.",
     vazio: "No transactions indexed yet.",
     desconectado:
       "The indexer is not connected to a Postgres database on this instance. This does not mean there are no transactions — it means the read path has not been switched on yet.",
@@ -281,6 +283,8 @@ export const pt: Dictionary = {
     title: "Transações do Niara-PMEs",
     lede:
       "Espelho das transações reais executadas nos contratos do Niara-PMEs na rede de testes Sepolia. Cada linha aponta para o hash verificável no Etherscan.",
+    notaNumeracao:
+      "A numeração segue a ordem em que o Register registrou cada evento. Eventos indexados retroativamente mantêm a data original on-chain.",
     vazio: "Nenhuma transação indexada ainda.",
     desconectado:
       "O indexador ainda não está conectado a um Postgres nesta instância. Isto não significa ausência de transações — significa que a leitura ainda não foi ligada.",
