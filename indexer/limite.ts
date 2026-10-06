@@ -12,6 +12,10 @@
  */
 
 export function ehLimiteDeTaxa(erro: unknown): boolean {
+  // Erro embrulhado (ex.: "Falha ao ler decimals()…" em tokens.ts) carrega o
+  // original em `cause`.
+  const causa = (erro as { cause?: unknown })?.cause;
+  if (causa && causa !== erro && ehLimiteDeTaxa(causa)) return true;
   const e = erro as {
     info?: { responseStatus?: string };
     error?: { code?: number; message?: string };

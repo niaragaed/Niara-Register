@@ -79,6 +79,8 @@ export type ResultadoCiclo = {
   emDia: boolean;
   /** Alguma das partes do ciclo terminou em erro. */
   falhou: boolean;
+  /** O lote normal especificamente terminou em erro (só após esgotar o backoff). */
+  falhouLoteNormal: boolean;
 };
 
 const interfaceOferta = new ethers.Interface(OFERTA_CAPTACAO_ABI);
@@ -96,11 +98,23 @@ export function criarIndexador(deps: {
   cfg: ConfigIndexador;
   dormir: (ms: number) => Promise<void>;
 }) {
-  const { rpc, tokens, banco, cfg, dormir } = deps;
+  const { rpc, banco, cfg, dormir } = deps;
   const orquestrador = cfg.orquestradorEndereco.toLowerCase();
   const enderecoAssinaturas = cfg.registroAssinaturasEndereco.toLowerCase();
   const opcoesBackoff: OpcoesBackoff = { ...cfg.backoff, dormir };
   const rede = <T,>(fn: () => Promise<T>, contexto: string) => comBackoff(fn, contexto, opcoesBackoff);
+
+  // Leituras de token (decimals, symbol, moeda(), token(), name/empresa) são
+  // eth_call no mesmo RPC: passam pelo mesmo backoff que getLogs e blockNumber.
+  // O cache de Tokens descarta a leitura que falhou, então a nova tentativa
+  // pergunta de novo à chain.
+  const tokens: LeitorTokens = {
+    daMoeda: (o) => rede(() => deps.tokens.daMoeda(o), `decimals da moeda de ${o}`),
+    simboloDaMoeda: (o) => rede(() => deps.tokens.simboloDaMoeda(o), `symbol da moeda de ${o}`),
+    moedaDaOferta: (o) => rede(() => deps.tokens.moedaDaOferta(o), `moeda() de ${o}`),
+    doTokenDeCotas: (o, t) => rede(() => deps.tokens.doTokenDeCotas(o, t), `decimals do token de ${o}`),
+    metadados: (t) => rede(() => deps.tokens.metadados(t), `metadados do token ${t}`),
+  };
 
   // Lista de ofertas monitoradas — carregada de registro_ofertas ao iniciar e
   // acrescida quando o orquestrador cria uma oferta nova.
@@ -471,6 +485,7 @@ export function criarIndexador(deps: {
 
   async function ciclo(): Promise<ResultadoCiclo> {
     let falhou = false;
+    let falhouLoteNormal = false;
 
     // 1. Lote normal: eventos novos de todas as fontes em dia, todo ciclo.
     try {
@@ -478,6 +493,7 @@ export function criarIndexador(deps: {
       await loteNormal(blocoAtual);
     } catch (erro) {
       falhou = true;
+      falhouLoteNormal = true;
       console.error("[indexer] erro no lote normal, tentando de novo no próximo ciclo:", erro);
     }
 
@@ -492,7 +508,7 @@ export function criarIndexador(deps: {
       }
     }
 
-    return { emDia: emDia(), falhou };
+    return { emDia: emDia(), falhou, falhouLoteNormal };
   }
 
   async function iniciar(): Promise<void> {

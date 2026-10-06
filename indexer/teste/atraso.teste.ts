@@ -8,7 +8,10 @@
  * nas bordas de pedaço e depois do ponto em que entram no lote. O RPC devolve
  * 429 em ~1 de cada 5 chamadas e, para um pedaço específico do atraso, 7
  * vezes seguidas (mais que as 6 tentativas do backoff), derrubando aquela
- * parte do ciclo. A chain cresce 3 blocos a cada ciclo.
+ * parte do ciclo. Também respondem 429, de forma intermitente, eth_blockNumber
+ * (1 em 3), getBlock (1 em 4) e as leituras de token (1 em 3; metade delas
+ * embrulhada como tokens.ts faz, com o 429 em `cause`). A chain cresce 3
+ * blocos a cada ciclo.
  *
  * Verifica:
  *  (a) um evento novo no topo da chain, criado durante a recuperação, é
@@ -98,6 +101,10 @@ const futuros: { bloco: number; criar: () => LogFalso }[] = [
 let topo = 2000;
 let chamadasGetLogs = 0;
 let erros429 = 0;
+const erros429PorTipo = { getLogs: 0, getBlockNumber: 0, getBlock: 0, tokens: 0 };
+let chamadasBlockNumber = 0;
+let chamadasGetBlock = 0;
+let chamadasTokens = 0;
 const cobertura = new Map<string, [number, number][]>();
 const falhasPorPedaco = new Map<string, number>();
 
@@ -115,6 +122,10 @@ function erro429(): Error {
 
 const rpc: Rpc = {
   async getBlockNumber() {
+    if (++chamadasBlockNumber % 3 === 1) {
+      erros429PorTipo.getBlockNumber++;
+      throw erro429();
+    }
     topo += 3; // a chain anda entre um ciclo e outro
     for (const f of futuros.filter((f) => f.bloco <= topo)) esperados.push(f.criar());
     futuros.splice(0, futuros.length, ...futuros.filter((f) => f.bloco > topo));
@@ -132,12 +143,14 @@ const rpc: Rpc = {
       if (n < 7) {
         falhasPorPedaco.set(chave, n + 1);
         erros429++;
+        erros429PorTipo.getLogs++;
         throw erro429();
       }
     }
     // Intermitente: ~1 em cada 5 chamadas.
     if (chamadasGetLogs % 5 === 2) {
       erros429++;
+      erros429PorTipo.getLogs++;
       throw erro429();
     }
 
@@ -148,16 +161,31 @@ const rpc: Rpc = {
     return logs.filter((l) => alvo.has(l.address) && l.blockNumber >= fromBlock && l.blockNumber <= toBlock);
   },
   async getBlock(numero) {
+    if (++chamadasGetBlock % 4 === 1) {
+      erros429PorTipo.getBlock++;
+      throw erro429();
+    }
     return { timestamp: 1_790_000_000 + numero * 12 };
   },
 };
 
+// 1 em cada 3 leituras de token responde 429 — alternando entre o erro cru do
+// ethers e o erro embrulhado por tokens.ts ("Falha ao ler …", com o 429 em cause).
+function talvez429<T>(descricao: string, valor: T): Promise<T> {
+  const n = ++chamadasTokens;
+  if (n % 3 === 1) {
+    erros429PorTipo.tokens++;
+    if (n % 2 === 0) return Promise.reject(erro429());
+    return Promise.reject(new Error(`Falha ao ler ${descricao}: limite`, { cause: erro429() }));
+  }
+  return Promise.resolve(valor);
+}
 const tokens: LeitorTokens = {
-  daMoeda: async () => 18,
-  simboloDaMoeda: async () => "mBRL",
-  moedaDaOferta: async () => MOEDA,
-  doTokenDeCotas: async () => 18,
-  metadados: async () => ({ nome: "Teste Participações", simbolo: "TST", empresa: "Empresa Teste" }),
+  daMoeda: () => talvez429("decimals()", 18),
+  simboloDaMoeda: () => talvez429("symbol()", "mBRL"),
+  moedaDaOferta: () => talvez429("moeda()", MOEDA),
+  doTokenDeCotas: () => talvez429("decimals() do token", 18),
+  metadados: () => talvez429("metadados", { nome: "Teste Participações", simbolo: "TST", empresa: "Empresa Teste" }),
 };
 
 // ── banco falso ──────────────────────────────────────────────────────────────────
@@ -242,11 +270,13 @@ let pmesNoMomento = 0;
 
 let ciclo = 0;
 let ciclosComFalha = 0;
+let ciclosComFalhaNoLoteNormal = 0;
 const ciclosAbortados: { ciclo: number; pmesAntes: number; pmesDepois: number; topo: number }[] = [];
 while (ciclo < 500) {
   ciclo++;
   const pmesAntes = indexador.checkpoints.pmes;
   const r = await indexador.ciclo();
+  if (r.falhouLoteNormal) ciclosComFalhaNoLoteNormal++;
   if (r.falhou) {
     ciclosComFalha++;
     ciclosAbortados.push({ ciclo, pmesAntes, pmesDepois: indexador.checkpoints.pmes, topo });
@@ -272,7 +302,23 @@ while (ciclo < 500) {
 logOriginal(`\nfim: ${ciclo} ciclos (${ciclosComFalha} com alguma parte abortada pelo 429), checkpoints ${JSON.stringify(indexador.checkpoints)}, topo ${topo}`);
 logOriginal(`getLogs: ${chamadasGetLogs} chamadas, ${erros429} respondidas com 429; espera simulada: backoff ${(esperaBackoffMs / 1000).toFixed(0)}s, espaçamento ${(esperaEspacamentoMs / 1000).toFixed(0)}s\n`);
 
-logOriginal("(a) evento novo no topo durante a recuperação");
+logOriginal(`429 por tipo de chamada: ${JSON.stringify(erros429PorTipo)}\n`);
+
+logOriginal("429 fora do getLogs");
+verificar(
+  erros429PorTipo.getBlockNumber > 0 && erros429PorTipo.getBlock > 0 && erros429PorTipo.tokens > 0,
+  `houve 429 em eth_blockNumber (${erros429PorTipo.getBlockNumber}), getBlock (${erros429PorTipo.getBlock}) e leituras de token (${erros429PorTipo.tokens})`,
+);
+verificar(
+  ciclosComFalhaNoLoteNormal === 0,
+  `nenhum ciclo teve o lote normal abortado (${ciclosComFalhaNoLoteNormal}) — todos esses 429 foram absorvidos pelo backoff`,
+);
+verificar(
+  ciclosComFalha === 1,
+  `o único ciclo com alguma parte abortada é o da rajada de 7× 429 no getLogs do atraso (${ciclosComFalha})`,
+);
+
+logOriginal("\n(a) evento novo no topo durante a recuperação");
 verificar(cicloEmQueApareceu === cicloDoEventoTopo + 1, `criado depois do ciclo ${cicloDoEventoTopo}, gravado no ciclo ${cicloEmQueApareceu}`);
 verificar(orqNoMomento < pmesNoMomento, `naquele momento o orquestrador ainda estava atrasado (orquestrador ${orqNoMomento} < pmes ${pmesNoMomento})`);
 

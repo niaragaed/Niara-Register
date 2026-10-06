@@ -63,7 +63,7 @@ export class Tokens {
       // Sem o dado não há como formatar sem inventar: deixa o erro subir para o
       // chamador decidir (o indexer registra e tenta de novo no próximo ciclo).
       this.cache.delete(chave);
-      throw new Error(`Falha ao ler ${descricao}: ${(erro as Error).message}`);
+      throw new Error(`Falha ao ler ${descricao}: ${(erro as Error).message}`, { cause: erro });
     });
     this.cache.set(chave, promessa);
     return promessa;
