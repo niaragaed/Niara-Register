@@ -44,6 +44,12 @@ export type MetadadosToken = {
   empresa: string | null;
 };
 
+/** O que o indexador usa dos tokens — o teste injeta uma versão falsa. */
+export type LeitorTokens = Pick<
+  Tokens,
+  "daMoeda" | "simboloDaMoeda" | "moedaDaOferta" | "doTokenDeCotas" | "metadados"
+>;
+
 export class Tokens {
   private readonly cache = new Map<string, Promise<unknown>>();
 

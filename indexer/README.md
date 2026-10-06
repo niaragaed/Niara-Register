@@ -31,9 +31,26 @@ Cada evento vira uma linha em `registro_transacoes`, idempotente por
 
 Em regime normal, as três fontes estão no mesmo bloco e cada ciclo faz **uma**
 chamada `eth_getLogs` com todos os endereços; os eventos são separados pelo
-endereço e os três checkpoints são salvos juntos. Uma fonte atrasada (a
-varredura inicial do orquestrador, ou um backfill) é recuperada em chamadas
-próprias, no máximo `CHUNKS_ATRASO_POR_CICLO` por ciclo.
+endereço e os três checkpoints são salvos juntos.
+
+Uma fonte atrasada (a varredura inicial do orquestrador, ou um backfill) é
+recuperada em chamadas próprias, **depois** do lote normal de cada ciclo: no
+máximo `CHUNKS_ATRASO_POR_CICLO` chamadas, espaçadas por `ATRASO_INTERVALO_MS`.
+Erro na recuperação não afeta o lote normal — os eventos novos continuam
+entrando a cada ciclo, e a recuperação retoma do ponto salvo no ciclo seguinte.
+
+Limite de taxa (HTTP 429 / "compute units per second"): o retry silencioso do
+ethers está desligado; cada chamada ao RPC passa por `limite.ts`, que espera
+1s, 2s, 4s… (teto 30s, até 6 tentativas) e registra uma linha de log a cada
+espera. Esgotadas as tentativas, só aquela parte do ciclo é abortada.
+
+## Teste
+
+`npm run teste` roda `teste/atraso.teste.ts`: RPC, tokens e banco falsos, em
+memória — não usa rede nem o Supabase. Simula uma recuperação longa com 429
+intermitente e uma rajada que esgota o backoff, e verifica que o lote normal
+grava eventos novos durante a recuperação e que, ao fim, não há lacuna nem
+duplicata.
 
 ## Rodando
 
@@ -62,7 +79,9 @@ ofertas e as linhas que seriam inseridas, com a conferência por oferta (aportes
 |---|---|---|
 | `POLL_INTERVAL_MS` | `30000` | intervalo entre ciclos |
 | `BLOCK_RANGE_CHUNK` | `500` | blocos por `eth_getLogs` (10 no plano free da Alchemy) |
-| `CHUNKS_ATRASO_POR_CICLO` | `200` | teto de chamadas por ciclo para atraso e backfill |
+| `CHUNKS_ATRASO_POR_CICLO` | `60` | teto de chamadas por ciclo para atraso e backfill |
+| `ATRASO_INTERVALO_MS` | `300` | pausa entre chamadas de atraso (~3/s, ~250 CU/s) |
+| `BACKOFF_TENTATIVAS` / `BACKOFF_BASE_MS` / `BACKOFF_TETO_MS` | `6` / `1000` / `30000` | backoff em 429 |
 | `START_BLOCK` | `0` | início da fonte `pmes` sem checkpoint |
 | `ORQUESTRADOR_ENDERECO` / `START_BLOCK_ORQUESTRADOR` | `0xde9c…96e5` / `11733723` | |
 | `REGISTRO_ASSINATURAS_ENDERECO` / `START_BLOCK_ASSINATURAS` | `0x5627…d93a` / `11691290` | |

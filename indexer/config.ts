@@ -13,27 +13,7 @@ function required(name: string): string {
   return value;
 }
 
-export type OfertaMonitorada = {
-  /** Sempre minúsculo — é a chave usada para casar com log.address. */
-  endereco: `0x${string}`;
-  token: `0x${string}` | null;
-  /** De registro_ofertas: 1–11 legadas, 12+ do orquestrador, em ordem de criação. */
-  numero: number;
-  apelido: string;
-  origem: "legado" | "orquestrador";
-  empresa: string | null;
-  bloco_criacao: number;
-  /**
-   * Backfill dos eventos anteriores à entrada da oferta no lote (só
-   * orquestrador). Pendente enquanto backfill_ate < backfill_alvo.
-   */
-  backfill_alvo: number | null;
-  backfill_ate: number | null;
-};
-
-export function apelidoDaOferta(endereco: string, numero: number): string {
-  return `oferta-${numero} (${endereco.slice(0, 6)}...${endereco.slice(-4)})`;
-}
+export type { OfertaMonitorada } from "./ofertas";
 
 export const config = {
   rpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${required("ALCHEMY_API_KEY")}`,
@@ -47,10 +27,19 @@ export const config = {
   // eth_getLogs tem limite de range no plano gratuito da Alchemy (10 blocos) —
   // processamos em pedaços pra nunca estourar o limite.
   blockRangeChunk: Number(process.env.BLOCK_RANGE_CHUNK ?? 500),
-  // Teto de chamadas eth_getLogs por ciclo para o trabalho atrasado (varredura
-  // do orquestrador e backfill de ofertas novas), para que o lote normal não
-  // fique parado enquanto o atraso é recuperado.
-  chunksAtrasoPorCiclo: Number(process.env.CHUNKS_ATRASO_POR_CICLO ?? 200),
+  // Trabalho atrasado (varredura do orquestrador, backfill de ofertas novas):
+  // no máximo CHUNKS_ATRASO_POR_CICLO chamadas por ciclo, espaçadas por
+  // ATRASO_INTERVALO_MS. O lote normal roda antes, em todo ciclo, e não depende
+  // disso. 300 ms ≈ 3 chamadas/s ≈ 250 CU/s, abaixo do limite de taxa do plano
+  // free da Alchemy mesmo somando o lote normal.
+  chunksAtrasoPorCiclo: Number(process.env.CHUNKS_ATRASO_POR_CICLO ?? 60),
+  atrasoIntervaloMs: Number(process.env.ATRASO_INTERVALO_MS ?? 300),
+  // Backoff em limite de taxa (429): 1s, 2s, 4s, 8s, 16s, 30s… até 6 tentativas.
+  backoff: {
+    tentativas: Number(process.env.BACKOFF_TENTATIVAS ?? 6),
+    baseMs: Number(process.env.BACKOFF_BASE_MS ?? 1_000),
+    tetoMs: Number(process.env.BACKOFF_TETO_MS ?? 30_000),
+  },
 
   // Contrato próprio do Register (não do PMEs) — endereço fixo, deployado em
   // niaragaed/niara-contracts-Register. A env var só existe para o caso raro de

@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ESTADO_LABELS } from "./abi";
-import type { OfertaMonitorada } from "./config";
-import type { Tokens } from "./tokens";
+import type { OfertaMonitorada } from "./ofertas";
+import type { LeitorTokens } from "./tokens";
 
 /**
  * Forma estruturada de cada evento do ledger, gravada na coluna `dados` (jsonb)
@@ -126,7 +126,7 @@ function desfechoDe(resultado: unknown): DadosOfferingClosed["desfecho"] {
 export async function montarDados(
   parsed: ethers.LogDescription,
   oferta: OfertaMonitorada,
-  tokens: Tokens,
+  tokens: LeitorTokens,
 ): Promise<DadosEvento | null> {
   const base: Base = {
     ofertaNumero: oferta.numero,
@@ -205,7 +205,7 @@ export async function montarDados(
 export async function montarDadosCriacao(
   parsed: ethers.LogDescription,
   oferta: OfertaMonitorada,
-  tokens: Tokens,
+  tokens: LeitorTokens,
 ): Promise<DadosOfferingCreated> {
   const casas = await tokens.daMoeda(oferta.endereco);
   const emMoeda = (v: unknown) => ethers.formatUnits(v as bigint, casas);
