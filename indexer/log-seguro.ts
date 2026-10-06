@@ -36,9 +36,15 @@ for (const metodo of metodos) {
 }
 
 // Erro não tratado: o handler padrão do Node escreve direto no stderr, sem
-// passar pelo console. Registrando aqui, ele passa pela máscara. Promessa
-// rejeitada sem catch vira uncaughtException no Node >= 15.
+// passar pelo console. Registrando aqui, ele passa pela máscara. Os dois
+// encerram o processo, como o Node faria por padrão: o Railway reinicia e o
+// checkpoint garante a retomada.
 process.on("uncaughtException", (erro) => {
   console.error("[indexer] erro fatal não tratado:", erro);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (motivo) => {
+  console.error("[indexer] promessa rejeitada sem tratamento:", motivo);
   process.exit(1);
 });
