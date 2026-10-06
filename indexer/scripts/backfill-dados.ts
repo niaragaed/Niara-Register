@@ -17,11 +17,11 @@
 import "../log-seguro";
 import "dotenv/config";
 import { ethers } from "ethers";
-import { config, numeroDaOferta, type OfertaMonitorada } from "../config";
+import { config, type OfertaMonitorada } from "../config";
 import { OFERTA_CAPTACAO_ABI } from "../abi";
-import { Decimais } from "../decimais";
+import { Tokens } from "../tokens";
 import { montarDados } from "../eventos";
-import { supabase } from "../db";
+import { carregarOfertas, supabase } from "../db";
 
 const GRAVAR = process.argv.includes("--gravar");
 const LIMITE_AMOSTRA = Number(
@@ -47,28 +47,20 @@ type Linha = {
 
 const provider = new ethers.JsonRpcProvider(config.rpcUrl);
 const interfaceOferta = new ethers.Interface(OFERTA_CAPTACAO_ABI);
-const decimais = new Decimais(provider);
+const tokens = new Tokens(provider);
 
 /**
- * A oferta pode não estar em OFERTAS_ONCHAIN (removida da env var depois de já
- * ter eventos no ledger). Nesse caso monta uma entrada a partir do endereço
- * gravado na própria linha, para o backfill não pular a linha à toa.
+ * A oferta vem de registro_ofertas (migration 004), a mesma lista que o indexer
+ * usa. Linha de um contrato fora da tabela é erro: o número da oferta não pode
+ * ser inventado aqui.
  */
-function ofertaDaLinha(linha: Linha): OfertaMonitorada {
-  const conhecida = config.ofertas.find(
-    (o) => o.endereco.toLowerCase() === linha.endereco_contrato.toLowerCase(),
-  );
-  if (conhecida) return conhecida;
+let ofertas: Map<string, OfertaMonitorada> | null = null;
 
-  const endereco = linha.endereco_contrato as `0x${string}`;
-  const numero = numeroDaOferta(endereco);
-  const curto = `${endereco.slice(0, 6)}...${endereco.slice(-4)}`;
-  return {
-    endereco,
-    token: null, // decimais.doTokenDeCotas pergunta à própria oferta
-    numero,
-    apelido: `oferta-${numero ?? "?"} (${curto})`,
-  };
+async function ofertaDaLinha(linha: Linha): Promise<OfertaMonitorada> {
+  ofertas ??= new Map((await carregarOfertas()).map((o) => [o.endereco, o]));
+  const oferta = ofertas.get(linha.endereco_contrato.toLowerCase());
+  if (!oferta) throw new Error(`${linha.endereco_contrato} não está em registro_ofertas`);
+  return oferta;
 }
 
 async function dadosDaLinha(linha: Linha) {
@@ -87,7 +79,7 @@ async function dadosDaLinha(linha: Linha) {
   const parsed = interfaceOferta.parseLog(log);
   if (!parsed) throw new Error("log não casa com a ABI de OfertaCaptacao");
 
-  return montarDados(parsed, ofertaDaLinha(linha), decimais);
+  return montarDados(parsed, await ofertaDaLinha(linha), tokens);
 }
 
 async function main() {

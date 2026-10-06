@@ -1,11 +1,21 @@
 import { createClient } from "@supabase/supabase-js";
-import { config } from "./config";
+import { apelidoDaOferta, config, type OfertaMonitorada } from "./config";
 import type { DadosEvento } from "./eventos";
 
 // Client com a service role key — o indexer precisa gravar direto no Postgres,
 // contornando qualquer RLS que exista pro client público do site. Nunca reusar
 // esta chave no front do Niara-Register (lib/supabase.ts lá usa a anon key).
 export const supabase = createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
+
+/**
+ * Em dry-run nada é gravado: cada escrita vira um registro em memória, que o
+ * index.ts imprime ao final. As leituras (checkpoints, ofertas) continuam indo
+ * ao banco de verdade.
+ */
+export const simulado = {
+  registros: [] as NovoRegistro[],
+  ofertas: [] as NovaOferta[],
+};
 
 export type NovoRegistro = {
   fonte: "pmes";
@@ -28,6 +38,14 @@ export type NovoRegistro = {
 // onConflict em (tx_hash, log_index) — garante idempotência: se o indexer cair e
 // reprocessar um range de blocos já gravado, não duplica a linha no ledger.
 export async function gravarRegistro(registro: NovoRegistro): Promise<void> {
+  if (config.dryRun) {
+    const chave = `${registro.tx_hash}#${registro.log_index}`;
+    if (!simulado.registros.some((r) => `${r.tx_hash}#${r.log_index}` === chave)) {
+      simulado.registros.push(registro);
+    }
+    return;
+  }
+
   const { error } = await supabase
     .from("registro_transacoes")
     .upsert(registro, { onConflict: "tx_hash,log_index", ignoreDuplicates: true });
@@ -54,6 +72,11 @@ export type NovaAssinatura = {
 // uma vez, então essa trava replica a mesma garantia no banco (evita duplicar
 // se o indexer reprocessar o mesmo range de blocos depois de reiniciar).
 export async function gravarAssinatura(registro: NovaAssinatura): Promise<void> {
+  if (config.dryRun) {
+    console.log(`[dry-run] assinatura que seria gravada: ${registro.hash_sha256}`);
+    return;
+  }
+
   const { error } = await supabase
     .from("registro_assinaturas")
     .upsert(registro, { onConflict: "hash_sha256", ignoreDuplicates: true });
@@ -62,6 +85,111 @@ export async function gravarAssinatura(registro: NovaAssinatura): Promise<void> 
     throw new Error(`Falha ao gravar assinatura (${registro.hash_sha256}): ${error.message}`);
   }
 }
+
+// ── Ofertas (registro_ofertas, migration 004) ──────────────────────────────────
+
+type LinhaOferta = {
+  endereco: string;
+  token: string;
+  numero: number;
+  origem: "legado" | "orquestrador";
+  empresa: string | null;
+  bloco_criacao: number;
+  backfill_alvo: number | null;
+  backfill_ate: number | null;
+};
+
+function paraMonitorada(l: LinhaOferta): OfertaMonitorada {
+  return {
+    endereco: l.endereco.toLowerCase() as `0x${string}`,
+    token: l.token.toLowerCase() as `0x${string}`,
+    numero: l.numero,
+    apelido: apelidoDaOferta(l.endereco, l.numero),
+    origem: l.origem,
+    empresa: l.empresa,
+    bloco_criacao: Number(l.bloco_criacao),
+    backfill_alvo: l.backfill_alvo === null ? null : Number(l.backfill_alvo),
+    backfill_ate: l.backfill_ate === null ? null : Number(l.backfill_ate),
+  };
+}
+
+/**
+ * A lista de ofertas monitoradas, lida do banco a cada início do processo — é o
+ * que faz uma oferta descoberta sobreviver a reinícios. Vazia significa que a
+ * migration 004 não rodou (o seed traz as 11 legadas): falha alto em vez de
+ * indexar nada em silêncio.
+ */
+export async function carregarOfertas(): Promise<OfertaMonitorada[]> {
+  const { data, error } = await supabase
+    .from("registro_ofertas")
+    .select("endereco,token,numero,origem,empresa,bloco_criacao,backfill_alvo,backfill_ate")
+    .order("numero");
+
+  if (error) {
+    throw new Error(`Falha ao carregar registro_ofertas (a migration 004 rodou?): ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("registro_ofertas está vazia — rode supabase/migrations_004_registro_ofertas.sql.");
+  }
+  return (data as LinhaOferta[]).map(paraMonitorada);
+}
+
+export type NovaOferta = {
+  endereco: string;
+  token: string;
+  emissor: string;
+  moeda: string;
+  origem: "orquestrador";
+  numero: number;
+  nome: string | null;
+  simbolo: string | null;
+  empresa: string | null;
+  bloco_criacao: number;
+  criada_em: string;
+  tx_criacao: string;
+  backfill_alvo: number;
+  backfill_ate: number;
+};
+
+/**
+ * Grava uma oferta descoberta pelo OfertaCompletaCriada. O número já vem
+ * decidido pelo chamador (max + 1, na ordem dos eventos); a unique em `numero`
+ * e a PK em `endereco` impedem que um reprocessamento duplique ou renumere.
+ */
+export async function gravarOferta(oferta: NovaOferta): Promise<void> {
+  if (config.dryRun) {
+    simulado.ofertas.push(oferta);
+    return;
+  }
+
+  const { error } = await supabase
+    .from("registro_ofertas")
+    .upsert(oferta, { onConflict: "endereco", ignoreDuplicates: true });
+
+  if (error) {
+    throw new Error(`Falha ao gravar oferta ${oferta.endereco}: ${error.message}`);
+  }
+}
+
+export function novaOfertaParaMonitorada(o: NovaOferta): OfertaMonitorada {
+  return paraMonitorada(o);
+}
+
+/** Progresso do backfill de uma oferta (último bloco já varrido). */
+export async function salvarBackfill(endereco: string, ate: number): Promise<void> {
+  if (config.dryRun) return;
+
+  const { error } = await supabase
+    .from("registro_ofertas")
+    .update({ backfill_ate: ate })
+    .eq("endereco", endereco.toLowerCase());
+
+  if (error) {
+    throw new Error(`Falha ao salvar backfill de ${endereco}: ${error.message}`);
+  }
+}
+
+// ── Checkpoints ────────────────────────────────────────────────────────────────
 
 export async function lerCheckpoint(fonte: string, fallback: number): Promise<number> {
   const { data, error } = await supabase
@@ -74,15 +202,21 @@ export async function lerCheckpoint(fonte: string, fallback: number): Promise<nu
     throw new Error(`Falha ao ler checkpoint (${fonte}): ${error.message}`);
   }
 
-  return data?.ultimo_bloco ?? fallback;
+  return data?.ultimo_bloco === undefined || data?.ultimo_bloco === null
+    ? fallback
+    : Number(data.ultimo_bloco);
 }
 
-export async function salvarCheckpoint(fonte: string, bloco: number): Promise<void> {
+/** Salva o checkpoint de várias fontes numa única escrita. */
+export async function salvarCheckpoints(fontes: string[], bloco: number): Promise<void> {
+  if (config.dryRun || fontes.length === 0) return;
+
+  const agora = new Date().toISOString();
   const { error } = await supabase
     .from("registro_checkpoints")
-    .upsert({ fonte, ultimo_bloco: bloco, atualizado_em: new Date().toISOString() });
+    .upsert(fontes.map((fonte) => ({ fonte, ultimo_bloco: bloco, atualizado_em: agora })));
 
   if (error) {
-    throw new Error(`Falha ao salvar checkpoint (${fonte}): ${error.message}`);
+    throw new Error(`Falha ao salvar checkpoint (${fontes.join(", ")}): ${error.message}`);
   }
 }

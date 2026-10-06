@@ -18,3 +18,9 @@ export const ESTADO_LABELS = ["Aberta", "EncerradaSucesso", "EncerradaFalha"] as
 export const REGISTRO_ASSINATURAS_ABI = [
   "event DocumentoRegistrado(bytes32 indexed hashDocumento, address indexed assinante, string nomeDocumento, string tipoDocumento, uint256 timestamp)",
 ];
+
+// De niara-contracts-PMEs, src/orquestracao/OfertaOrquestrador.sol. Só o evento
+// de criação: os demais (allowlist, timelock) não viram linha no ledger.
+export const OFERTA_ORQUESTRADOR_ABI = [
+  "event OfertaCompletaCriada(address indexed emissor, address indexed token, address indexed oferta, uint256 metaMinima, uint256 metaMaxima, uint256 precoPorCota, uint256 prazo)",
+];

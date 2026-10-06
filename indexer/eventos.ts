@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ESTADO_LABELS } from "./abi";
 import type { OfertaMonitorada } from "./config";
-import type { Decimais } from "./decimais";
+import type { Tokens } from "./tokens";
 
 /**
  * Forma estruturada de cada evento do ledger, gravada na coluna `dados` (jsonb)
@@ -13,7 +13,7 @@ import type { Decimais } from "./decimais";
  * como está, para não quebrar nada que já dependa dela.
  *
  * Valores monetários e de cota vão como STRING, convertidos com as casas
- * decimais lidas do próprio token on-chain (ver decimais.ts) — não com um 18
+ * decimais lidas do próprio token on-chain (ver tokens.ts) — não com um 18
  * assumido. Número em JSON é double e perderia precisão em valores grandes;
  * string atravessa o Postgres, o JSON e o JS sem arredondar.
  *
@@ -22,11 +22,19 @@ import type { Decimais } from "./decimais";
  * então o tipo é duplicado de propósito.
  */
 
-export type Moeda = "MockBRL";
+/**
+ * symbol() do token de pagamento da oferta, lido da chain (ver tokens.ts) —
+ * hoje "mBRL" nas duas MockBRL. Até a migration 004 era o literal "MockBRL";
+ * a própria 004 converteu as linhas antigas. O site decide como exibir.
+ */
+export type Moeda = string;
 
 /** Comum a todos: qual oferta emitiu o evento. */
 type Base = {
-  /** Do mapa explícito em config.ts. `null` para endereço fora do mapa. */
+  /**
+   * De registro_ofertas: 1–11 legadas, 12+ do orquestrador. O tipo admite null
+   * só por compatibilidade com linhas gravadas antes da tabela existir.
+   */
   ofertaNumero: number | null;
   ofertaEndereco: string;
 };
@@ -73,15 +81,31 @@ export type DadosRefund = Base & {
   moeda: Moeda;
 };
 
+/**
+ * OfertaCompletaCriada do OfertaOrquestrador: a oferta foi criada pelo próprio
+ * emissor (msg.sender da transação), não pela plataforma. Metas e preço na
+ * moeda da oferta; prazo é o timestamp Unix (segundos) de encerramento, como
+ * string.
+ */
+export type DadosOfferingCreated = Base & {
+  evento: "offering_created";
+  emissor: string;
+  token: string;
+  metaMinima: string;
+  metaMaxima: string;
+  precoPorCota: string;
+  prazo: string;
+  moeda: Moeda;
+};
+
 export type DadosEvento =
+  | DadosOfferingCreated
   | DadosInvestment
   | DadosOfferingClosed
   | DadosOfferingCancelled
   | DadosSharesRedeemed
   | DadosFundsReleased
   | DadosRefund;
-
-const MOEDA: Moeda = "MockBRL";
 
 function desfechoDe(resultado: unknown): DadosOfferingClosed["desfecho"] {
   switch (ESTADO_LABELS[Number(resultado)]) {
@@ -102,7 +126,7 @@ function desfechoDe(resultado: unknown): DadosOfferingClosed["desfecho"] {
 export async function montarDados(
   parsed: ethers.LogDescription,
   oferta: OfertaMonitorada,
-  decimais: Decimais,
+  tokens: Tokens,
 ): Promise<DadosEvento | null> {
   const base: Base = {
     ofertaNumero: oferta.numero,
@@ -112,7 +136,8 @@ export async function montarDados(
   // Só busca as casas decimais do token que o evento realmente usa: eventos de
   // valor consultam a moeda, o de cotas consulta o token de participação.
   const emMoeda = async (v: unknown) =>
-    ethers.formatUnits(v as bigint, await decimais.daMoeda(oferta.endereco));
+    ethers.formatUnits(v as bigint, await tokens.daMoeda(oferta.endereco));
+  const moeda = () => tokens.simboloDaMoeda(oferta.endereco);
 
   switch (parsed.name) {
     case "Aporte":
@@ -121,7 +146,7 @@ export async function montarDados(
         evento: "investment",
         investidor: parsed.args.investidor as string,
         valor: await emMoeda(parsed.args.valor),
-        moeda: MOEDA,
+        moeda: await moeda(),
         totalArrecadadoAtual: await emMoeda(parsed.args.totalArrecadadoAtual),
       };
 
@@ -131,14 +156,14 @@ export async function montarDados(
         evento: "offering_closed",
         desfecho: desfechoDe(parsed.args.resultado),
         totalArrecadado: await emMoeda(parsed.args.totalArrecadado),
-        moeda: MOEDA,
+        moeda: await moeda(),
       };
 
     case "OfertaCancelada":
       return { ...base, evento: "offering_cancelled" };
 
     case "CotasResgatadas": {
-      const casas = await decimais.doTokenDeCotas(oferta.endereco, oferta.token);
+      const casas = await tokens.doTokenDeCotas(oferta.endereco, oferta.token);
       return {
         ...base,
         evento: "shares_redeemed",
@@ -155,7 +180,7 @@ export async function montarDados(
         valorEmissor: await emMoeda(parsed.args.valorEmissor),
         protocolo: parsed.args.protocoloWallet as string,
         taxa: await emMoeda(parsed.args.taxa),
-        moeda: MOEDA,
+        moeda: await moeda(),
       };
 
     case "Reembolso":
@@ -164,10 +189,37 @@ export async function montarDados(
         evento: "refund",
         investidor: parsed.args.investidor as string,
         valor: await emMoeda(parsed.args.valor),
-        moeda: MOEDA,
+        moeda: await moeda(),
       };
 
     default:
       return null;
   }
+}
+
+/**
+ * Dados da linha `offering_created`, a partir do OfertaCompletaCriada já
+ * decodificado. `oferta` é a recém-registrada em registro_ofertas (já com
+ * número); os valores usam as casas e o símbolo da moeda() dela.
+ */
+export async function montarDadosCriacao(
+  parsed: ethers.LogDescription,
+  oferta: OfertaMonitorada,
+  tokens: Tokens,
+): Promise<DadosOfferingCreated> {
+  const casas = await tokens.daMoeda(oferta.endereco);
+  const emMoeda = (v: unknown) => ethers.formatUnits(v as bigint, casas);
+
+  return {
+    ofertaNumero: oferta.numero,
+    ofertaEndereco: oferta.endereco,
+    evento: "offering_created",
+    emissor: parsed.args.emissor as string,
+    token: parsed.args.token as string,
+    metaMinima: emMoeda(parsed.args.metaMinima),
+    metaMaxima: emMoeda(parsed.args.metaMaxima),
+    precoPorCota: emMoeda(parsed.args.precoPorCota),
+    prazo: (parsed.args.prazo as bigint).toString(),
+    moeda: await tokens.simboloDaMoeda(oferta.endereco),
+  };
 }
