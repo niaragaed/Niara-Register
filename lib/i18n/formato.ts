@@ -78,3 +78,19 @@ export function formatarValor(valor: string, locale: Locale): string {
 
   return `${sinal}${parteInteira}${separadorDecimal(locale)}${parteDecimal}`;
 }
+
+/**
+ * Quantidade de cotas: inteira ("350") quando não há parte decimal — que é o
+ * caso normal, já que cada cota é uma unidade inteira do token. Com fração,
+ * cai no mesmo formato de duas casas dos valores, para não esconder a fração.
+ */
+export function formatarCotas(valor: string, locale: Locale): string {
+  const m = VALOR.exec(valor.trim());
+  if (!m) return valor;
+
+  const [, sinal, inteiro, fracao = ""] = m;
+  if (/^0*$/.test(fracao)) {
+    return `${sinal}${new Intl.NumberFormat(localeIntl(locale)).format(BigInt(inteiro))}`;
+  }
+  return formatarValor(valor, locale);
+}

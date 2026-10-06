@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { dictionaries, rotuloMoeda } from "@/lib/i18n/dictionaries";
-import { formatarTimestamp, formatarValor } from "@/lib/i18n/formato";
+import { formatarCotas, formatarTimestamp, formatarValor } from "@/lib/i18n/formato";
 import type { Locale } from "@/lib/i18n/locale";
 import { enderecoCurto, type DadosEvento } from "@/lib/dados-evento";
 
@@ -125,7 +125,7 @@ export function FraseEvento({
           {preencher(t.frases.shares_redeemed, {
             ...comuns,
             investidor: <Endereco valor={dados.investidor} />,
-            cotas: num(dados.cotas),
+            cotas: formatarCotas(dados.cotas, locale),
           })}
         </>
       );
