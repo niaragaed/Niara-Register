@@ -13,9 +13,12 @@ function truncarHash(hash: string) {
 export function LedgerEntry({
   registro,
   locale,
+  empresas,
 }: {
   registro: RegistroTransacao;
   locale: Locale;
+  /** Empresa por endereço de oferta (minúsculo), de registro_ofertas. */
+  empresas?: Map<string, string>;
 }) {
   const t = dictionaries[locale];
 
@@ -42,7 +45,11 @@ export function LedgerEntry({
             {dados && (
               <span className="text-slate">
                 {" · "}
-                <FraseEvento dados={dados} locale={locale} />
+                <FraseEvento
+                  dados={dados}
+                  locale={locale}
+                  empresa={empresas?.get(dados.ofertaEndereco.toLowerCase())}
+                />
               </span>
             )}
             {detalhe && <span className="text-slate"> · {detalhe}</span>}
