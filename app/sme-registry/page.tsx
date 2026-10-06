@@ -47,6 +47,9 @@ export default async function RegistroPmesPage() {
         <p className="mt-3 max-w-xl font-body text-sm leading-relaxed text-slate">
           {t.pmes.lede}
         </p>
+        <p className="mt-2 max-w-xl font-body text-xs leading-relaxed text-slate/80">
+          {t.pmes.notaNumeracao}
+        </p>
       </header>
 
       {registros.length > 0 ? (
