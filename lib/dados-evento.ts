@@ -10,10 +10,18 @@
  * consome o que o indexer gravou.
  */
 
-export type Moeda = "MockBRL";
+/**
+ * symbol() do token de pagamento da oferta, como o indexer leu da chain (hoje
+ * "mBRL"). A exibição passa por `rotuloMoeda` (dicionário), que mostra "mBRL"
+ * como "MockBRL".
+ */
+export type Moeda = string;
 
 type Base = {
-  /** Do mapa explícito em indexer/config.ts. `null` para oferta fora do mapa. */
+  /**
+   * De registro_ofertas: 1–11 legadas, 12+ do orquestrador. Null só em linhas
+   * gravadas antes da tabela existir.
+   */
   ofertaNumero: number | null;
   ofertaEndereco: string;
 };
@@ -59,7 +67,21 @@ export type DadosRefund = Base & {
   moeda: Moeda;
 };
 
+/** OfertaCompletaCriada: oferta criada pelo próprio emissor, via OfertaOrquestrador. */
+export type DadosOfferingCreated = Base & {
+  evento: "offering_created";
+  emissor: string;
+  token: string;
+  metaMinima: string;
+  metaMaxima: string;
+  precoPorCota: string;
+  /** Timestamp Unix (segundos) de encerramento, como string. */
+  prazo: string;
+  moeda: Moeda;
+};
+
 export type DadosEvento =
+  | DadosOfferingCreated
   | DadosInvestment
   | DadosOfferingClosed
   | DadosOfferingCancelled
@@ -68,6 +90,7 @@ export type DadosEvento =
   | DadosRefund;
 
 const EVENTOS = [
+  "offering_created",
   "investment",
   "offering_closed",
   "offering_cancelled",

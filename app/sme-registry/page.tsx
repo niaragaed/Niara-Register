@@ -1,6 +1,6 @@
 import { LedgerEntry } from "@/components/ledger-entry";
 import { supabase, supabaseConfigurado } from "@/lib/supabase";
-import type { RegistroTransacao } from "@/lib/supabase";
+import type { RegistroOferta, RegistroTransacao } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 export const dynamic = "force-dynamic";
@@ -11,16 +11,30 @@ export default async function RegistroPmesPage() {
   // Lê direto da tabela indexada pelo Register — nunca gerada na hora.
   // Se as variáveis de ambiente do Supabase ainda não estiverem configuradas
   // neste ambiente, cai no estado vazio abaixo em vez de mostrar erro cru.
-  const { data, error } = supabaseConfigurado
-    ? await supabase
-        .from("registro_transacoes")
-        .select("*")
-        .eq("fonte", "pmes")
-        .order("numero_sequencial", { ascending: false })
-        .limit(50)
-    : { data: null, error: null };
+  const [transacoes, respostaOfertas] = supabaseConfigurado
+    ? await Promise.all([
+        supabase
+          .from("registro_transacoes")
+          .select("*")
+          .eq("fonte", "pmes")
+          .order("numero_sequencial", { ascending: false })
+          .limit(50),
+        supabase.from("registro_ofertas").select("endereco,empresa"),
+      ])
+    : [null, null];
+  const data = transacoes?.data;
+  const error = transacoes?.error;
+  const dadosOfertas = respostaOfertas?.data;
 
   const registros = (data ?? []) as RegistroTransacao[];
+
+  // Empresa de cada oferta, para a frase do ledger. Se registro_ofertas falhar,
+  // as frases saem sem empresa — o ledger em si não depende dela.
+  const empresas = new Map(
+    ((dadosOfertas ?? []) as Pick<RegistroOferta, "endereco" | "empresa">[])
+      .filter((o) => o.empresa)
+      .map((o) => [o.endereco.toLowerCase(), o.empresa as string]),
+  );
   const indexadorDesconectado = !supabaseConfigurado || Boolean(error);
 
   return (
@@ -38,7 +52,12 @@ export default async function RegistroPmesPage() {
       {registros.length > 0 ? (
         <div className="mt-2">
           {registros.map((registro) => (
-            <LedgerEntry key={registro.id} registro={registro} locale={locale} />
+            <LedgerEntry
+              key={registro.id}
+              registro={registro}
+              locale={locale}
+              empresas={empresas}
+            />
           ))}
         </div>
       ) : (

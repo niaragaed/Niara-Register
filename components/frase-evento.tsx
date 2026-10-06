@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { dictionaries } from "@/lib/i18n/dictionaries";
-import { formatarValor } from "@/lib/i18n/formato";
+import { dictionaries, rotuloMoeda } from "@/lib/i18n/dictionaries";
+import { formatarTimestamp, formatarValor } from "@/lib/i18n/formato";
 import type { Locale } from "@/lib/i18n/locale";
 import { enderecoCurto, type DadosEvento } from "@/lib/dados-evento";
 
@@ -45,20 +45,24 @@ function preencher(template: string, partes: Record<string, ReactNode>): ReactNo
 export function FraseEvento({
   dados,
   locale,
+  empresa,
 }: {
   dados: DadosEvento;
   locale: Locale;
+  /** De registro_ofertas; ausente quando a oferta não tem empresa conhecida. */
+  empresa?: string | null;
 }) {
   const t = dictionaries[locale];
 
-  // A oferta é número + endereço; sem número (endereço fora do mapa) sobra só o
-  // endereço, sem os parênteses vazios.
+  // A oferta é número + empresa (quando há) + endereço; sem número (linha
+  // anterior a registro_ofertas) sobra só o endereço, sem parênteses vazios.
   const oferta: ReactNode =
     dados.ofertaNumero === null ? (
       <Endereco valor={dados.ofertaEndereco} />
     ) : (
       <>
-        {dados.ofertaNumero} (<Endereco valor={dados.ofertaEndereco} />)
+        {dados.ofertaNumero}
+        {empresa ? ` · ${empresa}` : ""} (<Endereco valor={dados.ofertaEndereco} />)
       </>
     );
 
@@ -68,7 +72,26 @@ export function FraseEvento({
   // os separadores do idioma acontece só aqui, na exibição.
   const num = (v: string) => formatarValor(v, locale);
 
+  // O jsonb guarda o symbol() on-chain ("mBRL"); o rótulo de tela vem do
+  // dicionário ("MockBRL").
+  const moeda = "moeda" in dados ? rotuloMoeda(t, dados.moeda) : "";
+
   switch (dados.evento) {
+    case "offering_created":
+      return (
+        <>
+          {preencher(t.frases.offering_created, {
+            ...comuns,
+            emissor: <Endereco valor={dados.emissor} />,
+            metaMinima: num(dados.metaMinima),
+            metaMaxima: num(dados.metaMaxima),
+            precoPorCota: num(dados.precoPorCota),
+            prazo: formatarTimestamp(Number(dados.prazo), locale),
+            moeda,
+          })}
+        </>
+      );
+
     case "investment":
       return (
         <>
@@ -76,7 +99,7 @@ export function FraseEvento({
             ...comuns,
             investidor: <Endereco valor={dados.investidor} />,
             valor: num(dados.valor),
-            moeda: dados.moeda,
+            moeda,
           })}
         </>
       );
@@ -88,7 +111,7 @@ export function FraseEvento({
             ...comuns,
             desfecho: t.desfechos[dados.desfecho],
             totalArrecadado: num(dados.totalArrecadado),
-            moeda: dados.moeda,
+            moeda,
           })}
         </>
       );
@@ -116,7 +139,7 @@ export function FraseEvento({
             valorEmissor: num(dados.valorEmissor),
             protocolo: <Endereco valor={dados.protocolo} />,
             taxa: num(dados.taxa),
-            moeda: dados.moeda,
+            moeda,
           })}
         </>
       );
@@ -128,7 +151,7 @@ export function FraseEvento({
             ...comuns,
             investidor: <Endereco valor={dados.investidor} />,
             valor: num(dados.valor),
-            moeda: dados.moeda,
+            moeda,
           })}
         </>
       );

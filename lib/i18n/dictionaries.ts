@@ -116,6 +116,8 @@ export const en = {
    * Etherscan, o resto entra como texto.
    */
   frases: {
+    offering_created:
+      "Offering {oferta} created directly by issuer {emissor} — target {metaMinima} to {metaMaxima} {moeda}, {precoPorCota} {moeda} per share, closes {prazo}",
     investment:
       "Investor {investidor} invested {valor} {moeda} in offering {oferta}",
     offering_closed:
@@ -157,6 +159,7 @@ export const en = {
    * daqui pelo `tipo_evento` e a `descricao` só aparece como fallback.
    */
   eventos: {
+    "Oferta criada": "Offering created",
     Aporte: "Investment",
     "Oferta encerrada": "Offering closed",
     "Oferta cancelada": "Offering cancelled",
@@ -177,6 +180,15 @@ export const en = {
     NDA: "NDA",
     "Contrato de Locação": "Lease Agreement",
     Ata: "Minutes",
+  },
+
+  /**
+   * Rótulo de exibição da moeda, pelo symbol() que o indexer grava em `dados`.
+   * O token de teste se chama "mBRL" on-chain; na tela aparece "MockBRL", para
+   * não haver dúvida de que não é real. Símbolo fora do mapa aparece como veio.
+   */
+  moedas: {
+    mBRL: "MockBRL",
   },
 
   naoEncontrado: {
@@ -223,6 +235,11 @@ export function rotuloEvento(dict: Dictionary, tipoEvento: string): string | und
 export function rotuloTipoDocumento(dict: Dictionary, tipoDocumento: string): string {
   const chave = tipoDocumento.trim();
   return (dict.tiposDocumento as Record<string, string>)[chave] ?? chave;
+}
+
+/** Rótulo de exibição da moeda; sem correspondência, o próprio símbolo. */
+export function rotuloMoeda(dict: Dictionary, simbolo: string): string {
+  return (dict.moedas as Record<string, string>)[simbolo] ?? simbolo;
 }
 
 export const pt: Dictionary = {
@@ -327,6 +344,8 @@ export const pt: Dictionary = {
   },
 
   frases: {
+    offering_created:
+      "Oferta {oferta} criada diretamente pelo emissor {emissor} — meta de {metaMinima} a {metaMaxima} {moeda}, {precoPorCota} {moeda} por cota, encerra em {prazo}",
     investment:
       "Investidor {investidor} aportou {valor} {moeda} na oferta {oferta}",
     offering_closed:
@@ -358,6 +377,7 @@ export const pt: Dictionary = {
   },
 
   eventos: {
+    "Oferta criada": "Oferta criada",
     Aporte: "Aporte",
     "Oferta encerrada": "Oferta encerrada",
     "Oferta cancelada": "Oferta cancelada",
@@ -373,6 +393,10 @@ export const pt: Dictionary = {
     NDA: "NDA",
     "Contrato de Locação": "Contrato de Locação",
     Ata: "Ata",
+  },
+
+  moedas: {
+    mBRL: "MockBRL",
   },
 
   naoEncontrado: {

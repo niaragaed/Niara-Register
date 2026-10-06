@@ -43,6 +43,22 @@ export type RegistroTransacao = {
   dados: unknown;
 };
 
+/** Linha de registro_ofertas (migration 004): uma oferta monitorada pelo indexer. */
+export type RegistroOferta = {
+  endereco: string;
+  token: string;
+  emissor: string;
+  moeda: string;
+  origem: "legado" | "orquestrador";
+  numero: number;
+  nome: string | null;
+  simbolo: string | null;
+  empresa: string | null;
+  bloco_criacao: number;
+  criada_em: string;
+  tx_criacao: string | null;
+};
+
 export type RegistroAssinatura = {
   id: string;
   documento_nome: string;
