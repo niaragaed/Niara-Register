@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "tsx index.ts",
-    "dev": "tsx watch index.ts"
+    "dev": "tsx watch index.ts",
+    "teste": "tsx teste/atraso.teste.ts"
   },
   "dependencies": {
     "ethers": "^6.13.4",

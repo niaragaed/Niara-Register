@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { apelidoDaOferta, config, type OfertaMonitorada } from "./config";
+import { config } from "./config";
+import { paraMonitorada, type LinhaOferta, type OfertaMonitorada } from "./ofertas";
 import type { DadosEvento } from "./eventos";
 
 // Client com a service role key — o indexer precisa gravar direto no Postgres,
@@ -87,31 +88,6 @@ export async function gravarAssinatura(registro: NovaAssinatura): Promise<void> 
 }
 
 // ── Ofertas (registro_ofertas, migration 004) ──────────────────────────────────
-
-type LinhaOferta = {
-  endereco: string;
-  token: string;
-  numero: number;
-  origem: "legado" | "orquestrador";
-  empresa: string | null;
-  bloco_criacao: number;
-  backfill_alvo: number | null;
-  backfill_ate: number | null;
-};
-
-function paraMonitorada(l: LinhaOferta): OfertaMonitorada {
-  return {
-    endereco: l.endereco.toLowerCase() as `0x${string}`,
-    token: l.token.toLowerCase() as `0x${string}`,
-    numero: l.numero,
-    apelido: apelidoDaOferta(l.endereco, l.numero),
-    origem: l.origem,
-    empresa: l.empresa,
-    bloco_criacao: Number(l.bloco_criacao),
-    backfill_alvo: l.backfill_alvo === null ? null : Number(l.backfill_alvo),
-    backfill_ate: l.backfill_ate === null ? null : Number(l.backfill_ate),
-  };
-}
 
 /**
  * A lista de ofertas monitoradas, lida do banco a cada início do processo — é o
