@@ -74,7 +74,10 @@ export const en = {
       ") is deployed and live on Sepolia. The hash is computed in your browser and the on-chain record above is real — each signature becomes an actual transaction, verifiable on Etherscan.",
     historicoTitulo: "Documents already recorded",
     historicoLede:
-      "A mirror of every document recorded through this contract, most recent first.",
+      "A mirror of every document recorded through the Sepolia contract, most recent first. Solana records are verifiable above and on Solana Explorer; they will appear here once the indexer is extended to Solana.",
+    solanaPrefixo: "The Solana program (",
+    solanaSufixo:
+      ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
     vazio: "No documents recorded yet.",
     desconectado:
       "The indexer is not connected to a Postgres database on this instance. This does not mean there are no documents — it means the read path has not been switched on yet.",
@@ -86,7 +89,7 @@ export const en = {
     arquivo: "File:",
     hashTitulo: "SHA-256 hash",
     hashExplicacao:
-      "This hash is computed locally, in your browser — the document itself is never uploaded. To record this proof on-chain you need to sign with a Sepolia wallet.",
+      "This hash is computed locally, in your browser — the document itself is never uploaded. To record this proof on-chain you sign with a self-custody wallet on the network selected above.",
     jaRegistrado: "already recorded on-chain",
     assinadoPor: "signed by",
     assinadoEm: "on",
@@ -110,6 +113,17 @@ export const en = {
     erroJaRegistrado:
       "That hash was recorded by another transaction while you were filling in the form.",
     verNaSepolia: "view on Sepolia",
+    redeTitulo: "Network",
+    redeSepolia: "Ethereum Sepolia",
+    redeSolana: "Solana Devnet",
+    carteiraSepolia: "MetaMask or compatible",
+    carteiraSolana: "Phantom or Solflare",
+    semCarteiraSolana:
+      "No Solana wallet detected. Install Phantom (or Solflare) to continue.",
+    limiteSolana:
+      "On Solana the name is limited to 128 bytes and the type to 32 bytes.",
+    verNaSolana: "view on Solana Explorer",
+    naoRegistrado: "not recorded on this network yet",
   },
 
   /**
@@ -309,7 +323,10 @@ export const pt: Dictionary = {
       ") está deployado e ativo na Sepolia. O hash é calculado no seu navegador e o registro on-chain acima é real — cada assinatura vira uma transação de verdade, verificável no Etherscan.",
     historicoTitulo: "Documentos já registrados",
     historicoLede:
-      "Espelho de todos os documentos registrados via este contrato, mais recentes primeiro.",
+      "Espelho de todos os documentos registrados via o contrato na Sepolia, mais recentes primeiro. Registros na Solana são verificáveis acima e no Solana Explorer; entram aqui quando o indexador for estendido para a Solana.",
+    solanaPrefixo: "O programa na Solana (",
+    solanaSufixo:
+      ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
     vazio: "Nenhum documento registrado ainda.",
     desconectado:
       "O indexador ainda não está conectado a um Postgres nesta instância. Isto não significa ausência de documentos — significa que a leitura ainda não foi ligada.",
@@ -321,7 +338,7 @@ export const pt: Dictionary = {
     arquivo: "Arquivo:",
     hashTitulo: "Hash SHA-256",
     hashExplicacao:
-      "Este hash é calculado localmente, no seu navegador — o documento em si nunca é enviado. Para registrar esta prova on-chain, é preciso assinar com uma carteira Sepolia.",
+      "Este hash é calculado localmente, no seu navegador — o documento em si nunca é enviado. Para registrar esta prova on-chain, você assina com uma carteira de autocustódia na rede selecionada acima.",
     jaRegistrado: "já registrado on-chain",
     assinadoPor: "assinado por",
     assinadoEm: "em",
@@ -345,6 +362,17 @@ export const pt: Dictionary = {
     erroJaRegistrado:
       "Esse hash já foi registrado por outra transação enquanto você preenchia o formulário.",
     verNaSepolia: "ver na Sepolia",
+    redeTitulo: "Rede",
+    redeSepolia: "Ethereum Sepolia",
+    redeSolana: "Solana Devnet",
+    carteiraSepolia: "MetaMask ou compatível",
+    carteiraSolana: "Phantom ou Solflare",
+    semCarteiraSolana:
+      "Nenhuma carteira Solana detectada. Instale a Phantom (ou Solflare) para continuar.",
+    limiteSolana:
+      "Na Solana, o nome é limitado a 128 bytes e o tipo a 32 bytes.",
+    verNaSolana: "ver no Solana Explorer",
+    naoRegistrado: "ainda não registrado nesta rede",
   },
 
   frases: {

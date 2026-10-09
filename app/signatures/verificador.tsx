@@ -2,6 +2,18 @@
 
 import { useState } from "react";
 import { BrowserProvider, Contract, hexlify } from "ethers";
+import { Transaction } from "@solana/web3.js";
+import {
+  MAX_NOME_BYTES,
+  MAX_TIPO_BYTES,
+  buscarRegistroSolana,
+  bytesUtf8,
+  conexaoSolana,
+  instrucaoRegistrar,
+  linkExplorerSolana,
+  motivoErroSolana,
+} from "@/lib/registro-solana";
+import type { ProviderSolana } from "@/lib/solana";
 import {
   ENDERECO_REGISTRO_ASSINATURAS,
   REGISTRO_ASSINATURAS_ABI,
@@ -12,6 +24,8 @@ import { formatarTimestamp } from "@/lib/i18n/formato";
 import type { Locale } from "@/lib/i18n/locale";
 
 type TextosVerificador = Dictionary["verificador"];
+
+type Rede = "sepolia" | "solana";
 
 type Etapa =
   | "idle"
@@ -40,6 +54,11 @@ async function calcularSha256(arquivo: File): Promise<string> {
 
 function enderecoCurto(endereco: string): string {
   return `${endereco.slice(0, 6)}...${endereco.slice(-4)}`;
+}
+
+function providerSolana(): ProviderSolana | null {
+  if (typeof window === "undefined") return null;
+  return window.phantom?.solana ?? window.solana ?? null;
 }
 
 async function garantirRedeSepolia(ethereum: NonNullable<typeof window.ethereum>) {
@@ -85,6 +104,8 @@ export function VerificadorDeDocumento({
   const [nomeDocumento, setNomeDocumento] = useState("");
   const [tipoDocumento, setTipoDocumento] = useState("");
   const [etapa, setEtapa] = useState<Etapa>("idle");
+  const [rede, setRede] = useState<Rede>("sepolia");
+  const [verificadoSemRegistro, setVerificadoSemRegistro] = useState(false);
   const [enderecoCarteira, setEnderecoCarteira] = useState<string | null>(null);
   const [registroExistente, setRegistroExistente] = useState<RegistroExistente | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -96,6 +117,7 @@ export function VerificadorDeDocumento({
     setEtapa("calculando");
     setNomeArquivo(arquivo.name);
     setRegistroExistente(null);
+    setVerificadoSemRegistro(false);
     setTxHash(null);
     setMensagemErro(null);
     const digest = await calcularSha256(arquivo);
@@ -103,7 +125,105 @@ export function VerificadorDeDocumento({
     setEtapa("pronto");
   }
 
+  function trocarRede(nova: Rede) {
+    if (nova === rede) return;
+    setRede(nova);
+    // Carteira, resultado de verificação e tx são por rede; hash e campos
+    // do formulário continuam valendo.
+    setEnderecoCarteira(null);
+    setRegistroExistente(null);
+    setVerificadoSemRegistro(false);
+    setTxHash(null);
+    setMensagemErro(null);
+    if (hash) setEtapa("pronto");
+  }
+
+  async function conectarEVerificarSolana() {
+    if (!hash) return;
+    const provider = providerSolana();
+    if (!provider) {
+      setMensagemErro(t.semCarteiraSolana);
+      setEtapa("erro");
+      return;
+    }
+
+    try {
+      setEtapa("conectando");
+      const { publicKey } = await provider.connect();
+      setEnderecoCarteira(publicKey.toBase58());
+
+      setEtapa("verificando");
+      const registro = await buscarRegistroSolana(conexaoSolana(), hash);
+      if (registro) {
+        setRegistroExistente(registro);
+        setEtapa("ja_registrado");
+      } else {
+        setVerificadoSemRegistro(true);
+        setEtapa("pronto");
+      }
+    } catch (erro) {
+      console.error(erro);
+      setMensagemErro(erro instanceof Error ? erro.message : t.erroConexao);
+      setEtapa("erro");
+    }
+  }
+
+  async function assinarERegistrarSolana() {
+    const provider = providerSolana();
+    if (!hash || !provider?.publicKey) return;
+
+    try {
+      setEtapa("assinando");
+      setMensagemErro(null);
+
+      const conexao = conexaoSolana();
+      const { blockhash, lastValidBlockHeight } =
+        await conexao.getLatestBlockhash("confirmed");
+      const tx = new Transaction({
+        feePayer: provider.publicKey,
+        blockhash,
+        lastValidBlockHeight,
+      }).add(
+        instrucaoRegistrar(
+          provider.publicKey,
+          hash,
+          nomeDocumento.trim(),
+          tipoDocumento.trim(),
+        ),
+      );
+
+      // Assina na carteira e envia pelo nosso RPC de devnet: assim a
+      // transação vai para a devnet mesmo que a carteira esteja em outra rede.
+      const assinada = await provider.signTransaction(tx);
+      const assinatura = await conexao.sendRawTransaction(assinada.serialize());
+      const resultado = await conexao.confirmTransaction(
+        { signature: assinatura, blockhash, lastValidBlockHeight },
+        "confirmed",
+      );
+      if (resultado.value.err) {
+        throw new Error(JSON.stringify(resultado.value.err));
+      }
+
+      setTxHash(assinatura);
+      setEtapa("confirmado");
+    } catch (erro) {
+      console.error(erro);
+      const motivo = motivoErroSolana(erro);
+      setMensagemErro(
+        motivo === "DocumentoJaRegistrado"
+          ? t.erroJaRegistrado
+          : motivo === "NomeInvalido" || motivo === "TipoInvalido"
+            ? t.limiteSolana
+            : erro instanceof Error
+              ? erro.message
+              : t.erroRegistro,
+      );
+      setEtapa("erro");
+    }
+  }
+
   async function conectarEVerificar() {
+    if (rede === "solana") return conectarEVerificarSolana();
     if (!hash) return;
     if (!window.ethereum) {
       setMensagemErro(t.semCarteira);
@@ -140,6 +260,7 @@ export function VerificadorDeDocumento({
         });
         setEtapa("ja_registrado");
       } else {
+        setVerificadoSemRegistro(true);
         setEtapa("pronto");
       }
     } catch (erro) {
@@ -150,6 +271,7 @@ export function VerificadorDeDocumento({
   }
 
   async function assinarERegistrar() {
+    if (rede === "solana") return assinarERegistrarSolana();
     if (!hash || !window.ethereum) return;
 
     try {
@@ -180,11 +302,59 @@ export function VerificadorDeDocumento({
     }
   }
 
+  const dentroDoLimiteSolana =
+    bytesUtf8(nomeDocumento.trim()) <= MAX_NOME_BYTES &&
+    bytesUtf8(tipoDocumento.trim()) <= MAX_TIPO_BYTES;
   const podeAssinar =
-    hash !== null && nomeDocumento.trim() !== "" && tipoDocumento.trim() !== "";
+    hash !== null &&
+    nomeDocumento.trim() !== "" &&
+    tipoDocumento.trim() !== "" &&
+    (rede !== "solana" || dentroDoLimiteSolana);
+
+  const linkTx = (tx: string) =>
+    rede === "solana"
+      ? linkExplorerSolana("tx", tx)
+      : `https://sepolia.etherscan.io/tx/${tx}`;
+
+  const redes: { id: Rede; nome: string; carteira: string }[] = [
+    { id: "sepolia", nome: t.redeSepolia, carteira: t.carteiraSepolia },
+    { id: "solana", nome: t.redeSolana, carteira: t.carteiraSolana },
+  ];
 
   return (
     <div className="border border-slate/25 px-6 py-8">
+      <fieldset className="mb-6">
+        <legend className="font-mono text-xs uppercase tracking-wide text-slate">
+          {t.redeTitulo}
+        </legend>
+        <div className="mt-2 flex flex-wrap gap-2" role="radiogroup">
+          {redes.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              role="radio"
+              aria-checked={rede === r.id}
+              onClick={() => trocarRede(r.id)}
+              disabled={etapa === "assinando" || etapa === "conectando"}
+              className={`border px-4 py-2 text-left transition-colors disabled:opacity-50 ${
+                rede === r.id
+                  ? "border-ink bg-ink text-bone"
+                  : "border-slate/30 text-ink hover:border-brass"
+              }`}
+            >
+              <span className="block font-body text-sm">{r.nome}</span>
+              <span
+                className={`block font-mono text-[11px] ${
+                  rede === r.id ? "text-bone/70" : "text-slate"
+                }`}
+              >
+                {r.carteira}
+              </span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <label className="block cursor-pointer border border-dashed border-slate/40 px-6 py-10 text-center transition-colors hover:border-brass">
         <input type="file" className="sr-only" onChange={aoSelecionarArquivo} />
         <span className="font-body text-sm text-slate">
@@ -220,6 +390,12 @@ export function VerificadorDeDocumento({
                 {formatarTimestamp(registroExistente.timestamp, locale)}
               </p>
             </div>
+          )}
+
+          {verificadoSemRegistro && etapa === "pronto" && (
+            <p className="mt-5 font-mono text-xs uppercase tracking-wide text-slate">
+              {t.naoRegistrado}
+            </p>
           )}
 
           {(etapa === "pronto" || etapa === "conectando" || etapa === "verificando") && (
@@ -264,12 +440,20 @@ export function VerificadorDeDocumento({
                   onClick={assinarERegistrar}
                   disabled={!podeAssinar}
                   title={
-                    !podeAssinar ? t.assinarBloqueado : undefined
+                    !podeAssinar
+                      ? rede === "solana" && !dentroDoLimiteSolana
+                        ? t.limiteSolana
+                        : t.assinarBloqueado
+                      : undefined
                   }
                   className="mt-2 border border-ink bg-ink px-5 py-2.5 font-body text-sm text-bone transition-opacity hover:opacity-85 disabled:opacity-40"
                 >
                   {t.assinar}
                 </button>
+              )}
+
+              {rede === "solana" && !dentroDoLimiteSolana && (
+                <p className="font-body text-xs text-red-700">{t.limiteSolana}</p>
               )}
 
               {enderecoCarteira && (
@@ -292,12 +476,12 @@ export function VerificadorDeDocumento({
                 {t.sucesso}
               </p>
               <a
-                href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                href={linkTx(txHash)}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-2 block break-all font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
               >
-                {txHash} ↗ {t.verNaSepolia}
+                {txHash} ↗ {rede === "solana" ? t.verNaSolana : t.verNaSepolia}
               </a>
             </div>
           )}
