@@ -4,6 +4,7 @@ import { supabase, supabaseConfigurado } from "@/lib/supabase";
 import type { RegistroAssinatura } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
+import { ID_PROGRAMA_SOLANA, linkExplorerSolana } from "@/lib/registro-solana";
 export const dynamic = "force-dynamic";
 export default async function AssinaturaPage() {
   const locale = await getLocale();
@@ -56,6 +57,18 @@ export default async function AssinaturaPage() {
             niara-contracts-Register
           </a>
           {t.assinatura.contratoSufixo}
+        </p>
+        <p className="mt-3 font-body text-sm text-slate">
+          {t.assinatura.solanaPrefixo}
+          <a
+            href={linkExplorerSolana("address", ID_PROGRAMA_SOLANA.toBase58())}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            niara-register-solana
+          </a>
+          {t.assinatura.solanaSufixo}
         </p>
       </div>
 
