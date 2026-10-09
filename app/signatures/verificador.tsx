@@ -162,8 +162,11 @@ export function VerificadorDeDocumento({
         setEtapa("pronto");
       }
     } catch (erro) {
+      // A Phantom devolve só "Unexpected error" quando está bloqueada ou ainda
+      // sem carteira criada; 4001 é recusa explícita do usuário.
       console.error(erro);
-      setMensagemErro(erro instanceof Error ? erro.message : t.erroConexao);
+      const codigo = (erro as { code?: number })?.code;
+      setMensagemErro(codigo === 4001 ? t.conexaoRecusada : t.erroPhantom);
       setEtapa("erro");
     }
   }

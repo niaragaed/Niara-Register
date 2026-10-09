@@ -20,6 +20,13 @@ export function AssinaturaEntry({
   locale: Locale;
 }) {
   const t = dictionaries[locale];
+  // Linhas anteriores à migration 005 não têm `rede`: eram todas da Sepolia.
+  const solana = registro.rede === "solana-devnet";
+  const linkTx = registro.tx_hash
+    ? solana
+      ? `https://explorer.solana.com/tx/${registro.tx_hash}?cluster=devnet`
+      : `https://sepolia.etherscan.io/tx/${registro.tx_hash}`
+    : null;
 
   return (
     <div className="ledger-rule flex gap-5 py-5 pl-6">
@@ -43,6 +50,9 @@ export function AssinaturaEntry({
           )}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-3">
+          <span className="border border-slate/30 px-1.5 py-px font-mono text-[11px] uppercase tracking-wide text-ink">
+            {solana ? t.entrada.redeSolana : t.entrada.redeSepolia}
+          </span>
           <span className="font-mono text-xs text-slate">
             {t.entrada.hash} {truncarHash(registro.hash_sha256)}
           </span>
@@ -58,14 +68,15 @@ export function AssinaturaEntry({
               ? t.entrada.assinadoOnchain
               : t.entrada.pendente}
           </span>
-          {registro.tx_hash && (
+          {registro.tx_hash && linkTx && (
             <a
-              href={`https://sepolia.etherscan.io/tx/${registro.tx_hash}`}
+              href={linkTx}
               target="_blank"
               rel="noreferrer"
               className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
             >
-              {truncarHash(registro.tx_hash)} ↗ {t.entrada.verNaSepolia}
+              {truncarHash(registro.tx_hash)} ↗{" "}
+              {solana ? t.entrada.verNaSolana : t.entrada.verNaSepolia}
             </a>
           )}
         </div>

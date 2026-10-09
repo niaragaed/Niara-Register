@@ -61,6 +61,13 @@ export type RegistroOferta = {
 
 export type RegistroAssinatura = {
   id: string;
+  /**
+   * Rede de origem (migration 005). Ausente antes da migration — tratar como
+   * "sepolia", que era a única rede.
+   */
+  rede?: "sepolia" | "solana-devnet";
+  /** Slot da Solana; null nas linhas da Sepolia. */
+  slot?: number | null;
   documento_nome: string;
   tipo_documento: string | null;
   hash_sha256: string;

@@ -57,30 +57,42 @@ export async function gravarRegistro(registro: NovoRegistro): Promise<void> {
 }
 
 export type NovaAssinatura = {
+  /** Rede de origem (migration 005). */
+  rede: "sepolia" | "solana-devnet";
   documento_nome: string;
   tipo_documento: string;
+  /** Sempre "0x" + 64 hex minúsculos, nas duas redes. */
   hash_sha256: string;
+  /** EVM: endereço 0x…; Solana: chave pública base58. */
   assinante_endereco: string;
+  /** EVM: hash da transação; Solana: assinatura da transação (base58). */
   tx_hash: string;
   log_index: number;
+  /** EVM: contrato RegistroAssinaturas; Solana: program ID. */
   endereco_contrato: string;
-  bloco: number;
+  /** Bloco EVM (null na Solana). */
+  bloco: number | null;
+  /** Slot da Solana (ausente na EVM). */
+  slot?: number;
   assinado_em: string;
   status: "assinado_onchain";
 };
 
-// onConflict em hash_sha256 — o próprio contrato só deixa registrar cada hash
-// uma vez, então essa trava replica a mesma garantia no banco (evita duplicar
-// se o indexer reprocessar o mesmo range de blocos depois de reiniciar).
+// onConflict em (rede, hash_sha256) — cada contrato/programa só deixa registrar
+// um hash uma vez NA SUA REDE, então essa trava replica a mesma garantia no
+// banco (evita duplicar se o indexer reprocessar blocos/slots depois de
+// reiniciar), sem impedir o mesmo documento de ter prova em duas redes.
 export async function gravarAssinatura(registro: NovaAssinatura): Promise<void> {
   if (config.dryRun) {
-    console.log(`[dry-run] assinatura que seria gravada: ${registro.hash_sha256}`);
+    console.log(
+      `[dry-run] assinatura que seria gravada (${registro.rede}): ${registro.hash_sha256} — "${registro.documento_nome}" — ${registro.assinante_endereco}`,
+    );
     return;
   }
 
   const { error } = await supabase
     .from("registro_assinaturas")
-    .upsert(registro, { onConflict: "hash_sha256", ignoreDuplicates: true });
+    .upsert(registro, { onConflict: "rede,hash_sha256", ignoreDuplicates: true });
 
   if (error) {
     throw new Error(`Falha ao gravar assinatura (${registro.hash_sha256}): ${error.message}`);

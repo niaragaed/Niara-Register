@@ -4,7 +4,9 @@ import { config } from "./config";
 import * as db from "./db";
 import { simulado } from "./db";
 import { criarIndexador } from "./indexador";
+import { criarIndexadorSolana, FONTE_SOLANA } from "./solana";
 import { Tokens } from "./tokens";
+import { Connection } from "@solana/web3.js";
 
 // Ponto de entrada: liga o núcleo (indexador.ts) às dependências reais — RPC da
 // Alchemy, Supabase, relógio de verdade — e roda o laço.
@@ -26,8 +28,61 @@ const indexador = criarIndexador({
   dormir,
 });
 
+// Solana: laço próprio, com o retry interno do web3.js desligado — o 429 passa
+// pelo mesmo comBackoff da EVM (limite.ts).
+const indexadorSolana = config.solana.ativo
+  ? criarIndexadorSolana({
+      rpc: new Connection(config.solana.rpcUrl, {
+        commitment: "finalized",
+        disableRetryOnRateLimit: true,
+      }) as unknown as Parameters<typeof criarIndexadorSolana>[0]["rpc"],
+      banco: db,
+      programId: config.solana.programId,
+      slotInicial: config.solana.slotInicial,
+      backoff: config.backoff,
+      dormir,
+    })
+  : null;
+
+/**
+ * Nunca derruba o processo: erro na Solana é registrado e o ciclo seguinte
+ * retoma do checkpoint. Também não bloqueia o laço EVM — roda em paralelo.
+ */
+async function loopSolana(): Promise<void> {
+  if (!indexadorSolana) return;
+  for (;;) {
+    try {
+      const { transacoes, gravados } = await indexadorSolana.ciclo();
+      if (transacoes > 0) {
+        console.log(
+          `[indexer] solana: ${transacoes} transação(ões) nova(s), ${gravados} documento(s) gravado(s) — checkpoint slot ${indexadorSolana.checkpoint}`,
+        );
+      }
+    } catch (erro) {
+      console.error("[indexer] solana: erro no ciclo, tentando de novo no próximo:", erro);
+    }
+    await dormir(config.solana.pollIntervalMs);
+  }
+}
+
 async function loop(): Promise<void> {
   await indexador.iniciar();
+  if (indexadorSolana) {
+    await indexadorSolana.iniciar();
+    console.log(
+      `[indexer] Solana: programa ${config.solana.programId} em ${config.solana.rpcUrl} — checkpoint (${FONTE_SOLANA}) slot ${indexadorSolana.checkpoint}`,
+    );
+  } else {
+    console.log("[indexer] Solana: desativada (SOLANA_DESATIVADO=1)");
+  }
+
+  // Em dry-run, a Solana roda um ciclo só, antes, e imprime o que gravaria.
+  if (config.dryRun && indexadorSolana) {
+    const r = await indexadorSolana.ciclo();
+    console.log(`[dry-run] solana: ${r.transacoes} transação(ões), ${r.gravados} documento(s) seriam gravados`);
+  } else {
+    void loopSolana();
+  }
 
   if (config.dryRun) console.log("[indexer] DRY-RUN — nada será gravado no banco");
   console.log(`[indexer] Niara-Register — checkpoints: ${JSON.stringify(indexador.checkpoints)}`);

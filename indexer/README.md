@@ -19,6 +19,8 @@ Três fontes, cada uma com checkpoint próprio em `registro_checkpoints`:
   `pmes`; os eventos dela anteriores a isso são buscados por um backfill, que
   guarda o progresso na própria tabela e retoma se o processo cair.
 - **`assinaturas`**: `DocumentoRegistrado` do `RegistroAssinaturas`.
+- **`solana-assinaturas`** (Solana devnet): `DocumentoRegistrado` do programa
+  `niara-register-solana` (`9RPHqLou…`). Ver seção abaixo.
 
 A lista de ofertas vem do banco (`registro_ofertas`, migration 004), não de
 variável de ambiente: as 11 legadas entram pelo seed da migration, as do
@@ -44,9 +46,44 @@ ethers está desligado; cada chamada ao RPC passa por `limite.ts`, que espera
 1s, 2s, 4s… (teto 30s, até 6 tentativas) e registra uma linha de log a cada
 espera. Esgotadas as tentativas, só aquela parte do ciclo é abortada.
 
+## Fonte Solana (`solana.ts`)
+
+Laço próprio, em paralelo ao lote EVM — erro ou lentidão de um RPC nunca atrasa
+o outro, e um erro na Solana nunca derruba o processo. A cada
+`SOLANA_POLL_INTERVAL_MS`:
+
+1. `getSignaturesForAddress(programa)` (commitment `finalized`) até o slot do
+   checkpoint `solana-assinaturas`;
+2. para cada transação bem-sucedida, extrai `DocumentoRegistrado` dos logs —
+   **só** quando o `Program data:` foi emitido dentro do frame do nosso
+   programa (pilha de `invoke`), então outro programa não forja linha citando
+   nosso endereço;
+3. confere o evento contra a conta PDA `["assinatura", hash]` e grava o que
+   está **na conta** em `registro_assinaturas`, com `rede = 'solana-devnet'`,
+   `slot`, `bloco = null`, hash `0x…` (mesmo formato da Sepolia);
+4. salva o checkpoint com o maior slot processado.
+
+Idempotente por `(rede, hash_sha256)` — exige a
+`supabase/migrations_005_assinaturas_multichain.sql`. **Ordem de deploy:**
+rodar a migration 005 no Supabase **antes** de publicar este indexer (o upsert
+da Sepolia também passou a usar `rede,hash_sha256`).
+
+| Variável | Padrão | |
+|---|---|---|
+| `SOLANA_RPC_URL` | `https://api.devnet.solana.com` | RPC público tem limite baixo; Helius/QuickNode free é melhor |
+| `SOLANA_PROGRAM_ID` | `9RPHqLouFjoUbPdcmA1GyHMeDoWvjZMuCyYFPBWLmTcR` | |
+| `SOLANA_START_SLOT` | `509235000` | slot do deploy; início sem checkpoint |
+| `SOLANA_POLL_INTERVAL_MS` | `30000` | |
+| `SOLANA_DESATIVADO` | — | `1` desliga só a fonte Solana |
+
 ## Teste
 
-`npm run teste` roda `teste/atraso.teste.ts`: RPC, tokens e banco falsos, em
+`npm run teste` roda `teste/atraso.teste.ts` e `teste/solana.teste.ts`. O da
+Solana testa offline a decodificação e a atribuição de eventos (evento forjado
+por outro programa é ignorado) e depois roda um ciclo contra a devnet real com
+banco em memória (`SOLANA_TESTE_REDE=0` pula essa parte).
+
+`teste/atraso.teste.ts`: RPC, tokens e banco falsos, em
 memória — não usa rede nem o Supabase. Simula uma recuperação longa com 429
 intermitente e uma rajada que esgota o backoff, e verifica que o lote normal
 grava eventos novos durante a recuperação e que, ao fim, não há lacuna nem
