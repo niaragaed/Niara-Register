@@ -2,21 +2,22 @@
   "name": "niara-register-indexer",
   "version": "0.1.0",
   "private": true,
-  "description": "Worker de longa duração que lê eventos reais do niara-contracts-PMEs na Sepolia e grava no Postgres do Niara-Register.",
+  "description": "Worker de longa duração que lê eventos reais do niara-contracts-PMEs e do RegistroAssinaturas na Sepolia e do programa niara-register-solana na Solana devnet, e grava no Postgres do Niara-Register.",
   "type": "module",
   "scripts": {
     "start": "tsx index.ts",
     "dev": "tsx watch index.ts",
-    "teste": "tsx teste/atraso.teste.ts"
+    "teste": "tsx teste/atraso.teste.ts && tsx teste/solana.teste.ts"
   },
   "dependencies": {
-    "ethers": "^6.13.4",
+    "@solana/web3.js": "^1.99.0",
     "@supabase/supabase-js": "^2.112.4",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4"
   },
   "devDependencies": {
+    "@types/node": "^20.17.9",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "@types/node": "^20.17.9"
+    "typescript": "^5.7.2"
   }
 }

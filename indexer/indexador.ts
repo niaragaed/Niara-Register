@@ -239,6 +239,7 @@ export function criarIndexador(deps: {
     if (!parsed || parsed.name !== "DocumentoRegistrado") return;
 
     await banco.gravarAssinatura({
+      rede: "sepolia",
       documento_nome: parsed.args.nomeDocumento as string,
       tipo_documento: parsed.args.tipoDocumento as string,
       hash_sha256: parsed.args.hashDocumento as string,

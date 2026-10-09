@@ -56,6 +56,18 @@ export const config = {
     "0xde9cc84d1300b57f640f2d1862900393b82796e5").toLowerCase() as `0x${string}`,
   startBlockOrquestrador: Number(process.env.START_BLOCK_ORQUESTRADOR ?? 11733723),
 
+  // Solana devnet — programa niara-register-solana. Laço próprio, independente
+  // do lote EVM (ver solana.ts). SOLANA_DESATIVADO=1 desliga só esta fonte.
+  solana: {
+    ativo: process.env.SOLANA_DESATIVADO !== "1",
+    rpcUrl: process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
+    programId: process.env.SOLANA_PROGRAM_ID ?? "9RPHqLouFjoUbPdcmA1GyHMeDoWvjZMuCyYFPBWLmTcR",
+    // Slot do deploy do programa na devnet (solana program show) — ponto de
+    // partida sem checkpoint salvo.
+    slotInicial: Number(process.env.SOLANA_START_SLOT ?? 509235000),
+    pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
+  },
+
   // Modo de validação: lê a chain e o banco, mas não grava nada (nem
   // checkpoint). Imprime o que seria inserido e encerra ao alcançar a chain.
   dryRun: process.argv.includes("--dry-run") || process.env.DRY_RUN === "1",

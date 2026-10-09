@@ -74,7 +74,7 @@ export const en = {
       ") is deployed and live on Sepolia. The hash is computed in your browser and the on-chain record above is real — each signature becomes an actual transaction, verifiable on Etherscan.",
     historicoTitulo: "Documents already recorded",
     historicoLede:
-      "A mirror of every document recorded through the Sepolia contract, most recent first. Solana records are verifiable above and on Solana Explorer; they will appear here once the indexer is extended to Solana.",
+      "A mirror of every document recorded on Ethereum Sepolia and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer.",
     solanaPrefixo: "The Solana program (",
     solanaSufixo:
       ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
@@ -124,6 +124,9 @@ export const en = {
       "On Solana the name is limited to 128 bytes and the type to 32 bytes.",
     verNaSolana: "view on Solana Explorer",
     naoRegistrado: "not recorded on this network yet",
+    erroPhantom:
+      "Could not connect to the Solana wallet. Unlock Phantom (and finish its setup, if it is new), then try again.",
+    conexaoRecusada: "The connection request was rejected in the wallet.",
   },
 
   /**
@@ -165,6 +168,9 @@ export const en = {
     // chave espelha o valor "pendente" do banco; o rótulo é o texto decidido
     pendente: "Awaiting confirmation",
     verNaSepolia: "view on Sepolia",
+    verNaSolana: "view on Solana Explorer",
+    redeSepolia: "Ethereum Sepolia",
+    redeSolana: "Solana Devnet",
     hash: "hash",
     assinante: "signer",
   },
@@ -323,7 +329,7 @@ export const pt: Dictionary = {
       ") está deployado e ativo na Sepolia. O hash é calculado no seu navegador e o registro on-chain acima é real — cada assinatura vira uma transação de verdade, verificável no Etherscan.",
     historicoTitulo: "Documentos já registrados",
     historicoLede:
-      "Espelho de todos os documentos registrados via o contrato na Sepolia, mais recentes primeiro. Registros na Solana são verificáveis acima e no Solana Explorer; entram aqui quando o indexador for estendido para a Solana.",
+      "Espelho de todos os documentos registrados na Ethereum Sepolia e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede.",
     solanaPrefixo: "O programa na Solana (",
     solanaSufixo:
       ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
@@ -373,6 +379,9 @@ export const pt: Dictionary = {
       "Na Solana, o nome é limitado a 128 bytes e o tipo a 32 bytes.",
     verNaSolana: "ver no Solana Explorer",
     naoRegistrado: "ainda não registrado nesta rede",
+    erroPhantom:
+      "Não foi possível conectar à carteira Solana. Desbloqueie a Phantom (e termine a configuração, se ela for nova) e tente de novo.",
+    conexaoRecusada: "O pedido de conexão foi recusado na carteira.",
   },
 
   frases: {
@@ -404,6 +413,9 @@ export const pt: Dictionary = {
     assinadoOnchain: "Assinado on-chain",
     pendente: "Aguardando confirmação",
     verNaSepolia: "ver na Sepolia",
+    verNaSolana: "ver no Solana Explorer",
+    redeSepolia: "Ethereum Sepolia",
+    redeSolana: "Solana Devnet",
     hash: "hash",
     assinante: "assinante",
   },
