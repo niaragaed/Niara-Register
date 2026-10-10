@@ -75,6 +75,15 @@ export default async function AssinaturaPage() {
           >
             BaseScan
           </a>
+          {" · "}
+          <a
+            href={linkEnderecoEvm("robinhood-testnet", REDES_EVM["robinhood-testnet"].endereco)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            Robinhood Explorer
+          </a>
           .
         </p>
         <p className="mt-3 font-body text-sm text-slate">

@@ -45,45 +45,48 @@ const indexadorSolana = config.solana.ativo
     })
   : null;
 
-// Base Sepolia: provider próprio, também sem o retry silencioso do ethers.
-const FONTE_BASE = "base-sepolia-assinaturas";
-const indexadorBase = config.base.ativo
-  ? (() => {
-      const req = new ethers.FetchRequest(config.base.rpcUrl);
-      req.retryFunc = async () => false;
-      const providerBase = new ethers.JsonRpcProvider(req, 84532, { staticNetwork: true });
-      return criarIndexadorAssinaturasEvm({
-        rede: "base-sepolia",
-        fonte: FONTE_BASE,
-        rpc: providerBase,
+// Redes EVM adicionais (Base Sepolia, Robinhood Chain Testnet): o mesmo
+// RegistroAssinaturas, cada uma com provider próprio (sem o retry silencioso
+// do ethers), checkpoint próprio e laço próprio.
+const indexadoresEvmExtras = config.redesEvmExtras
+  .filter((r) => r.ativo)
+  .map((r) => {
+    const req = new ethers.FetchRequest(r.rpcUrl);
+    req.retryFunc = async () => false;
+    const providerRede = new ethers.JsonRpcProvider(req, r.chainId, { staticNetwork: true });
+    return {
+      cfg: r,
+      idx: criarIndexadorAssinaturasEvm({
+        rede: r.rede,
+        fonte: r.fonte,
+        rpc: providerRede,
         banco: db,
-        endereco: config.base.endereco,
-        blocoDeploy: config.base.blocoDeploy,
-        chunk: config.base.chunk,
-        maxPedacosPorCiclo: config.base.maxPedacosPorCiclo,
-        confirmacoes: config.base.confirmacoes,
+        endereco: r.endereco,
+        blocoDeploy: r.blocoDeploy,
+        chunk: r.chunk,
+        maxPedacosPorCiclo: r.maxPedacosPorCiclo,
+        confirmacoes: r.confirmacoes,
         backoff: config.backoff,
         dormir,
-      });
-    })()
-  : null;
+      }),
+    };
+  });
 
-/** Mesmo contrato do loopSolana: nunca derruba o processo nem bloqueia a EVM. */
-async function loopBase(): Promise<void> {
-  if (!indexadorBase) return;
+/** Mesmo contrato do loopSolana: nunca derruba o processo nem bloqueia as outras redes. */
+async function loopEvmExtra({ cfg, idx }: (typeof indexadoresEvmExtras)[number]): Promise<void> {
   for (;;) {
     let emDia = true;
     try {
-      const r = await indexadorBase.ciclo();
+      const r = await idx.ciclo();
       emDia = r.emDia;
       if (r.gravados > 0) {
-        console.log(`[indexer] base-sepolia: ${r.gravados} documento(s) gravado(s) — checkpoint bloco ${indexadorBase.checkpoint}`);
+        console.log(`[indexer] ${cfg.rede}: ${r.gravados} documento(s) gravado(s) — checkpoint bloco ${idx.checkpoint}`);
       }
     } catch (erro) {
-      console.error("[indexer] base-sepolia: erro no ciclo, tentando de novo no próximo:", erro);
+      console.error(`[indexer] ${cfg.rede}: erro no ciclo, tentando de novo no próximo:`, erro);
     }
     // Atrasado (ex.: primeira varredura desde o deploy): segue sem esperar.
-    if (emDia) await dormir(config.base.pollIntervalMs);
+    if (emDia) await dormir(cfg.pollIntervalMs);
   }
 }
 
@@ -119,19 +122,20 @@ async function loop(): Promise<void> {
     console.log("[indexer] Solana: desativada (SOLANA_DESATIVADO=1)");
   }
 
-  if (indexadorBase) {
-    await indexadorBase.iniciar();
-    console.log(
-      `[indexer] Base Sepolia: RegistroAssinaturas em ${config.base.endereco} via ${config.base.rpcUrl} — checkpoint (${FONTE_BASE}) bloco ${indexadorBase.checkpoint}`,
-    );
-  } else {
-    console.log("[indexer] Base Sepolia: desativada (BASE_DESATIVADO=1)");
+  for (const r of config.redesEvmExtras.filter((r) => !r.ativo)) {
+    console.log(`[indexer] ${r.rede}: desativada`);
   }
-  if (config.dryRun && indexadorBase) {
-    const r = await indexadorBase.ciclo();
-    console.log(`[dry-run] base-sepolia: ${r.gravados} documento(s) seriam gravados (em dia: ${r.emDia})`);
-  } else {
-    void loopBase();
+  for (const extra of indexadoresEvmExtras) {
+    await extra.idx.iniciar();
+    console.log(
+      `[indexer] ${extra.cfg.rede}: RegistroAssinaturas em ${extra.cfg.endereco} via ${extra.cfg.rpcUrl} — checkpoint (${extra.cfg.fonte}) bloco ${extra.idx.checkpoint}`,
+    );
+    if (config.dryRun) {
+      const r = await extra.idx.ciclo();
+      console.log(`[dry-run] ${extra.cfg.rede}: ${r.gravados} documento(s) seriam gravados (em dia: ${r.emDia})`);
+    } else {
+      void loopEvmExtra(extra);
+    }
   }
 
   // Em dry-run, a Solana roda um ciclo só, antes, e imprime o que gravaria.

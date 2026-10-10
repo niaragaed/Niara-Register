@@ -3,7 +3,7 @@
 // (qualquer um confere no explorador), então fica aqui e não em variável de
 // ambiente — se houver redeploy, atualizar só este arquivo.
 
-export type RedeEvm = "sepolia" | "base-sepolia";
+export type RedeEvm = "sepolia" | "base-sepolia" | "robinhood-testnet";
 
 export type ConfigRedeEvm = {
   /** chainId em hex, como a carteira devolve em eth_chainId. */
@@ -31,6 +31,15 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
     chainName: "Base Sepolia",
     rpcUrl: "https://sepolia.base.org",
     explorer: "https://sepolia.basescan.org",
+    endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+  },
+  // Fonte: broadcast/.../46630/run-latest.json. Dados da rede:
+  // docs.robinhood.com/chain/connecting
+  "robinhood-testnet": {
+    chainIdHex: "0xb626", // 46630
+    chainName: "Robinhood Chain Testnet",
+    rpcUrl: "https://rpc.testnet.chain.robinhood.com",
+    explorer: "https://explorer.testnet.chain.robinhood.com",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
 };

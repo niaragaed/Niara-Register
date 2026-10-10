@@ -29,16 +29,13 @@ export function AssinaturaEntry({
       ? `https://explorer.solana.com/tx/${registro.tx_hash}?cluster=devnet`
       : linkTxEvm(rede, registro.tx_hash)
     : null;
-  const nomeRede = solana
-    ? t.entrada.redeSolana
-    : rede === "base-sepolia"
-      ? t.entrada.redeBase
-      : t.entrada.redeSepolia;
-  const verNa = solana
-    ? t.entrada.verNaSolana
-    : rede === "base-sepolia"
-      ? t.entrada.verNaBase
-      : t.entrada.verNaSepolia;
+  const rotulos = {
+    sepolia: [t.entrada.redeSepolia, t.entrada.verNaSepolia],
+    "base-sepolia": [t.entrada.redeBase, t.entrada.verNaBase],
+    "robinhood-testnet": [t.entrada.redeRobinhood, t.entrada.verNaRobinhood],
+    "solana-devnet": [t.entrada.redeSolana, t.entrada.verNaSolana],
+  } as const;
+  const [nomeRede, verNa] = rotulos[rede];
 
   return (
     <div className="ledger-rule flex gap-5 py-5 pl-6">

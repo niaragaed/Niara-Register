@@ -19,8 +19,9 @@ Três fontes, cada uma com checkpoint próprio em `registro_checkpoints`:
   `pmes`; os eventos dela anteriores a isso são buscados por um backfill, que
   guarda o progresso na própria tabela e retoma se o processo cair.
 - **`assinaturas`**: `DocumentoRegistrado` do `RegistroAssinaturas`.
-- **`base-sepolia-assinaturas`** (Base Sepolia): `DocumentoRegistrado` do
-  mesmo `RegistroAssinaturas`, deployado na Base Sepolia. Ver seção abaixo.
+- **`base-sepolia-assinaturas`** e **`robinhood-testnet-assinaturas`**:
+  `DocumentoRegistrado` do mesmo `RegistroAssinaturas` na Base Sepolia e na
+  Robinhood Chain Testnet. Ver seção abaixo.
 - **`solana-assinaturas`** (Solana devnet): `DocumentoRegistrado` do programa
   `niara-register-solana` (`9RPHqLou…`). Ver seção abaixo.
 
@@ -48,23 +49,27 @@ ethers está desligado; cada chamada ao RPC passa por `limite.ts`, que espera
 1s, 2s, 4s… (teto 30s, até 6 tentativas) e registra uma linha de log a cada
 espera. Esgotadas as tentativas, só aquela parte do ciclo é abortada.
 
-## Fonte Base Sepolia (`evm-assinaturas.ts`)
+## Redes EVM adicionais (`evm-assinaturas.ts`)
 
-Laço próprio, com provider próprio (sem o retry silencioso do ethers), em
-paralelo à Sepolia e à Solana. Por ciclo: do checkpoint até `topo −
-BASE_CONFIRMACOES`, em pedaços de `BASE_BLOCK_RANGE_CHUNK` blocos (o RPC
-público da Base aceita no máximo 200), até `BASE_PEDACOS_POR_CICLO` pedaços;
+O mesmo `RegistroAssinaturas` em **Base Sepolia** (`0x5627…d93a`, bloco
+47915732) e **Robinhood Chain Testnet** (chain ID 46630). Cada rede tem
+provider próprio (sem o retry silencioso do ethers), checkpoint próprio
+(`<rede>-assinaturas`) e laço próprio, em paralelo à Sepolia e à Solana. Por
+ciclo: do checkpoint até `topo − confirmações`, em pedaços, até 20 pedaços;
 checkpoint salvo a cada pedaço. A data vem do campo `timestamp` do próprio
-evento. Grava com `rede = 'base-sepolia'` — exige a
-`supabase/migrations_006_assinaturas_base.sql` (rodar **antes** do deploy).
+evento.
 
-| Variável | Padrão | |
-|---|---|---|
-| `BASE_SEPOLIA_RPC_URL` | `https://sepolia.base.org` | |
-| `BASE_REGISTRO_ASSINATURAS_ENDERECO` / `BASE_START_BLOCK` | endereço e bloco do deploy | |
-| `BASE_BLOCK_RANGE_CHUNK` / `BASE_PEDACOS_POR_CICLO` / `BASE_CONFIRMACOES` | `200` / `20` / `5` | |
-| `BASE_POLL_INTERVAL_MS` | `30000` | |
-| `BASE_DESATIVADO` | — | `1` desliga só a Base |
+| Rede | RPC padrão | Pedaço | Confirmações | Migration |
+|---|---|---|---|---|
+| `base-sepolia` | `https://sepolia.base.org` (limite de 200 blocos por `eth_getLogs`) | 200 | 5 | 006 |
+| `robinhood-testnet` | `https://rpc.testnet.chain.robinhood.com` | 2000 | 20 (blocos de ~250 ms) | 007 |
+
+Rodar a migration da rede **antes** de publicar o indexer com ela.
+
+Variáveis por rede, com prefixo `BASE_` ou `ROBINHOOD_`:
+`REGISTRO_ASSINATURAS_ENDERECO`, `START_BLOCK`, `BLOCK_RANGE_CHUNK`,
+`PEDACOS_POR_CICLO`, `CONFIRMACOES`, `POLL_INTERVAL_MS`, `DESATIVADO=1`.
+RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL`.
 
 ## Fonte Solana (`solana.ts`)
 
