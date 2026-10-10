@@ -58,7 +58,7 @@ export async function gravarRegistro(registro: NovoRegistro): Promise<void> {
 
 export type NovaAssinatura = {
   /** Rede de origem (migration 005). */
-  rede: "sepolia" | "base-sepolia" | "robinhood-testnet" | "solana-devnet";
+  rede: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "solana-devnet";
   documento_nome: string;
   tipo_documento: string;
   /** Sempre "0x" + 64 hex minúsculos, nas duas redes. */

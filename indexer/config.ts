@@ -17,7 +17,7 @@ export type { OfertaMonitorada } from "./ofertas";
 
 /** Configuração de uma rede EVM adicional, com override por variável de ambiente. */
 function redeEvmExtra(base: {
-  rede: "base-sepolia" | "robinhood-testnet";
+  rede: "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet";
   prefixo: string;
   chainId: number;
   rpcUrl: string;
@@ -25,6 +25,8 @@ function redeEvmExtra(base: {
   blocoDeploy: number;
   chunk: number;
   confirmacoes: number;
+  maxPedacosPorCiclo?: number;
+  intervaloEntrePedacosMs?: number;
 }) {
   const env = (nome: string) => process.env[`${base.prefixo}_${nome}`];
   return {
@@ -36,7 +38,8 @@ function redeEvmExtra(base: {
     endereco: (env("REGISTRO_ASSINATURAS_ENDERECO") ?? base.endereco) as `0x${string}`,
     blocoDeploy: Number(env("START_BLOCK") ?? base.blocoDeploy),
     chunk: Number(env("BLOCK_RANGE_CHUNK") ?? base.chunk),
-    maxPedacosPorCiclo: Number(env("PEDACOS_POR_CICLO") ?? 20),
+    maxPedacosPorCiclo: Number(env("PEDACOS_POR_CICLO") ?? base.maxPedacosPorCiclo ?? 20),
+    intervaloEntrePedacosMs: Number(env("INTERVALO_PEDACOS_MS") ?? base.intervaloEntrePedacosMs ?? 0),
     confirmacoes: Number(env("CONFIRMACOES") ?? base.confirmacoes),
     pollIntervalMs: Number(env("POLL_INTERVAL_MS") ?? 30_000),
   };
@@ -129,6 +132,23 @@ export const config = {
       // aceitou 5000 blocos por eth_getLogs em teste) e margem de 20 blocos.
       chunk: 2000,
       confirmacoes: 20,
+    }),
+    redeEvmExtra({
+      rede: "hyperevm-testnet",
+      prefixo: "HYPEREVM",
+      chainId: 998,
+      // RPC oficial da HyperEVM Testnet (hyperliquid.gitbook.io → HyperEVM).
+      rpcUrl: process.env.HYPEREVM_RPC_URL ?? "https://rpc.hyperliquid-testnet.xyz/evm",
+      // Fonte: niara-contracts-Register, broadcast/DeployRegistro.s.sol/998/run-latest.json
+      endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+      // bloco 66500325 = 0x3f6b6e5; mesmo endereço das outras redes (mesma carteira, nonce 0).
+      blocoDeploy: 66500325,
+      // O RPC oficial limita eth_getLogs a 50 blocos e tem limite de taxa por
+      // IP apertado: pedaços de 50, até 30 por ciclo, 1 s entre eles.
+      chunk: 50,
+      confirmacoes: 2,
+      maxPedacosPorCiclo: 30,
+      intervaloEntrePedacosMs: 1000,
     }),
   ],
 

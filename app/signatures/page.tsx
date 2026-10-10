@@ -84,6 +84,15 @@ export default async function AssinaturaPage() {
           >
             Robinhood Explorer
           </a>
+          {" · "}
+          <a
+            href={linkEnderecoEvm("hyperevm-testnet", REDES_EVM["hyperevm-testnet"].endereco)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            Purrsec
+          </a>
           .
         </p>
         <p className="mt-3 font-body text-sm text-slate">

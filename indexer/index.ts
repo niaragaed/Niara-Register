@@ -66,6 +66,7 @@ const indexadoresEvmExtras = config.redesEvmExtras
         chunk: r.chunk,
         maxPedacosPorCiclo: r.maxPedacosPorCiclo,
         confirmacoes: r.confirmacoes,
+        intervaloEntrePedacosMs: r.intervaloEntrePedacosMs,
         backoff: config.backoff,
         dormir,
       }),
