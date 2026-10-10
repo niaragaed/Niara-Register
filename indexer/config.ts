@@ -17,7 +17,7 @@ export type { OfertaMonitorada } from "./ofertas";
 
 /** Configuração de uma rede EVM adicional, com override por variável de ambiente. */
 function redeEvmExtra(base: {
-  rede: "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet";
+  rede: "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet";
   prefixo: string;
   chainId: number;
   rpcUrl: string;
@@ -149,6 +149,21 @@ export const config = {
       confirmacoes: 2,
       maxPedacosPorCiclo: 30,
       intervaloEntrePedacosMs: 1000,
+    }),
+    redeEvmExtra({
+      rede: "tempo-testnet",
+      prefixo: "TEMPO",
+      chainId: 42431,
+      // Tempo Testnet (Moderato) — tempo.xyz/developers/docs/quickstart/connection-details
+      rpcUrl: process.env.TEMPO_RPC_URL ?? "https://rpc.moderato.tempo.xyz",
+      // Fonte: niara-contracts-Register, broadcast/DeployRegistro.s.sol/42431/run-latest.json
+      endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+      // bloco 38942339 = 0x2523683; mesmo endereço das outras redes (mesma carteira, nonce 0).
+      blocoDeploy: 38942339,
+      // Blocos de ~0,5 s com finalidade determinística (Simplex BFT); o RPC
+      // público aceitou 10 000 blocos por eth_getLogs em teste.
+      chunk: 5000,
+      confirmacoes: 2,
     }),
   ],
 

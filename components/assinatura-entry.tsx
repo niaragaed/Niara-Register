@@ -34,6 +34,7 @@ export function AssinaturaEntry({
     "base-sepolia": [t.entrada.redeBase, t.entrada.verNaBase],
     "robinhood-testnet": [t.entrada.redeRobinhood, t.entrada.verNaRobinhood],
     "hyperevm-testnet": [t.entrada.redeHyperEvm, t.entrada.verNaHyperEvm],
+    "tempo-testnet": [t.entrada.redeTempo, t.entrada.verNaTempo],
     "solana-devnet": [t.entrada.redeSolana, t.entrada.verNaSolana],
   } as const;
   const [nomeRede, verNa] = rotulos[rede];

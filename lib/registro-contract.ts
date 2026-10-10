@@ -3,7 +3,12 @@
 // (qualquer um confere no explorador), então fica aqui e não em variável de
 // ambiente — se houver redeploy, atualizar só este arquivo.
 
-export type RedeEvm = "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet";
+export type RedeEvm =
+  | "sepolia"
+  | "base-sepolia"
+  | "robinhood-testnet"
+  | "hyperevm-testnet"
+  | "tempo-testnet";
 
 export type ConfigRedeEvm = {
   /** chainId em hex, como a carteira devolve em eth_chainId. */
@@ -55,6 +60,18 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
     moeda: { name: "HYPE", symbol: "HYPE" },
     rpcUrl: "https://rpc.hyperliquid-testnet.xyz/evm",
     explorer: "https://testnet.purrsec.com",
+    endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+  },
+  // Fonte: broadcast/.../42431/run-latest.json. Dados da rede:
+  // tempo.xyz/developers/docs/quickstart/connection-details. Sem token nativo:
+  // as taxas saem em stablecoin (pathUSD por padrão); "USD" é o símbolo que a
+  // própria Tempo recomenda para carteiras.
+  "tempo-testnet": {
+    chainIdHex: "0xa5bf", // 42431
+    chainName: "Tempo Testnet (Moderato)",
+    moeda: { name: "USD", symbol: "USD" },
+    rpcUrl: "https://rpc.moderato.tempo.xyz",
+    explorer: "https://explore.testnet.tempo.xyz",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
 };
