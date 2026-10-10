@@ -19,6 +19,8 @@ Três fontes, cada uma com checkpoint próprio em `registro_checkpoints`:
   `pmes`; os eventos dela anteriores a isso são buscados por um backfill, que
   guarda o progresso na própria tabela e retoma se o processo cair.
 - **`assinaturas`**: `DocumentoRegistrado` do `RegistroAssinaturas`.
+- **`base-sepolia-assinaturas`** (Base Sepolia): `DocumentoRegistrado` do
+  mesmo `RegistroAssinaturas`, deployado na Base Sepolia. Ver seção abaixo.
 - **`solana-assinaturas`** (Solana devnet): `DocumentoRegistrado` do programa
   `niara-register-solana` (`9RPHqLou…`). Ver seção abaixo.
 
@@ -45,6 +47,24 @@ Limite de taxa (HTTP 429 / "compute units per second"): o retry silencioso do
 ethers está desligado; cada chamada ao RPC passa por `limite.ts`, que espera
 1s, 2s, 4s… (teto 30s, até 6 tentativas) e registra uma linha de log a cada
 espera. Esgotadas as tentativas, só aquela parte do ciclo é abortada.
+
+## Fonte Base Sepolia (`evm-assinaturas.ts`)
+
+Laço próprio, com provider próprio (sem o retry silencioso do ethers), em
+paralelo à Sepolia e à Solana. Por ciclo: do checkpoint até `topo −
+BASE_CONFIRMACOES`, em pedaços de `BASE_BLOCK_RANGE_CHUNK` blocos (o RPC
+público da Base aceita no máximo 200), até `BASE_PEDACOS_POR_CICLO` pedaços;
+checkpoint salvo a cada pedaço. A data vem do campo `timestamp` do próprio
+evento. Grava com `rede = 'base-sepolia'` — exige a
+`supabase/migrations_006_assinaturas_base.sql` (rodar **antes** do deploy).
+
+| Variável | Padrão | |
+|---|---|---|
+| `BASE_SEPOLIA_RPC_URL` | `https://sepolia.base.org` | |
+| `BASE_REGISTRO_ASSINATURAS_ENDERECO` / `BASE_START_BLOCK` | endereço e bloco do deploy | |
+| `BASE_BLOCK_RANGE_CHUNK` / `BASE_PEDACOS_POR_CICLO` / `BASE_CONFIRMACOES` | `200` / `20` / `5` | |
+| `BASE_POLL_INTERVAL_MS` | `30000` | |
+| `BASE_DESATIVADO` | — | `1` desliga só a Base |
 
 ## Fonte Solana (`solana.ts`)
 
@@ -78,7 +98,7 @@ da Sepolia também passou a usar `rede,hash_sha256`).
 
 ## Teste
 
-`npm run teste` roda `teste/atraso.teste.ts` e `teste/solana.teste.ts`. O da
+`npm run teste` roda `teste/atraso.teste.ts`, `teste/solana.teste.ts` e `teste/base.teste.ts`. O da
 Solana testa offline a decodificação e a atribuição de eventos (evento forjado
 por outro programa é ignorado) e depois roda um ciclo contra a devnet real com
 banco em memória (`SOLANA_TESTE_REDE=0` pula essa parte).

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "tsx index.ts",
     "dev": "tsx watch index.ts",
-    "teste": "tsx teste/atraso.teste.ts && tsx teste/solana.teste.ts"
+    "teste": "tsx teste/atraso.teste.ts && tsx teste/solana.teste.ts && tsx teste/base.teste.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.99.0",

@@ -1,4 +1,5 @@
 import type { RegistroAssinatura } from "@/lib/supabase";
+import { linkTxEvm } from "@/lib/registro-contract";
 import { dictionaries, rotuloTipoDocumento } from "@/lib/i18n/dictionaries";
 import { formatarData } from "@/lib/i18n/formato";
 import type { Locale } from "@/lib/i18n/locale";
@@ -21,12 +22,23 @@ export function AssinaturaEntry({
 }) {
   const t = dictionaries[locale];
   // Linhas anteriores à migration 005 não têm `rede`: eram todas da Sepolia.
-  const solana = registro.rede === "solana-devnet";
+  const rede = registro.rede ?? "sepolia";
+  const solana = rede === "solana-devnet";
   const linkTx = registro.tx_hash
     ? solana
       ? `https://explorer.solana.com/tx/${registro.tx_hash}?cluster=devnet`
-      : `https://sepolia.etherscan.io/tx/${registro.tx_hash}`
+      : linkTxEvm(rede, registro.tx_hash)
     : null;
+  const nomeRede = solana
+    ? t.entrada.redeSolana
+    : rede === "base-sepolia"
+      ? t.entrada.redeBase
+      : t.entrada.redeSepolia;
+  const verNa = solana
+    ? t.entrada.verNaSolana
+    : rede === "base-sepolia"
+      ? t.entrada.verNaBase
+      : t.entrada.verNaSepolia;
 
   return (
     <div className="ledger-rule flex gap-5 py-5 pl-6">
@@ -51,7 +63,7 @@ export function AssinaturaEntry({
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-3">
           <span className="border border-slate/30 px-1.5 py-px font-mono text-[11px] uppercase tracking-wide text-ink">
-            {solana ? t.entrada.redeSolana : t.entrada.redeSepolia}
+            {nomeRede}
           </span>
           <span className="font-mono text-xs text-slate">
             {t.entrada.hash} {truncarHash(registro.hash_sha256)}
@@ -75,8 +87,7 @@ export function AssinaturaEntry({
               rel="noreferrer"
               className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
             >
-              {truncarHash(registro.tx_hash)} ↗{" "}
-              {solana ? t.entrada.verNaSolana : t.entrada.verNaSepolia}
+              {truncarHash(registro.tx_hash)} ↗ {verNa}
             </a>
           )}
         </div>

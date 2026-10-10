@@ -1,11 +1,39 @@
-// Endereço e ABI do RegistroAssinaturas — deployado de verdade na Sepolia.
-// Endereço de contrato é informação pública (qualquer um confere no
-// Etherscan), então não há necessidade de tratar como segredo nem de
-// variável de ambiente — mas se o contrato for redeployado no futuro,
-// atualizar só este arquivo.
-// Fonte: niaragaed/niara-contracts-Register, script/DeployRegistro.s.sol
-export const ENDERECO_REGISTRO_ASSINATURAS =
-  "0x5627857ee73f37d6da96530ed08c07339dd9d93a" as const;
+// RegistroAssinaturas — o MESMO contrato (niaragaed/niara-contracts-Register)
+// deployado em mais de uma rede EVM. Endereço de contrato é informação pública
+// (qualquer um confere no explorador), então fica aqui e não em variável de
+// ambiente — se houver redeploy, atualizar só este arquivo.
+
+export type RedeEvm = "sepolia" | "base-sepolia";
+
+export type ConfigRedeEvm = {
+  /** chainId em hex, como a carteira devolve em eth_chainId. */
+  chainIdHex: string;
+  /** Nome usado ao pedir para a carteira adicionar a rede. */
+  chainName: string;
+  rpcUrl: string;
+  explorer: string;
+  endereco: `0x${string}`;
+};
+
+export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
+  // Fonte: script/DeployRegistro.s.sol, broadcast/.../11155111/run-latest.json
+  sepolia: {
+    chainIdHex: "0xaa36a7", // 11155111
+    chainName: "Sepolia",
+    rpcUrl: "https://rpc.sepolia.org",
+    explorer: "https://sepolia.etherscan.io",
+    endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+  },
+  // Fonte: broadcast/.../84532/run-latest.json — mesmo endereço da Sepolia
+  // porque saiu da mesma carteira de deploy com o mesmo nonce (CREATE).
+  "base-sepolia": {
+    chainIdHex: "0x14a34", // 84532
+    chainName: "Base Sepolia",
+    rpcUrl: "https://sepolia.base.org",
+    explorer: "https://sepolia.basescan.org",
+    endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+  },
+};
 
 export const REGISTRO_ASSINATURAS_ABI = [
   "function registrar(bytes32 hashDocumento, string nomeDocumento, string tipoDocumento) external",
@@ -15,4 +43,10 @@ export const REGISTRO_ASSINATURAS_ABI = [
   "error HashInvalido()",
 ] as const;
 
-export const SEPOLIA_CHAIN_ID_HEX = "0xaa36a7"; // 11155111 em hex
+export function linkTxEvm(rede: RedeEvm, tx: string): string {
+  return `${REDES_EVM[rede].explorer}/tx/${tx}`;
+}
+
+export function linkEnderecoEvm(rede: RedeEvm, endereco: string): string {
+  return `${REDES_EVM[rede].explorer}/address/${endereco}`;
+}
