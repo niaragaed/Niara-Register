@@ -15,6 +15,33 @@ function required(name: string): string {
 
 export type { OfertaMonitorada } from "./ofertas";
 
+/** Configuração de uma rede EVM adicional, com override por variável de ambiente. */
+function redeEvmExtra(base: {
+  rede: "base-sepolia" | "robinhood-testnet";
+  prefixo: string;
+  chainId: number;
+  rpcUrl: string;
+  endereco: string;
+  blocoDeploy: number;
+  chunk: number;
+  confirmacoes: number;
+}) {
+  const env = (nome: string) => process.env[`${base.prefixo}_${nome}`];
+  return {
+    rede: base.rede,
+    fonte: `${base.rede}-assinaturas`,
+    chainId: base.chainId,
+    ativo: env("DESATIVADO") !== "1",
+    rpcUrl: base.rpcUrl,
+    endereco: (env("REGISTRO_ASSINATURAS_ENDERECO") ?? base.endereco) as `0x${string}`,
+    blocoDeploy: Number(env("START_BLOCK") ?? base.blocoDeploy),
+    chunk: Number(env("BLOCK_RANGE_CHUNK") ?? base.chunk),
+    maxPedacosPorCiclo: Number(env("PEDACOS_POR_CICLO") ?? 20),
+    confirmacoes: Number(env("CONFIRMACOES") ?? base.confirmacoes),
+    pollIntervalMs: Number(env("POLL_INTERVAL_MS") ?? 30_000),
+  };
+}
+
 export const config = {
   rpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${required("ALCHEMY_API_KEY")}`,
   supabaseUrl: required("SUPABASE_URL"),
@@ -68,24 +95,42 @@ export const config = {
     pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
   },
 
-  // Base Sepolia — o mesmo RegistroAssinaturas, num laço próprio (ver
-  // evm-assinaturas.ts). BASE_DESATIVADO=1 desliga só esta fonte. O RPC público
-  // da Base basta para o volume do Register; para mais folga, um RPC da
-  // Alchemy/QuickNode em BASE_SEPOLIA_RPC_URL.
-  base: {
-    ativo: process.env.BASE_DESATIVADO !== "1",
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
-    // Fonte: niara-contracts-Register, broadcast/DeployRegistro.s.sol/84532/run-latest.json
-    // (bloco 47915732 = 0x2db22d4). Mesmo endereço da Sepolia: mesma carteira, mesmo nonce.
-    endereco: (process.env.BASE_REGISTRO_ASSINATURAS_ENDERECO ??
-      "0x5627857ee73f37d6da96530ed08c07339dd9d93a") as `0x${string}`,
-    blocoDeploy: Number(process.env.BASE_START_BLOCK ?? 47915732),
-    // O RPC público da Base limita eth_getLogs a 200 blocos por chamada.
-    chunk: Number(process.env.BASE_BLOCK_RANGE_CHUNK ?? 200),
-    maxPedacosPorCiclo: Number(process.env.BASE_PEDACOS_POR_CICLO ?? 20),
-    confirmacoes: Number(process.env.BASE_CONFIRMACOES ?? 5),
-    pollIntervalMs: Number(process.env.BASE_POLL_INTERVAL_MS ?? 30_000),
-  },
+  // Redes EVM adicionais com o mesmo RegistroAssinaturas, cada uma num laço
+  // próprio (ver evm-assinaturas.ts). Variáveis por rede com prefixo próprio
+  // (BASE_*, ROBINHOOD_*); <PREFIXO>_DESATIVADO=1 desliga só aquela rede.
+  redesEvmExtras: [
+    redeEvmExtra({
+      rede: "base-sepolia",
+      prefixo: "BASE",
+      chainId: 84532,
+      // O RPC público da Base basta para o volume do Register; para mais folga,
+      // um RPC da Alchemy/QuickNode em BASE_SEPOLIA_RPC_URL.
+      rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+      // Fonte: niara-contracts-Register, broadcast/DeployRegistro.s.sol/84532/run-latest.json
+      // (bloco 47915732 = 0x2db22d4). Mesmo endereço da Sepolia: mesma carteira, mesmo nonce.
+      endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+      blocoDeploy: 47915732,
+      // O RPC público da Base limita eth_getLogs a 200 blocos por chamada.
+      chunk: 200,
+      confirmacoes: 5,
+    }),
+    redeEvmExtra({
+      rede: "robinhood-testnet",
+      prefixo: "ROBINHOOD",
+      chainId: 46630,
+      // RPC público da Robinhood Chain Testnet (docs.robinhood.com/chain/connecting);
+      // para mais folga, o da Alchemy em ROBINHOOD_RPC_URL.
+      rpcUrl: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.testnet.chain.robinhood.com",
+      // Fonte: niara-contracts-Register, broadcast/DeployRegistro.s.sol/46630/run-latest.json
+      endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+      // bloco 131998737 = 0x7de2411; mesmo endereço das outras redes (mesma carteira, nonce 0).
+      blocoDeploy: 131998737,
+      // Chain Arbitrum: blocos de ~250 ms, então pedaços maiores (o RPC público
+      // aceitou 5000 blocos por eth_getLogs em teste) e margem de 20 blocos.
+      chunk: 2000,
+      confirmacoes: 20,
+    }),
+  ],
 
   // Modo de validação: lê a chain e o banco, mas não grava nada (nem
   // checkpoint). Imprime o que seria inserido e encerra ao alcançar a chain.

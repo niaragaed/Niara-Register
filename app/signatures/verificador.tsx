@@ -327,6 +327,7 @@ export function VerificadorDeDocumento({
   const redes: { id: Rede; nome: string; carteira: string }[] = [
     { id: "sepolia", nome: t.redeSepolia, carteira: t.carteiraSepolia },
     { id: "base-sepolia", nome: t.redeBase, carteira: t.carteiraSepolia },
+    { id: "robinhood-testnet", nome: t.redeRobinhood, carteira: t.carteiraSepolia },
     { id: "solana", nome: t.redeSolana, carteira: t.carteiraSolana },
   ];
 
@@ -495,7 +496,9 @@ export function VerificadorDeDocumento({
                   ? t.verNaSolana
                   : rede === "base-sepolia"
                     ? t.verNaBase
-                    : t.verNaSepolia}
+                    : rede === "robinhood-testnet"
+                      ? t.verNaRobinhood
+                      : t.verNaSepolia}
               </a>
             </div>
           )}

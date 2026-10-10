@@ -19,7 +19,7 @@ import { comBackoff, type OpcoesBackoff } from "./limite";
  * Gravação idempotente por (rede, hash_sha256) — ver migration 005/006.
  */
 
-export type RedeEvmExtra = "base-sepolia";
+export type RedeEvmExtra = "base-sepolia" | "robinhood-testnet";
 
 export type RpcEvmLeve = {
   getBlockNumber(): Promise<number>;

@@ -65,7 +65,7 @@ export type RegistroAssinatura = {
    * Rede de origem (migration 005). Ausente antes da migration — tratar como
    * "sepolia", que era a única rede.
    */
-  rede?: "sepolia" | "base-sepolia" | "solana-devnet";
+  rede?: "sepolia" | "base-sepolia" | "robinhood-testnet" | "solana-devnet";
   /** Slot da Solana; null nas linhas da Sepolia. */
   slot?: number | null;
   documento_nome: string;
