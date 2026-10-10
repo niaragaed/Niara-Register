@@ -98,6 +98,18 @@ export const config = {
     pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
   },
 
+  // Niara-PMEs na Solana devnet — programa niara-pmes-solana. Mesmo livro do PMEs
+  // (registro_transacoes, fonte 'pmes', rede 'solana-devnet'), laço próprio (pmes-solana.ts).
+  // Usa o mesmo RPC da fonte de assinaturas. PMES_SOLANA_DESATIVADO=1 desliga só esta fonte.
+  pmesSolana: {
+    ativo: process.env.PMES_SOLANA_DESATIVADO !== "1",
+    programId: process.env.PMES_SOLANA_PROGRAM_ID ?? "FKefGFhUmgXBM1xCtSFBWpoNnp3wuPJs6Yddpsp67J2y",
+    // Sem checkpoint salvo, começa do início do histórico do programa (são poucas transações):
+    // getSignaturesForAddress pagina da mais nova para a mais antiga até acabar.
+    slotInicial: Number(process.env.PMES_SOLANA_START_SLOT ?? 0),
+    pollIntervalMs: Number(process.env.PMES_SOLANA_POLL_INTERVAL_MS ?? 30_000),
+  },
+
   // Redes EVM adicionais com o mesmo RegistroAssinaturas, cada uma num laço
   // próprio (ver evm-assinaturas.ts). Variáveis por rede com prefixo próprio
   // (BASE_*, ROBINHOOD_*); <PREFIXO>_DESATIVADO=1 desliga só aquela rede.

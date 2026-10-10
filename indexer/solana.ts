@@ -38,7 +38,7 @@ const PAGINA = 1000; // máximo do getSignaturesForAddress
 
 // ── decodificação (Borsh) ────────────────────────────────────────────────────────
 
-class Leitor {
+export class Leitor {
   private pos = 0;
   constructor(private readonly buf: Buffer) {}
   bytes(n: number): Buffer {
@@ -109,8 +109,22 @@ export function decodificarConta(dados: Buffer): DocumentoSolana | null {
  * estava executando naquele momento.
  */
 export function extrairEventos(logs: string[], programId: string): DocumentoSolana[] {
-  const pilha: string[] = [];
   const eventos: DocumentoSolana[] = [];
+  for (const base64 of dadosDoPrograma(logs, programId)) {
+    const evento = decodificarEvento(base64);
+    if (evento) eventos.push(evento);
+  }
+  return eventos;
+}
+
+/**
+ * Payloads base64 de "Program data:" emitidos por `programId` — só quando ele está no topo da
+ * pilha de invoke naquele momento (outro programa não consegue forjar um evento nosso). Usado
+ * também pela fonte do PMEs na Solana (pmes-solana.ts).
+ */
+export function dadosDoPrograma(logs: string[], programId: string): string[] {
+  const pilha: string[] = [];
+  const dados: string[] = [];
   for (const linha of logs) {
     const invoke = /^Program (\S+) invoke \[\d+\]$/.exec(linha);
     if (invoke) {
@@ -122,11 +136,10 @@ export function extrairEventos(logs: string[], programId: string): DocumentoSola
       continue;
     }
     if (linha.startsWith("Program data: ") && pilha[pilha.length - 1] === programId) {
-      const evento = decodificarEvento(linha.slice("Program data: ".length).trim());
-      if (evento) eventos.push(evento);
+      dados.push(linha.slice("Program data: ".length).trim());
     }
   }
-  return eventos;
+  return dados;
 }
 
 export function enderecoDoRegistro(hashHex: string, programa: PublicKey): PublicKey {
