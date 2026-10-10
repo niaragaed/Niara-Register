@@ -3,7 +3,7 @@
 // (qualquer um confere no explorador), então fica aqui e não em variável de
 // ambiente — se houver redeploy, atualizar só este arquivo.
 
-export type RedeEvm = "sepolia" | "base-sepolia" | "robinhood-testnet";
+export type RedeEvm = "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet";
 
 export type ConfigRedeEvm = {
   /** chainId em hex, como a carteira devolve em eth_chainId. */
@@ -12,6 +12,8 @@ export type ConfigRedeEvm = {
   chainName: string;
   rpcUrl: string;
   explorer: string;
+  /** Moeda de gás, usada ao pedir para a carteira adicionar a rede. */
+  moeda: { name: string; symbol: string };
   endereco: `0x${string}`;
 };
 
@@ -20,6 +22,7 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
   sepolia: {
     chainIdHex: "0xaa36a7", // 11155111
     chainName: "Sepolia",
+    moeda: { name: "Ether", symbol: "ETH" },
     rpcUrl: "https://rpc.sepolia.org",
     explorer: "https://sepolia.etherscan.io",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
@@ -29,6 +32,7 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
   "base-sepolia": {
     chainIdHex: "0x14a34", // 84532
     chainName: "Base Sepolia",
+    moeda: { name: "Ether", symbol: "ETH" },
     rpcUrl: "https://sepolia.base.org",
     explorer: "https://sepolia.basescan.org",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
@@ -38,8 +42,19 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
   "robinhood-testnet": {
     chainIdHex: "0xb626", // 46630
     chainName: "Robinhood Chain Testnet",
+    moeda: { name: "Ether", symbol: "ETH" },
     rpcUrl: "https://rpc.testnet.chain.robinhood.com",
     explorer: "https://explorer.testnet.chain.robinhood.com",
+    endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+  },
+  // Fonte: broadcast/.../998/run-latest.json. Dados da rede: hyperliquid.gitbook.io
+  // (HyperEVM) e docs.chain.link (explorador da testnet).
+  "hyperevm-testnet": {
+    chainIdHex: "0x3e6", // 998
+    chainName: "HyperEVM Testnet",
+    moeda: { name: "HYPE", symbol: "HYPE" },
+    rpcUrl: "https://rpc.hyperliquid-testnet.xyz/evm",
+    explorer: "https://testnet.purrsec.com",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
 };

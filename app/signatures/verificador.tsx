@@ -85,7 +85,7 @@ async function garantirRedeEvm(
           {
             chainId: cfg.chainIdHex,
             chainName: cfg.chainName,
-            nativeCurrency: { name: `${cfg.chainName} ETH`, symbol: "ETH", decimals: 18 },
+            nativeCurrency: { ...cfg.moeda, decimals: 18 },
             rpcUrls: [cfg.rpcUrl],
             blockExplorerUrls: [cfg.explorer],
           },
@@ -328,6 +328,7 @@ export function VerificadorDeDocumento({
     { id: "sepolia", nome: t.redeSepolia, carteira: t.carteiraSepolia },
     { id: "base-sepolia", nome: t.redeBase, carteira: t.carteiraSepolia },
     { id: "robinhood-testnet", nome: t.redeRobinhood, carteira: t.carteiraSepolia },
+    { id: "hyperevm-testnet", nome: t.redeHyperEvm, carteira: t.carteiraSepolia },
     { id: "solana", nome: t.redeSolana, carteira: t.carteiraSolana },
   ];
 
@@ -498,7 +499,9 @@ export function VerificadorDeDocumento({
                     ? t.verNaBase
                     : rede === "robinhood-testnet"
                       ? t.verNaRobinhood
-                      : t.verNaSepolia}
+                      : rede === "hyperevm-testnet"
+                        ? t.verNaHyperEvm
+                        : t.verNaSepolia}
               </a>
             </div>
           )}

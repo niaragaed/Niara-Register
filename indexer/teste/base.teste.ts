@@ -130,6 +130,28 @@ const novo = () =>
   verificar(um?.rede === "base-sepolia" && um.assinado_em === new Date(1_700_000_000_000).toISOString() && um.bloco === 1000, "rede, data (do evento) e bloco corretos");
   verificar(/^0x[0-9a-f]{64}$/.test(um?.hash_sha256 ?? ""), "hash 0x + 64 hex minúsculo, mesmo formato das outras redes");
 
+  // Pausa entre pedaços (HyperEVM): dormir chamado entre pedaços, nunca antes do primeiro.
+  const pausas: number[] = [];
+  const comPausa = criarIndexadorAssinaturasEvm({
+    rede: "hyperevm-testnet",
+    fonte: "teste-pausa",
+    rpc,
+    banco,
+    endereco: CONTRATO,
+    blocoDeploy: 1000,
+    chunk: 500,
+    maxPedacosPorCiclo: 3,
+    confirmacoes: 5,
+    intervaloEntrePedacosMs: 1000,
+    backoff: { tentativas: 6, baseMs: 1, tetoMs: 1 },
+    dormir: async (ms) => {
+      pausas.push(ms);
+    },
+  });
+  await comPausa.iniciar();
+  await comPausa.ciclo();
+  verificar(pausas.length === 2 && pausas.every((ms) => ms === 1000), `3 pedaços → 2 pausas de 1 s entre eles (${pausas.join(",")})`);
+
   console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} FALHA(S)`);
   process.exit(falhas === 0 ? 0 : 1);
 })();

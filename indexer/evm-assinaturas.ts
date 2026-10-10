@@ -19,7 +19,7 @@ import { comBackoff, type OpcoesBackoff } from "./limite";
  * Gravação idempotente por (rede, hash_sha256) — ver migration 005/006.
  */
 
-export type RedeEvmExtra = "base-sepolia" | "robinhood-testnet";
+export type RedeEvmExtra = "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet";
 
 export type RpcEvmLeve = {
   getBlockNumber(): Promise<number>;
@@ -46,6 +46,8 @@ export function criarIndexadorAssinaturasEvm(deps: {
   maxPedacosPorCiclo: number;
   /** Blocos de margem atrás do topo, contra reorganização. */
   confirmacoes: number;
+  /** Pausa entre pedaços no mesmo ciclo (RPC com limite de taxa apertado). */
+  intervaloEntrePedacosMs?: number;
   backoff: Omit<OpcoesBackoff, "dormir">;
   dormir: (ms: number) => Promise<void>;
 }) {
@@ -96,6 +98,7 @@ export function criarIndexadorAssinaturasEvm(deps: {
     const topo = (await rede(() => rpc.getBlockNumber(), "getBlockNumber")) - deps.confirmacoes;
     let gravados = 0;
     for (let i = 0; i < deps.maxPedacosPorCiclo && checkpoint < topo; i++) {
+      if (i > 0 && deps.intervaloEntrePedacosMs) await deps.dormir(deps.intervaloEntrePedacosMs);
       const de = checkpoint + 1;
       const ate = Math.min(checkpoint + deps.chunk, topo);
       const logs = await rede(

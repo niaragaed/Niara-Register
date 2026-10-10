@@ -71,10 +71,10 @@ export const en = {
       "Compute a document's SHA-256 hash and record it on-chain as proof of existence and authorship. The document never leaves your browser — only the hash is recorded.",
     contratoPrefixo: "The signature registry contract (",
     contratoSufixo:
-      ") is the same contract on Ethereum Sepolia, Base Sepolia and Robinhood Chain Testnet. The hash is computed in your browser and each signature becomes a real transaction, verifiable on the network's explorer: ",
+      ") is the same contract on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet and HyperEVM Testnet. The hash is computed in your browser and each signature becomes a real transaction, verifiable on the network's explorer: ",
     historicoTitulo: "Documents already recorded",
     historicoLede:
-      "A mirror of every document recorded on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer.",
+      "A mirror of every document recorded on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer.",
     solanaPrefixo: "The Solana program (",
     solanaSufixo:
       ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
@@ -120,6 +120,8 @@ export const en = {
     verNaBase: "view on BaseScan",
     redeRobinhood: "Robinhood Chain Testnet",
     verNaRobinhood: "view on Robinhood Explorer",
+    redeHyperEvm: "HyperEVM Testnet",
+    verNaHyperEvm: "view on Purrsec",
     carteiraSepolia: "MetaMask or compatible",
     carteiraSolana: "Phantom or Solflare",
     semCarteiraSolana:
@@ -175,6 +177,8 @@ export const en = {
     verNaSolana: "view on Solana Explorer",
     verNaBase: "view on BaseScan",
     verNaRobinhood: "view on Robinhood Explorer",
+    verNaHyperEvm: "view on Purrsec",
+    redeHyperEvm: "HyperEVM Testnet",
     redeSepolia: "Ethereum Sepolia",
     redeSolana: "Solana Devnet",
     redeBase: "Base Sepolia",
@@ -334,10 +338,10 @@ export const pt: Dictionary = {
       "Calcule o hash SHA-256 de um documento e registre-o on-chain como prova de existência e autoria. O documento nunca sai do seu navegador — só o hash é registrado.",
     contratoPrefixo: "O contrato de registro de assinaturas (",
     contratoSufixo:
-      ") é o mesmo contrato na Ethereum Sepolia, na Base Sepolia e na Robinhood Chain Testnet. O hash é calculado no seu navegador e cada assinatura vira uma transação de verdade, verificável no explorador da rede: ",
+      ") é o mesmo contrato na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet e na HyperEVM Testnet. O hash é calculado no seu navegador e cada assinatura vira uma transação de verdade, verificável no explorador da rede: ",
     historicoTitulo: "Documentos já registrados",
     historicoLede:
-      "Espelho de todos os documentos registrados na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede.",
+      "Espelho de todos os documentos registrados na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede.",
     solanaPrefixo: "O programa na Solana (",
     solanaSufixo:
       ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
@@ -383,6 +387,8 @@ export const pt: Dictionary = {
     verNaBase: "ver no BaseScan",
     redeRobinhood: "Robinhood Chain Testnet",
     verNaRobinhood: "ver no Robinhood Explorer",
+    redeHyperEvm: "HyperEVM Testnet",
+    verNaHyperEvm: "ver no Purrsec",
     carteiraSepolia: "MetaMask ou compatível",
     carteiraSolana: "Phantom ou Solflare",
     semCarteiraSolana:
@@ -428,6 +434,8 @@ export const pt: Dictionary = {
     verNaSolana: "ver no Solana Explorer",
     verNaBase: "ver no BaseScan",
     verNaRobinhood: "ver no Robinhood Explorer",
+    verNaHyperEvm: "ver no Purrsec",
+    redeHyperEvm: "HyperEVM Testnet",
     redeSepolia: "Ethereum Sepolia",
     redeSolana: "Solana Devnet",
     redeBase: "Base Sepolia",
