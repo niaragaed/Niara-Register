@@ -14,12 +14,18 @@ import { enderecoCurto, type DadosEvento } from "@/lib/dados-evento";
  * das palavras fica livre para cada idioma.
  */
 
-const ETHERSCAN = "https://sepolia.etherscan.io/address/";
+export type RedeLivro = "sepolia" | "solana-devnet";
 
-function Endereco({ valor }: { valor: string }) {
+function linkEndereco(rede: RedeLivro, valor: string) {
+  return rede === "solana-devnet"
+    ? `https://explorer.solana.com/address/${valor}?cluster=devnet`
+    : `https://sepolia.etherscan.io/address/${valor}`;
+}
+
+function Endereco({ valor, rede }: { valor: string; rede: RedeLivro }) {
   return (
     <a
-      href={`${ETHERSCAN}${valor}`}
+      href={linkEndereco(rede, valor)}
       target="_blank"
       rel="noreferrer"
       title={valor}
@@ -46,9 +52,12 @@ export function FraseEvento({
   dados,
   locale,
   empresa,
+  rede = "sepolia",
 }: {
   dados: DadosEvento;
   locale: Locale;
+  /** Rede do evento — decide o explorador dos endereços. */
+  rede?: RedeLivro;
   /** De registro_ofertas; ausente quando a oferta não tem empresa conhecida. */
   empresa?: string | null;
 }) {
@@ -58,11 +67,11 @@ export function FraseEvento({
   // anterior a registro_ofertas) sobra só o endereço, sem parênteses vazios.
   const oferta: ReactNode =
     dados.ofertaNumero === null ? (
-      <Endereco valor={dados.ofertaEndereco} />
+      <Endereco rede={rede} valor={dados.ofertaEndereco} />
     ) : (
       <>
         {dados.ofertaNumero}
-        {empresa ? ` · ${empresa}` : ""} (<Endereco valor={dados.ofertaEndereco} />)
+        {empresa ? ` · ${empresa}` : ""} (<Endereco rede={rede} valor={dados.ofertaEndereco} />)
       </>
     );
 
@@ -82,7 +91,7 @@ export function FraseEvento({
         <>
           {preencher(t.frases.offering_created, {
             ...comuns,
-            emissor: <Endereco valor={dados.emissor} />,
+            emissor: <Endereco rede={rede} valor={dados.emissor} />,
             metaMinima: num(dados.metaMinima),
             metaMaxima: num(dados.metaMaxima),
             precoPorCota: num(dados.precoPorCota),
@@ -97,7 +106,7 @@ export function FraseEvento({
         <>
           {preencher(t.frases.investment, {
             ...comuns,
-            investidor: <Endereco valor={dados.investidor} />,
+            investidor: <Endereco rede={rede} valor={dados.investidor} />,
             valor: num(dados.valor),
             moeda,
           })}
@@ -124,7 +133,7 @@ export function FraseEvento({
         <>
           {preencher(t.frases.shares_redeemed, {
             ...comuns,
-            investidor: <Endereco valor={dados.investidor} />,
+            investidor: <Endereco rede={rede} valor={dados.investidor} />,
             cotas: formatarCotas(dados.cotas, locale),
           })}
         </>
@@ -135,9 +144,9 @@ export function FraseEvento({
         <>
           {preencher(t.frases.funds_released, {
             ...comuns,
-            emissor: <Endereco valor={dados.emissor} />,
+            emissor: <Endereco rede={rede} valor={dados.emissor} />,
             valorEmissor: num(dados.valorEmissor),
-            protocolo: <Endereco valor={dados.protocolo} />,
+            protocolo: <Endereco rede={rede} valor={dados.protocolo} />,
             taxa: num(dados.taxa),
             moeda,
           })}
@@ -149,7 +158,7 @@ export function FraseEvento({
         <>
           {preencher(t.frases.refund, {
             ...comuns,
-            investidor: <Endereco valor={dados.investidor} />,
+            investidor: <Endereco rede={rede} valor={dados.investidor} />,
             valor: num(dados.valor),
             moeda,
           })}

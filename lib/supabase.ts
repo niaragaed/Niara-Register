@@ -35,6 +35,10 @@ export type RegistroTransacao = {
   bloco: number;
   ocorrido_em: string;
   confirmado: boolean;
+  /** Rede de origem (migration 010). Ausente antes dela: Sepolia. */
+  rede?: "sepolia" | "solana-devnet";
+  /** Slot da Solana (bloco fica null lá). */
+  slot?: number | null;
   /**
    * Forma estruturada do evento, gravada pelo indexer (ver lib/dados-evento.ts).
    * `unknown` porque vem de uma coluna jsonb: quem consome valida com
@@ -49,7 +53,7 @@ export type RegistroOferta = {
   token: string;
   emissor: string;
   moeda: string;
-  origem: "legado" | "orquestrador";
+  origem: "legado" | "orquestrador" | "solana";
   numero: number;
   nome: string | null;
   simbolo: string | null;

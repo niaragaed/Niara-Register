@@ -30,7 +30,7 @@ export const en = {
     cards: {
       pmes: {
         title: "SME Registry",
-        text: "Actual transactions from the SME offerings, indexed directly from the contracts on Sepolia.",
+        text: "Actual transactions from the SME offerings, indexed directly from the contracts on Sepolia and the program on Solana Devnet.",
       },
       global: {
         title: "Global Registry",
@@ -47,7 +47,7 @@ export const en = {
     eyebrow: "SME Registry",
     title: "Niara-SMEs transactions",
     lede:
-      "A mirror of the transactions executed on the Niara-SMEs contracts on the Sepolia test network. Each entry points to a verifiable hash on Etherscan.",
+      "A mirror of the transactions executed on the Niara-SMEs contracts on the Sepolia test network and on the niara-pmes-solana program on Solana Devnet. Each entry shows its network and points to the transaction on that network's explorer.",
     notaNumeracao:
       "Entries are numbered in the order the Register recorded them. Events indexed retroactively keep their original on-chain date.",
     vazio: "No transactions indexed yet.",
@@ -358,7 +358,7 @@ export const pt: Dictionary = {
     cards: {
       pmes: {
         title: "Registro PMEs",
-        text: "Transações reais da captação de PMEs, indexadas diretamente dos contratos na Sepolia.",
+        text: "Transações reais da captação de PMEs, indexadas diretamente dos contratos na Sepolia e do programa na Solana Devnet.",
       },
       global: {
         title: "Registro Global",
@@ -375,7 +375,7 @@ export const pt: Dictionary = {
     eyebrow: "Registro PMEs",
     title: "Transações do Niara-PMEs",
     lede:
-      "Espelho das transações reais executadas nos contratos do Niara-PMEs na rede de testes Sepolia. Cada linha aponta para o hash verificável no Etherscan.",
+      "Espelho das transações reais executadas nos contratos do Niara-PMEs na rede de testes Sepolia e no programa niara-pmes-solana na Solana Devnet. Cada linha mostra a rede e aponta para a transação no explorador dela.",
     notaNumeracao:
       "A numeração segue a ordem em que o Register registrou cada evento. Eventos indexados retroativamente mantêm a data original on-chain.",
     vazio: "Nenhuma transação indexada ainda.",

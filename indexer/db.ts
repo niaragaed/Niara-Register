@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "./config";
 import { paraMonitorada, type LinhaOferta, type OfertaMonitorada } from "./ofertas";
 import type { DadosEvento } from "./eventos";
+import type { NovaOfertaSolana, OfertaSolanaRegistrada } from "./pmes-solana";
 
 // Client com a service role key — o indexer precisa gravar direto no Postgres,
 // contornando qualquer RLS que exista pro client público do site. Nunca reusar
@@ -20,12 +21,17 @@ export const simulado = {
 
 export type NovoRegistro = {
   fonte: "pmes";
+  /** Rede de origem (migration 010). Ausente = 'sepolia' (default da coluna). */
+  rede?: "sepolia" | "solana-devnet";
   tipo_evento: string;
   descricao: string;
   tx_hash: string;
   log_index: number;
   endereco_contrato: string;
-  bloco: number;
+  /** Bloco EVM; null na Solana. */
+  bloco: number | null;
+  /** Slot da Solana (ausente na EVM). */
+  slot?: number;
   ocorrido_em: string;
   confirmado: boolean;
   /**
@@ -111,6 +117,9 @@ export async function carregarOfertas(): Promise<OfertaMonitorada[]> {
   const { data, error } = await supabase
     .from("registro_ofertas")
     .select("endereco,token,numero,origem,empresa,bloco_criacao,backfill_alvo,backfill_ate")
+    // Só as da Sepolia: as da Solana (migration 010) têm laço próprio (pmes-solana.ts) e
+    // endereço base58, que nunca pode entrar num getLogs da EVM.
+    .eq("rede", "sepolia")
     .order("numero");
 
   if (error) {
@@ -207,4 +216,49 @@ export async function salvarCheckpoints(fontes: string[], bloco: number): Promis
   if (error) {
     throw new Error(`Falha ao salvar checkpoint (${fontes.join(", ")}): ${error.message}`);
   }
+}
+
+// ── Ofertas do PMEs na Solana (registro_ofertas com rede = 'solana-devnet', migration 010) ──
+
+export async function carregarOfertasSolana(): Promise<OfertaSolanaRegistrada[]> {
+  const { data, error } = await supabase
+    .from("registro_ofertas")
+    .select("endereco,numero,empresa")
+    .eq("rede", "solana-devnet")
+    .order("numero");
+  if (error) {
+    throw new Error(`Falha ao carregar ofertas da Solana (a migration 010 rodou?): ${error.message}`);
+  }
+  return (data ?? []) as OfertaSolanaRegistrada[];
+}
+
+let numeroSimulado = 0;
+
+/**
+ * Grava a oferta (idempotente por endereço) com o próximo número da Solana — numeração própria
+ * por rede (unique (rede, numero)), então nunca disputa número com o laço da Sepolia. Se outro
+ * processo pegar o mesmo número no meio, tenta de novo com o seguinte.
+ */
+export async function registrarOfertaSolana(oferta: NovaOfertaSolana): Promise<number> {
+  if (config.dryRun) return ++numeroSimulado;
+
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    const { data: existente } = await supabase.from("registro_ofertas").select("numero").eq("endereco", oferta.endereco).maybeSingle();
+    if (existente) return Number(existente.numero);
+
+    const { data: ultima, error: erroMax } = await supabase
+      .from("registro_ofertas")
+      .select("numero")
+      .eq("rede", "solana-devnet")
+      .order("numero", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (erroMax) throw new Error(`Falha ao ler numeração das ofertas da Solana: ${erroMax.message}`);
+    const numero = (ultima ? Number(ultima.numero) : 0) + 1;
+
+    const { error } = await supabase.from("registro_ofertas").insert({ ...oferta, numero, origem: "solana", rede: "solana-devnet" });
+    if (!error) return numero;
+    if (error.code !== "23505") throw new Error(`Falha ao gravar oferta ${oferta.endereco}: ${error.message}`);
+  }
+  throw new Error(`Não foi possível numerar a oferta ${oferta.endereco} depois de 5 tentativas.`);
 }

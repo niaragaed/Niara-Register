@@ -5,6 +5,7 @@ import * as db from "./db";
 import { simulado } from "./db";
 import { criarIndexador } from "./indexador";
 import { criarIndexadorSolana, FONTE_SOLANA } from "./solana";
+import { criarIndexadorPmesSolana, FONTE_PMES_SOLANA } from "./pmes-solana";
 import { criarIndexadorAssinaturasEvm } from "./evm-assinaturas";
 import { Tokens } from "./tokens";
 import { Connection } from "@solana/web3.js";
@@ -40,6 +41,21 @@ const indexadorSolana = config.solana.ativo
       banco: db,
       programId: config.solana.programId,
       slotInicial: config.solana.slotInicial,
+      backoff: config.backoff,
+      dormir,
+    })
+  : null;
+
+// Niara-PMEs na Solana: outro programa, mesmo RPC da Solana, laço e checkpoint próprios.
+const indexadorPmesSolana = config.pmesSolana.ativo
+  ? criarIndexadorPmesSolana({
+      rpc: new Connection(config.solana.rpcUrl, {
+        commitment: "finalized",
+        disableRetryOnRateLimit: true,
+      }) as unknown as Parameters<typeof criarIndexadorPmesSolana>[0]["rpc"],
+      banco: db,
+      programId: config.pmesSolana.programId,
+      slotInicial: config.pmesSolana.slotInicial,
       backoff: config.backoff,
       dormir,
     })
@@ -112,6 +128,24 @@ async function loopSolana(): Promise<void> {
   }
 }
 
+/** Mesmo contrato do loopSolana: nunca derruba o processo nem bloqueia os outros laços. */
+async function loopPmesSolana(): Promise<void> {
+  if (!indexadorPmesSolana) return;
+  for (;;) {
+    try {
+      const { transacoes, gravados } = await indexadorPmesSolana.ciclo();
+      if (transacoes > 0) {
+        console.log(
+          `[indexer] pmes-solana: ${transacoes} transação(ões) nova(s), ${gravados} evento(s) gravado(s) — checkpoint slot ${indexadorPmesSolana.checkpoint}`,
+        );
+      }
+    } catch (erro) {
+      console.error("[indexer] pmes-solana: erro no ciclo, tentando de novo no próximo:", erro);
+    }
+    await dormir(config.pmesSolana.pollIntervalMs);
+  }
+}
+
 async function loop(): Promise<void> {
   await indexador.iniciar();
   if (indexadorSolana) {
@@ -145,6 +179,26 @@ async function loop(): Promise<void> {
     console.log(`[dry-run] solana: ${r.transacoes} transação(ões), ${r.gravados} documento(s) seriam gravados`);
   } else {
     void loopSolana();
+  }
+
+  if (indexadorPmesSolana) {
+    try {
+      await indexadorPmesSolana.iniciar();
+      console.log(
+        `[indexer] PMEs Solana: programa ${config.pmesSolana.programId} — checkpoint (${FONTE_PMES_SOLANA}) slot ${indexadorPmesSolana.checkpoint}, ${indexadorPmesSolana.ofertas.size} oferta(s)`,
+      );
+      if (config.dryRun) {
+        const r = await indexadorPmesSolana.ciclo();
+        console.log(`[dry-run] pmes-solana: ${r.transacoes} transação(ões), ${r.gravados} evento(s) seriam gravados`);
+      } else {
+        void loopPmesSolana();
+      }
+    } catch (erro) {
+      // Ex.: migration 010 ainda não rodou. Não derruba o resto do indexador.
+      console.error("[indexer] PMEs Solana: não iniciou — fonte desligada até o próximo deploy:", erro);
+    }
+  } else {
+    console.log("[indexer] PMEs Solana: desativada (PMES_SOLANA_DESATIVADO=1)");
   }
 
   if (config.dryRun) console.log("[indexer] DRY-RUN — nada será gravado no banco");
@@ -186,7 +240,7 @@ async function relatorioDryRun(): Promise<void> {
     );
   }
 
-  const registros = [...simulado.registros].sort((a, b) => a.bloco - b.bloco || a.log_index - b.log_index);
+  const registros = [...simulado.registros].sort((a, b) => (a.bloco ?? 0) - (b.bloco ?? 0) || a.log_index - b.log_index);
   console.log(`\nregistro_transacoes — ${registros.length} linha(s) nova(s):`);
   for (const r of registros) {
     console.log(`  bloco ${r.bloco} #${r.log_index}  ${r.tipo_evento}`);
