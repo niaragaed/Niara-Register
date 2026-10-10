@@ -53,13 +53,13 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
   // Fonte: broadcast/.../998/run-latest.json. Dados da rede: hyperliquid.gitbook.io
-  // (HyperEVM) e docs.chain.link (explorador da testnet).
+  // (HyperEVM); explorador: HyperEVMScan (família Etherscan).
   "hyperevm-testnet": {
     chainIdHex: "0x3e6", // 998
     chainName: "HyperEVM Testnet",
     moeda: { name: "HYPE", symbol: "HYPE" },
     rpcUrl: "https://rpc.hyperliquid-testnet.xyz/evm",
-    explorer: "https://testnet.purrsec.com",
+    explorer: "https://testnet.hyperevmscan.io",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
   // Fonte: broadcast/.../42431/run-latest.json. Dados da rede:
