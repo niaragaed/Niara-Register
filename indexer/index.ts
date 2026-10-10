@@ -5,6 +5,7 @@ import * as db from "./db";
 import { simulado } from "./db";
 import { criarIndexador } from "./indexador";
 import { criarIndexadorSolana, FONTE_SOLANA } from "./solana";
+import { criarIndexadorAssinaturasEvm } from "./evm-assinaturas";
 import { Tokens } from "./tokens";
 import { Connection } from "@solana/web3.js";
 
@@ -44,6 +45,48 @@ const indexadorSolana = config.solana.ativo
     })
   : null;
 
+// Base Sepolia: provider próprio, também sem o retry silencioso do ethers.
+const FONTE_BASE = "base-sepolia-assinaturas";
+const indexadorBase = config.base.ativo
+  ? (() => {
+      const req = new ethers.FetchRequest(config.base.rpcUrl);
+      req.retryFunc = async () => false;
+      const providerBase = new ethers.JsonRpcProvider(req, 84532, { staticNetwork: true });
+      return criarIndexadorAssinaturasEvm({
+        rede: "base-sepolia",
+        fonte: FONTE_BASE,
+        rpc: providerBase,
+        banco: db,
+        endereco: config.base.endereco,
+        blocoDeploy: config.base.blocoDeploy,
+        chunk: config.base.chunk,
+        maxPedacosPorCiclo: config.base.maxPedacosPorCiclo,
+        confirmacoes: config.base.confirmacoes,
+        backoff: config.backoff,
+        dormir,
+      });
+    })()
+  : null;
+
+/** Mesmo contrato do loopSolana: nunca derruba o processo nem bloqueia a EVM. */
+async function loopBase(): Promise<void> {
+  if (!indexadorBase) return;
+  for (;;) {
+    let emDia = true;
+    try {
+      const r = await indexadorBase.ciclo();
+      emDia = r.emDia;
+      if (r.gravados > 0) {
+        console.log(`[indexer] base-sepolia: ${r.gravados} documento(s) gravado(s) — checkpoint bloco ${indexadorBase.checkpoint}`);
+      }
+    } catch (erro) {
+      console.error("[indexer] base-sepolia: erro no ciclo, tentando de novo no próximo:", erro);
+    }
+    // Atrasado (ex.: primeira varredura desde o deploy): segue sem esperar.
+    if (emDia) await dormir(config.base.pollIntervalMs);
+  }
+}
+
 /**
  * Nunca derruba o processo: erro na Solana é registrado e o ciclo seguinte
  * retoma do checkpoint. Também não bloqueia o laço EVM — roda em paralelo.
@@ -74,6 +117,21 @@ async function loop(): Promise<void> {
     );
   } else {
     console.log("[indexer] Solana: desativada (SOLANA_DESATIVADO=1)");
+  }
+
+  if (indexadorBase) {
+    await indexadorBase.iniciar();
+    console.log(
+      `[indexer] Base Sepolia: RegistroAssinaturas em ${config.base.endereco} via ${config.base.rpcUrl} — checkpoint (${FONTE_BASE}) bloco ${indexadorBase.checkpoint}`,
+    );
+  } else {
+    console.log("[indexer] Base Sepolia: desativada (BASE_DESATIVADO=1)");
+  }
+  if (config.dryRun && indexadorBase) {
+    const r = await indexadorBase.ciclo();
+    console.log(`[dry-run] base-sepolia: ${r.gravados} documento(s) seriam gravados (em dia: ${r.emDia})`);
+  } else {
+    void loopBase();
   }
 
   // Em dry-run, a Solana roda um ciclo só, antes, e imprime o que gravaria.

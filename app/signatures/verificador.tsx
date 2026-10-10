@@ -15,9 +15,10 @@ import {
 } from "@/lib/registro-solana";
 import type { ProviderSolana } from "@/lib/solana";
 import {
-  ENDERECO_REGISTRO_ASSINATURAS,
+  REDES_EVM,
   REGISTRO_ASSINATURAS_ABI,
-  SEPOLIA_CHAIN_ID_HEX,
+  linkTxEvm,
+  type RedeEvm,
 } from "@/lib/registro-contract";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import { formatarTimestamp } from "@/lib/i18n/formato";
@@ -25,7 +26,7 @@ import type { Locale } from "@/lib/i18n/locale";
 
 type TextosVerificador = Dictionary["verificador"];
 
-type Rede = "sepolia" | "solana";
+type Rede = RedeEvm | "solana";
 
 type Etapa =
   | "idle"
@@ -61,14 +62,18 @@ function providerSolana(): ProviderSolana | null {
   return window.phantom?.solana ?? window.solana ?? null;
 }
 
-async function garantirRedeSepolia(ethereum: NonNullable<typeof window.ethereum>) {
+async function garantirRedeEvm(
+  ethereum: NonNullable<typeof window.ethereum>,
+  rede: RedeEvm,
+) {
+  const cfg = REDES_EVM[rede];
   const chainIdAtual = await ethereum.request({ method: "eth_chainId" });
-  if (chainIdAtual === SEPOLIA_CHAIN_ID_HEX) return;
+  if (String(chainIdAtual).toLowerCase() === cfg.chainIdHex) return;
 
   try {
     await ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
+      params: [{ chainId: cfg.chainIdHex }],
     });
   } catch (erro: unknown) {
     // 4902 = a carteira não conhece essa rede ainda, precisa adicionar
@@ -78,11 +83,11 @@ async function garantirRedeSepolia(ethereum: NonNullable<typeof window.ethereum>
         method: "wallet_addEthereumChain",
         params: [
           {
-            chainId: SEPOLIA_CHAIN_ID_HEX,
-            chainName: "Sepolia",
-            nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
-            rpcUrls: ["https://rpc.sepolia.org"],
-            blockExplorerUrls: ["https://sepolia.etherscan.io"],
+            chainId: cfg.chainIdHex,
+            chainName: cfg.chainName,
+            nativeCurrency: { name: `${cfg.chainName} ETH`, symbol: "ETH", decimals: 18 },
+            rpcUrls: [cfg.rpcUrl],
+            blockExplorerUrls: [cfg.explorer],
           },
         ],
       });
@@ -237,7 +242,7 @@ export function VerificadorDeDocumento({
     try {
       setEtapa("conectando");
       await window.ethereum.request({ method: "eth_requestAccounts" });
-      await garantirRedeSepolia(window.ethereum);
+      await garantirRedeEvm(window.ethereum, rede);
 
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
@@ -246,7 +251,7 @@ export function VerificadorDeDocumento({
 
       setEtapa("verificando");
       const contrato = new Contract(
-        ENDERECO_REGISTRO_ASSINATURAS,
+        REDES_EVM[rede].endereco,
         REGISTRO_ASSINATURAS_ABI,
         provider,
       );
@@ -281,10 +286,12 @@ export function VerificadorDeDocumento({
       setEtapa("assinando");
       setMensagemErro(null);
 
+      // A carteira pode ter trocado de rede entre a verificação e a assinatura.
+      await garantirRedeEvm(window.ethereum, rede);
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contrato = new Contract(
-        ENDERECO_REGISTRO_ASSINATURAS,
+        REDES_EVM[rede].endereco,
         REGISTRO_ASSINATURAS_ABI,
         signer,
       );
@@ -315,12 +322,11 @@ export function VerificadorDeDocumento({
     (rede !== "solana" || dentroDoLimiteSolana);
 
   const linkTx = (tx: string) =>
-    rede === "solana"
-      ? linkExplorerSolana("tx", tx)
-      : `https://sepolia.etherscan.io/tx/${tx}`;
+    rede === "solana" ? linkExplorerSolana("tx", tx) : linkTxEvm(rede, tx);
 
   const redes: { id: Rede; nome: string; carteira: string }[] = [
     { id: "sepolia", nome: t.redeSepolia, carteira: t.carteiraSepolia },
+    { id: "base-sepolia", nome: t.redeBase, carteira: t.carteiraSepolia },
     { id: "solana", nome: t.redeSolana, carteira: t.carteiraSolana },
   ];
 
@@ -484,7 +490,12 @@ export function VerificadorDeDocumento({
                 rel="noreferrer"
                 className="mt-2 block break-all font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
               >
-                {txHash} ↗ {rede === "solana" ? t.verNaSolana : t.verNaSepolia}
+                {txHash} ↗{" "}
+                {rede === "solana"
+                  ? t.verNaSolana
+                  : rede === "base-sepolia"
+                    ? t.verNaBase
+                    : t.verNaSepolia}
               </a>
             </div>
           )}

@@ -71,10 +71,10 @@ export const en = {
       "Compute a document's SHA-256 hash and record it on-chain as proof of existence and authorship. The document never leaves your browser — only the hash is recorded.",
     contratoPrefixo: "The signature registry contract (",
     contratoSufixo:
-      ") is deployed and live on Sepolia. The hash is computed in your browser and the on-chain record above is real — each signature becomes an actual transaction, verifiable on Etherscan.",
+      ") is the same contract on Ethereum Sepolia and Base Sepolia. The hash is computed in your browser and each signature becomes a real transaction, verifiable on the network's explorer: ",
     historicoTitulo: "Documents already recorded",
     historicoLede:
-      "A mirror of every document recorded on Ethereum Sepolia and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer.",
+      "A mirror of every document recorded on Ethereum Sepolia, Base Sepolia and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer.",
     solanaPrefixo: "The Solana program (",
     solanaSufixo:
       ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
@@ -116,6 +116,8 @@ export const en = {
     redeTitulo: "Network",
     redeSepolia: "Ethereum Sepolia",
     redeSolana: "Solana Devnet",
+    redeBase: "Base Sepolia",
+    verNaBase: "view on BaseScan",
     carteiraSepolia: "MetaMask or compatible",
     carteiraSolana: "Phantom or Solflare",
     semCarteiraSolana:
@@ -169,8 +171,10 @@ export const en = {
     pendente: "Awaiting confirmation",
     verNaSepolia: "view on Sepolia",
     verNaSolana: "view on Solana Explorer",
+    verNaBase: "view on BaseScan",
     redeSepolia: "Ethereum Sepolia",
     redeSolana: "Solana Devnet",
+    redeBase: "Base Sepolia",
     hash: "hash",
     assinante: "signer",
   },
@@ -326,10 +330,10 @@ export const pt: Dictionary = {
       "Calcule o hash SHA-256 de um documento e registre-o on-chain como prova de existência e autoria. O documento nunca sai do seu navegador — só o hash é registrado.",
     contratoPrefixo: "O contrato de registro de assinaturas (",
     contratoSufixo:
-      ") está deployado e ativo na Sepolia. O hash é calculado no seu navegador e o registro on-chain acima é real — cada assinatura vira uma transação de verdade, verificável no Etherscan.",
+      ") é o mesmo contrato na Ethereum Sepolia e na Base Sepolia. O hash é calculado no seu navegador e cada assinatura vira uma transação de verdade, verificável no explorador da rede: ",
     historicoTitulo: "Documentos já registrados",
     historicoLede:
-      "Espelho de todos os documentos registrados na Ethereum Sepolia e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede.",
+      "Espelho de todos os documentos registrados na Ethereum Sepolia, na Base Sepolia e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede.",
     solanaPrefixo: "O programa na Solana (",
     solanaSufixo:
       ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
@@ -371,6 +375,8 @@ export const pt: Dictionary = {
     redeTitulo: "Rede",
     redeSepolia: "Ethereum Sepolia",
     redeSolana: "Solana Devnet",
+    redeBase: "Base Sepolia",
+    verNaBase: "ver no BaseScan",
     carteiraSepolia: "MetaMask ou compatível",
     carteiraSolana: "Phantom ou Solflare",
     semCarteiraSolana:
@@ -414,8 +420,10 @@ export const pt: Dictionary = {
     pendente: "Aguardando confirmação",
     verNaSepolia: "ver na Sepolia",
     verNaSolana: "ver no Solana Explorer",
+    verNaBase: "ver no BaseScan",
     redeSepolia: "Ethereum Sepolia",
     redeSolana: "Solana Devnet",
+    redeBase: "Base Sepolia",
     hash: "hash",
     assinante: "assinante",
   },

@@ -68,6 +68,25 @@ export const config = {
     pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
   },
 
+  // Base Sepolia — o mesmo RegistroAssinaturas, num laço próprio (ver
+  // evm-assinaturas.ts). BASE_DESATIVADO=1 desliga só esta fonte. O RPC público
+  // da Base basta para o volume do Register; para mais folga, um RPC da
+  // Alchemy/QuickNode em BASE_SEPOLIA_RPC_URL.
+  base: {
+    ativo: process.env.BASE_DESATIVADO !== "1",
+    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+    // Fonte: niara-contracts-Register, broadcast/DeployRegistro.s.sol/84532/run-latest.json
+    // (bloco 47915732 = 0x2db22d4). Mesmo endereço da Sepolia: mesma carteira, mesmo nonce.
+    endereco: (process.env.BASE_REGISTRO_ASSINATURAS_ENDERECO ??
+      "0x5627857ee73f37d6da96530ed08c07339dd9d93a") as `0x${string}`,
+    blocoDeploy: Number(process.env.BASE_START_BLOCK ?? 47915732),
+    // O RPC público da Base limita eth_getLogs a 200 blocos por chamada.
+    chunk: Number(process.env.BASE_BLOCK_RANGE_CHUNK ?? 200),
+    maxPedacosPorCiclo: Number(process.env.BASE_PEDACOS_POR_CICLO ?? 20),
+    confirmacoes: Number(process.env.BASE_CONFIRMACOES ?? 5),
+    pollIntervalMs: Number(process.env.BASE_POLL_INTERVAL_MS ?? 30_000),
+  },
+
   // Modo de validação: lê a chain e o banco, mas não grava nada (nem
   // checkpoint). Imprime o que seria inserido e encerra ao alcançar a chain.
   dryRun: process.argv.includes("--dry-run") || process.env.DRY_RUN === "1",

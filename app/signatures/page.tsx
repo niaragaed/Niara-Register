@@ -5,6 +5,7 @@ import type { RegistroAssinatura } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 import { ID_PROGRAMA_SOLANA, linkExplorerSolana } from "@/lib/registro-solana";
+import { REDES_EVM, linkEnderecoEvm } from "@/lib/registro-contract";
 export const dynamic = "force-dynamic";
 export default async function AssinaturaPage() {
   const locale = await getLocale();
@@ -49,7 +50,7 @@ export default async function AssinaturaPage() {
         <p className="font-body text-sm text-slate">
           {t.assinatura.contratoPrefixo}
           <a
-            href="https://sepolia.etherscan.io/address/0x5627857ee73f37d6da96530ed08c07339dd9d93a"
+            href="https://github.com/niaragaed/niara-contracts-Register"
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
@@ -57,6 +58,24 @@ export default async function AssinaturaPage() {
             niara-contracts-Register
           </a>
           {t.assinatura.contratoSufixo}
+          <a
+            href={linkEnderecoEvm("sepolia", REDES_EVM.sepolia.endereco)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            Etherscan
+          </a>
+          {" · "}
+          <a
+            href={linkEnderecoEvm("base-sepolia", REDES_EVM["base-sepolia"].endereco)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            BaseScan
+          </a>
+          .
         </p>
         <p className="mt-3 font-body text-sm text-slate">
           {t.assinatura.solanaPrefixo}
