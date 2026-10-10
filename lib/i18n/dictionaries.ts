@@ -74,7 +74,8 @@ export const en = {
       ") is the same contract on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet and Tempo Testnet. The hash is computed in your browser and each signature becomes a real transaction, verifiable on the network's explorer: ",
     historicoTitulo: "Documents already recorded",
     historicoLede:
-      "A mirror of every document recorded on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet, Tempo Testnet and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer.",
+      "A mirror of every document recorded on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet, Tempo Testnet and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer — except HyperEVM Testnet, which has no working public explorer: there the link opens a page that reads the transaction live from the network's official RPC.",
+    leitorHyperEvm: "HyperEVM (read from RPC)",
     solanaPrefixo: "The Solana program (",
     solanaSufixo:
       ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
@@ -121,7 +122,7 @@ export const en = {
     redeRobinhood: "Robinhood Chain Testnet",
     verNaRobinhood: "view on Robinhood Explorer",
     redeHyperEvm: "HyperEVM Testnet",
-    verNaHyperEvm: "view on HyperEVMScan",
+    verNaHyperEvm: "verify on-chain",
     redeTempo: "Tempo Testnet",
     verNaTempo: "view on Tempo Explorer",
     carteiraSepolia: "MetaMask or compatible",
@@ -179,7 +180,7 @@ export const en = {
     verNaSolana: "view on Solana Explorer",
     verNaBase: "view on BaseScan",
     verNaRobinhood: "view on Robinhood Explorer",
-    verNaHyperEvm: "view on HyperEVMScan",
+    verNaHyperEvm: "verify on-chain",
     redeHyperEvm: "HyperEVM Testnet",
     verNaTempo: "view on Tempo Explorer",
     redeTempo: "Tempo Testnet",
@@ -227,6 +228,62 @@ export const en = {
    */
   moedas: {
     mBRL: "MockBRL",
+  },
+
+  explorador: {
+    eyebrowTx: "Transaction",
+    eyebrowEndereco: "Address",
+    fontePrefixo: "Read live from the official RPC of ",
+    fonteSufixo:
+      " when this page loaded — not from Niara's database. Anyone can repeat the same query (see below).",
+    status: "Status",
+    sucesso: "Success",
+    revertida: "Reverted — nothing was recorded",
+    pendente: "Pending — not yet included in a block",
+    bloco: "Block",
+    confirmacoes: "confirmations",
+    data: "Block time",
+    de: "From (signer)",
+    para: "To",
+    contratoNiara: "Niara Register contract",
+    contratoCriado: "Contract created",
+    gasUsado: "Gas used",
+    registroTitulo: "Document recorded — DocumentoRegistrado event",
+    documento: "Document",
+    tipo: "Type",
+    hashDocumento: "SHA-256 hash",
+    assinante: "Signer",
+    registradoEm: "Recorded at",
+    verificacaoTitulo: "Checked now on the contract — verificar(hash)",
+    confere:
+      "The contract confirms this record: same hash, signer and timestamp. It cannot be changed or overwritten.",
+    naoConfere:
+      "The contract currently returns different data for this hash than the event above.",
+    verificacaoFalhou:
+      "The RPC did not answer the verificar(hash) call just now. The event above is still on-chain; reload to try again.",
+    semRegistro:
+      "This transaction did not emit a DocumentoRegistrado event from the Niara Register contract.",
+    deployTexto:
+      "Deployment of the Niara Register contract (RegistroAssinaturas) on this network.",
+    naoEncontradaTitulo: "Transaction not found",
+    naoEncontradaTexto:
+      "The network's RPC does not know this transaction hash. Check the hash and the network.",
+    rpcTitulo: "The network did not answer",
+    rpcTexto:
+      "The official RPC is unavailable or rate-limited right now. Nothing is wrong with the record — reload in a few seconds.",
+    tipoConta: "Type",
+    contaContrato: "Contract",
+    contaComum: "Account (no code)",
+    tamanhoCodigo: "Bytecode size",
+    bytes: "bytes",
+    nonce: "Transactions sent (nonce)",
+    txDeploy: "Deployment transaction",
+    registrosTitulo: "Documents recorded on this network",
+    registrosLede:
+      "From the Niara Register indexer (mirror of the contract's events). Each one opens the transaction read live from the RPC.",
+    confiraTitulo: "Check it yourself",
+    confiraTexto: "The same data, straight from the network, with no Niara code in between:",
+    voltar: "Back to Document Signing",
   },
 
   naoEncontrado: {
@@ -345,7 +402,8 @@ export const pt: Dictionary = {
       ") é o mesmo contrato na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet e na Tempo Testnet. O hash é calculado no seu navegador e cada assinatura vira uma transação de verdade, verificável no explorador da rede: ",
     historicoTitulo: "Documentos já registrados",
     historicoLede:
-      "Espelho de todos os documentos registrados na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet, na Tempo Testnet e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede.",
+      "Espelho de todos os documentos registrados na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet, na Tempo Testnet e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede — menos na HyperEVM Testnet, que não tem explorador público funcionando: lá o link abre uma página que lê a transação na hora, direto do RPC oficial da rede.",
+    leitorHyperEvm: "HyperEVM (lido do RPC)",
     solanaPrefixo: "O programa na Solana (",
     solanaSufixo:
       ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
@@ -392,7 +450,7 @@ export const pt: Dictionary = {
     redeRobinhood: "Robinhood Chain Testnet",
     verNaRobinhood: "ver no Robinhood Explorer",
     redeHyperEvm: "HyperEVM Testnet",
-    verNaHyperEvm: "ver no HyperEVMScan",
+    verNaHyperEvm: "verificar on-chain",
     redeTempo: "Tempo Testnet",
     verNaTempo: "ver no Tempo Explorer",
     carteiraSepolia: "MetaMask ou compatível",
@@ -440,7 +498,7 @@ export const pt: Dictionary = {
     verNaSolana: "ver no Solana Explorer",
     verNaBase: "ver no BaseScan",
     verNaRobinhood: "ver no Robinhood Explorer",
-    verNaHyperEvm: "ver no HyperEVMScan",
+    verNaHyperEvm: "verificar on-chain",
     redeHyperEvm: "HyperEVM Testnet",
     verNaTempo: "ver no Tempo Explorer",
     redeTempo: "Tempo Testnet",
@@ -473,6 +531,62 @@ export const pt: Dictionary = {
 
   moedas: {
     mBRL: "MockBRL",
+  },
+
+  explorador: {
+    eyebrowTx: "Transação",
+    eyebrowEndereco: "Endereço",
+    fontePrefixo: "Lido na hora do RPC oficial da ",
+    fonteSufixo:
+      " quando esta página carregou — não do banco da Niara. Qualquer pessoa pode repetir a mesma consulta (veja abaixo).",
+    status: "Status",
+    sucesso: "Sucesso",
+    revertida: "Revertida — nada foi registrado",
+    pendente: "Pendente — ainda não incluída em um bloco",
+    bloco: "Bloco",
+    confirmacoes: "confirmações",
+    data: "Data do bloco",
+    de: "De (quem assinou)",
+    para: "Para",
+    contratoNiara: "contrato do Niara Register",
+    contratoCriado: "Contrato criado",
+    gasUsado: "Gás usado",
+    registroTitulo: "Documento registrado — evento DocumentoRegistrado",
+    documento: "Documento",
+    tipo: "Tipo",
+    hashDocumento: "Hash SHA-256",
+    assinante: "Assinante",
+    registradoEm: "Registrado em",
+    verificacaoTitulo: "Conferido agora no contrato — verificar(hash)",
+    confere:
+      "O contrato confirma este registro: mesmo hash, mesmo assinante e mesma data. Ele não pode ser alterado nem sobrescrito.",
+    naoConfere:
+      "O contrato devolve hoje dados diferentes do evento acima para este hash.",
+    verificacaoFalhou:
+      "O RPC não respondeu à chamada verificar(hash) agora. O evento acima continua on-chain; recarregue para tentar de novo.",
+    semRegistro:
+      "Esta transação não emitiu o evento DocumentoRegistrado do contrato do Niara Register.",
+    deployTexto:
+      "Deploy do contrato do Niara Register (RegistroAssinaturas) nesta rede.",
+    naoEncontradaTitulo: "Transação não encontrada",
+    naoEncontradaTexto:
+      "O RPC da rede não conhece este hash de transação. Confira o hash e a rede.",
+    rpcTitulo: "A rede não respondeu",
+    rpcTexto:
+      "O RPC oficial está indisponível ou limitando requisições agora. Não há nada de errado com o registro — recarregue em alguns segundos.",
+    tipoConta: "Tipo",
+    contaContrato: "Contrato",
+    contaComum: "Conta (sem código)",
+    tamanhoCodigo: "Tamanho do bytecode",
+    bytes: "bytes",
+    nonce: "Transações enviadas (nonce)",
+    txDeploy: "Transação de deploy",
+    registrosTitulo: "Documentos registrados nesta rede",
+    registrosLede:
+      "Do indexador do Niara Register (espelho dos eventos do contrato). Cada um abre a transação lida na hora do RPC.",
+    confiraTitulo: "Confira você mesmo",
+    confiraTexto: "Os mesmos dados, direto da rede, sem nenhum código da Niara no meio:",
+    voltar: "Voltar para Assinatura de documentos",
   },
 
   naoEncontrado: {
