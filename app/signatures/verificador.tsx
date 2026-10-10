@@ -329,6 +329,7 @@ export function VerificadorDeDocumento({
     { id: "base-sepolia", nome: t.redeBase, carteira: t.carteiraSepolia },
     { id: "robinhood-testnet", nome: t.redeRobinhood, carteira: t.carteiraSepolia },
     { id: "hyperevm-testnet", nome: t.redeHyperEvm, carteira: t.carteiraSepolia },
+    { id: "tempo-testnet", nome: t.redeTempo, carteira: t.carteiraSepolia },
     { id: "solana", nome: t.redeSolana, carteira: t.carteiraSolana },
   ];
 
@@ -501,7 +502,9 @@ export function VerificadorDeDocumento({
                       ? t.verNaRobinhood
                       : rede === "hyperevm-testnet"
                         ? t.verNaHyperEvm
-                        : t.verNaSepolia}
+                        : rede === "tempo-testnet"
+                          ? t.verNaTempo
+                          : t.verNaSepolia}
               </a>
             </div>
           )}

@@ -93,6 +93,15 @@ export default async function AssinaturaPage() {
           >
             Purrsec
           </a>
+          {" · "}
+          <a
+            href={linkEnderecoEvm("tempo-testnet", REDES_EVM["tempo-testnet"].endereco)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
+          >
+            Tempo Explorer
+          </a>
           .
         </p>
         <p className="mt-3 font-body text-sm text-slate">

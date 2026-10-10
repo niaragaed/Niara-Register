@@ -52,7 +52,8 @@ espera. Esgotadas as tentativas, só aquela parte do ciclo é abortada.
 ## Redes EVM adicionais (`evm-assinaturas.ts`)
 
 O mesmo `RegistroAssinaturas` (`0x5627…d93a`) em **Base Sepolia**,
-**Robinhood Chain Testnet** (chain ID 46630) e **HyperEVM Testnet** (chain ID 998). Cada rede tem
+**Robinhood Chain Testnet** (chain ID 46630), **HyperEVM Testnet** (chain ID 998)
+e **Tempo Testnet** (chain ID 42431). Cada rede tem
 provider próprio (sem o retry silencioso do ethers), checkpoint próprio
 (`<rede>-assinaturas`) e laço próprio, em paralelo à Sepolia e à Solana. Por
 ciclo: do checkpoint até `topo − confirmações`, em pedaços, até 20 pedaços;
@@ -64,13 +65,14 @@ evento.
 | `base-sepolia` | `https://sepolia.base.org` (limite de 200 blocos por `eth_getLogs`) | 200 | 5 | 006 |
 | `robinhood-testnet` | `https://rpc.testnet.chain.robinhood.com` | 2000 | 20 (blocos de ~250 ms) | 007 |
 | `hyperevm-testnet` | `https://rpc.hyperliquid-testnet.xyz/evm` (limite de 50 blocos por `eth_getLogs` e de taxa por IP; 1 s entre pedaços) | 50 | 2 | 008 |
+| `tempo-testnet` | `https://rpc.moderato.tempo.xyz` (blocos de ~0,5 s, finalidade determinística) | 5000 | 2 | 009 |
 
 Rodar a migration da rede **antes** de publicar o indexer com ela.
 
-Variáveis por rede, com prefixo `BASE_`, `ROBINHOOD_` ou `HYPEREVM_`:
+Variáveis por rede, com prefixo `BASE_`, `ROBINHOOD_`, `HYPEREVM_` ou `TEMPO_`:
 `REGISTRO_ASSINATURAS_ENDERECO`, `START_BLOCK`, `BLOCK_RANGE_CHUNK`,
 `PEDACOS_POR_CICLO`, `INTERVALO_PEDACOS_MS`, `CONFIRMACOES`, `POLL_INTERVAL_MS`, `DESATIVADO=1`.
-RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL` / `HYPEREVM_RPC_URL`.
+RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL` / `HYPEREVM_RPC_URL` / `TEMPO_RPC_URL`.
 
 ## Fonte Solana (`solana.ts`)
 
