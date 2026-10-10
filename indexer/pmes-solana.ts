@@ -352,7 +352,11 @@ export function criarIndexadorPmesSolana(deps: {
       () => rpc.getTransaction(assinatura, { commitment: "finalized", maxSupportedTransactionVersion: 0 }),
       `getTransaction ${assinatura.slice(0, 8)}`,
     );
-    if (!tx?.meta || tx.meta.err) return 0;
+    // Transação listada mas não devolvida (nó do RPC atrasado/balanceado): lança para o ciclo
+    // inteiro repetir SEM avançar o checkpoint — nunca pular um evento em silêncio. Só a
+    // transação que falhou on-chain (meta.err) é pulada de propósito.
+    if (!tx?.meta) throw new Error(`getTransaction ${assinatura} ainda não disponível no RPC`);
+    if (tx.meta.err) return 0;
     const slot = tx.slot ?? slotTx;
     const quando = new Date((tx.blockTime ?? Math.floor(Date.now() / 1000)) * 1000).toISOString();
 
