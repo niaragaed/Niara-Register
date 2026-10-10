@@ -131,7 +131,8 @@ export function dadosDoPrograma(logs: string[], programId: string): string[] {
       pilha.push(invoke[1]);
       continue;
     }
-    if (/^Program \S+ (success|failed)/.test(linha)) {
+    // Ancorado num endereço base58: "Program log: success…" não pode desempilhar.
+    if (/^Program [1-9A-HJ-NP-Za-km-z]{32,44} (success|failed)/.test(linha)) {
       pilha.pop();
       continue;
     }
