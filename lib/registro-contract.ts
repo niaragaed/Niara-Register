@@ -16,7 +16,15 @@ export type ConfigRedeEvm = {
   /** Nome usado ao pedir para a carteira adicionar a rede. */
   chainName: string;
   rpcUrl: string;
+  /**
+   * Base dos links de transação/endereço (`${explorer}/tx/<hash>`). Normalmente
+   * um explorador de terceiros; quando `explorerProprio`, é a rota do próprio
+   * site (/explorer/<rede>), que lê a transação direto do RPC da rede.
+   */
   explorer: string;
+  explorerProprio?: boolean;
+  /** Transação de deploy do contrato (mostrada na página do endereço). */
+  txDeploy?: `0x${string}`;
   /** Moeda de gás, usada ao pedir para a carteira adicionar a rede. */
   moeda: { name: string; symbol: string };
   endereco: `0x${string}`;
@@ -53,13 +61,17 @@ export const REDES_EVM: Record<RedeEvm, ConfigRedeEvm> = {
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
   // Fonte: broadcast/.../998/run-latest.json. Dados da rede: hyperliquid.gitbook.io
-  // (HyperEVM); explorador: HyperEVMScan (família Etherscan).
+  // (HyperEVM). Sem explorador público funcionando para a testnet (out/2026:
+  // Purrsec 404, testnet.hyperevmscan.io inexistente, Blockscout comunitário
+  // milhões de blocos atrás) — os links vão para o leitor do próprio site.
   "hyperevm-testnet": {
     chainIdHex: "0x3e6", // 998
     chainName: "HyperEVM Testnet",
     moeda: { name: "HYPE", symbol: "HYPE" },
     rpcUrl: "https://rpc.hyperliquid-testnet.xyz/evm",
-    explorer: "https://testnet.hyperevmscan.io",
+    explorer: "/explorer/hyperevm-testnet",
+    explorerProprio: true,
+    txDeploy: "0xedbc0391b0368ffc182435769d3891d7837f1d2c56a2a76a3f41f0039bf1c517",
     endereco: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },
   // Fonte: broadcast/.../42431/run-latest.json. Dados da rede:
@@ -83,6 +95,15 @@ export const REGISTRO_ASSINATURAS_ABI = [
   "error DocumentoJaRegistrado(bytes32 hashDocumento)",
   "error HashInvalido()",
 ] as const;
+
+/** Rota do leitor próprio (funciona para qualquer rede EVM da lista). */
+export function linkLeitorTx(rede: RedeEvm, tx: string): string {
+  return `/explorer/${rede}/tx/${tx}`;
+}
+
+export function linkLeitorEndereco(rede: RedeEvm, endereco: string): string {
+  return `/explorer/${rede}/address/${endereco}`;
+}
 
 export function linkTxEvm(rede: RedeEvm, tx: string): string {
   return `${REDES_EVM[rede].explorer}/tx/${tx}`;

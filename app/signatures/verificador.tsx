@@ -18,6 +18,7 @@ import {
   REDES_EVM,
   REGISTRO_ASSINATURAS_ABI,
   linkTxEvm,
+  type ConfigRedeEvm,
   type RedeEvm,
 } from "@/lib/registro-contract";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
@@ -62,6 +63,13 @@ function providerSolana(): ProviderSolana | null {
   return window.phantom?.solana ?? window.solana ?? null;
 }
 
+/** URL do explorador para wallet_addEthereumChain; null se não houver uma https. */
+function urlExplorador(cfg: ConfigRedeEvm): string[] | null {
+  if (!cfg.explorerProprio) return [cfg.explorer];
+  const origem = window.location.origin;
+  return origem.startsWith("https://") ? [`${origem}${cfg.explorer}`] : null;
+}
+
 async function garantirRedeEvm(
   ethereum: NonNullable<typeof window.ethereum>,
   rede: RedeEvm,
@@ -87,7 +95,10 @@ async function garantirRedeEvm(
             chainName: cfg.chainName,
             nativeCurrency: { ...cfg.moeda, decimals: 18 },
             rpcUrls: [cfg.rpcUrl],
-            blockExplorerUrls: [cfg.explorer],
+            // Carteiras exigem URL absoluta (https). Com o leitor próprio, o
+            // "ver no explorador" da carteira cai nas rotas /explorer/... do site,
+            // que seguem o mesmo formato <base>/tx/<hash>.
+            blockExplorerUrls: urlExplorador(cfg),
           },
         ],
       });

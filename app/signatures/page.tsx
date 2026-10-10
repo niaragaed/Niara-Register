@@ -91,7 +91,7 @@ export default async function AssinaturaPage() {
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
           >
-            HyperEVMScan
+            {t.assinatura.leitorHyperEvm}
           </a>
           {" · "}
           <a
