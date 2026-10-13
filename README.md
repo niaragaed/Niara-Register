@@ -59,7 +59,7 @@ flowchart LR
 ```
 
 - **`app/`, `components/`, `lib/`**: the Next.js 16 app (React 19, Tailwind v4, TypeScript). It reads the ledger from Supabase and talks to wallets directly (ethers v6 on EVM, `@solana/web3.js` on Solana).
-- **`indexer/`**: a long-running Node/TypeScript worker, hosted on Railway. It reads events from every network and writes them to Postgres. It is idempotent per `(tx_hash, log_index)` or `(network, hash)`, so it can restart without duplicating or losing rows. Each source has its own checkpoint and loop, so a slow RPC on one network never delays the others. On Solana, an event is accepted only when it was emitted inside our own program's invoke frame, so another program cannot forge a ledger entry. The indexer is a mirror, not a source of truth: the chain is the source of truth. More detail in [`indexer/README.md`](indexer/README.md) (in Portuguese).
+- **`indexer/`**: a long-running Node/TypeScript worker, hosted on Railway. It reads events from every network and writes them to Postgres. It is idempotent per `(tx_hash, log_index)` or `(network, hash)`, so it can restart without duplicating or losing rows. Each source has its own checkpoint and loop, so a slow RPC on one network never delays the others. On Solana, an event is accepted only when it was emitted inside our own program's invoke frame, so another program cannot forge a ledger entry. The indexer is a mirror, not a source of truth: the chain is the source of truth. More detail in [`indexer/README.md`](indexer/README.md).
 - **`supabase/`**: the canonical schema (`schema.sql`) and numbered migrations (`migrations_002` to `migrations_010`).
 
 ## Built during the Colosseum hackathon
