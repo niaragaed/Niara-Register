@@ -1,13 +1,13 @@
 import type { NextConfig } from "next";
 
 /**
- * As rotas do site são em inglês e iguais nos dois idiomas — o idioma vem do
- * cookie, não da URL.
+ * The site's routes are in English and the same in both languages: the
+ * language comes from the cookie, not the URL.
  *
- * Os caminhos antigos em português foram compartilhados antes da renomeação,
- * então respondem com redirect permanente (308) em vez de 404. `permanent: true`
- * emite 308, que preserva o método da requisição; o 301 clássico não garante
- * isso. Não remover sem dar tempo de os links antigos saírem de circulação.
+ * The old Portuguese paths were shared before the rename, so they answer with
+ * a permanent redirect (308) instead of a 404. `permanent: true` emits 308,
+ * which preserves the request method; the classic 301 does not guarantee that.
+ * Do not remove them before the old links have had time to fall out of use.
  */
 const nextConfig: NextConfig = {
   async redirects() {

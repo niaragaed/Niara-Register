@@ -8,13 +8,13 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
   const t = dictionaries[locale];
   return {
-    title: t.meta.titulo,
-    description: t.meta.descricao,
+    title: t.meta.title,
+    description: t.meta.description,
     openGraph: {
       type: "website",
-      siteName: t.meta.titulo,
-      title: t.meta.titulo,
-      description: t.meta.descricao,
+      siteName: t.meta.title,
+      title: t.meta.title,
+      description: t.meta.description,
       locale: locale === "pt" ? "pt_BR" : "en_US",
     },
   };

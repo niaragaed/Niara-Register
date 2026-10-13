@@ -1,20 +1,20 @@
-import { VerificadorDeDocumento } from "./verificador";
-import { AssinaturaEntry } from "@/components/assinatura-entry";
-import { supabase, supabaseConfigurado } from "@/lib/supabase";
-import type { RegistroAssinatura } from "@/lib/supabase";
+import { DocumentVerifier } from "./verifier";
+import { SignatureEntry } from "@/components/signature-entry";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import type { SignatureRow } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
-import { ID_PROGRAMA_SOLANA, linkExplorerSolana } from "@/lib/registro-solana";
-import { REDES_EVM, linkEnderecoEvm } from "@/lib/registro-contract";
+import { SOLANA_PROGRAM_ID, solanaExplorerLink } from "@/lib/register-solana";
+import { EVM_NETWORKS, evmAddressLink } from "@/lib/register-contract";
 export const dynamic = "force-dynamic";
-export default async function AssinaturaPage() {
+export default async function SignaturesPage() {
   const locale = await getLocale();
   const t = dictionaries[locale];
 
-  // Mesmo princípio do /sme-registry: lê direto da tabela indexada, nunca
-  // gera dado na hora. Se o Supabase não estiver configurado nesta instância,
-  // cai no estado vazio abaixo em vez de mostrar erro cru.
-  const { data, error } = supabaseConfigurado
+  // Same principle as /sme-registry: reads straight from the indexed table,
+  // never generates data on the fly. If Supabase is not configured on this
+  // instance, it falls into the empty state below instead of a raw error.
+  const { data, error } = isSupabaseConfigured
     ? await supabase
         .from("registro_assinaturas")
         .select("*")
@@ -22,33 +22,33 @@ export default async function AssinaturaPage() {
         .limit(50)
     : { data: null, error: null };
 
-  const registros = (data ?? []) as RegistroAssinatura[];
-  const indexadorDesconectado = !supabaseConfigurado || Boolean(error);
+  const records = (data ?? []) as SignatureRow[];
+  const indexerDisconnected = !isSupabaseConfigured || Boolean(error);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-14">
       <header className="border-b border-slate/15 pb-8">
         <p className="font-mono text-xs uppercase tracking-wide text-slate">
-          {t.assinatura.eyebrow}
+          {t.signing.eyebrow}
         </p>
         <h1 className="mt-3 font-display text-3xl text-ink">
-          {t.assinatura.title}
+          {t.signing.title}
         </h1>
         <p className="mt-3 max-w-xl font-body text-sm leading-relaxed text-slate">
-          {t.assinatura.lede}
+          {t.signing.lede}
         </p>
       </header>
 
       <div className="mt-10">
-        {/* O verificador é o único client component que precisa de textos.
-            Recebe só a sua fatia do dicionário por props — com um consumidor
-            só, um provider de contexto seria peso sem ganho. */}
-        <VerificadorDeDocumento t={t.verificador} locale={locale} />
+        {/* The verifier is the only client component that needs text. It
+            gets only its slice of the dictionary through props: with a
+            single consumer, a context provider would be weight with no gain. */}
+        <DocumentVerifier t={t.verifier} locale={locale} />
       </div>
 
       <div className="mt-6 border border-dashed border-moss/40 px-6 py-6">
         <p className="font-body text-sm text-slate">
-          {t.assinatura.contratoPrefixo}
+          {t.signing.contractPrefix}
           <a
             href="https://github.com/niaragaed/niara-contracts-Register"
             target="_blank"
@@ -57,9 +57,9 @@ export default async function AssinaturaPage() {
           >
             niara-contracts-Register
           </a>
-          {t.assinatura.contratoSufixo}
+          {t.signing.contractSuffix}
           <a
-            href={linkEnderecoEvm("sepolia", REDES_EVM.sepolia.endereco)}
+            href={evmAddressLink("sepolia", EVM_NETWORKS.sepolia.address)}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
@@ -68,7 +68,7 @@ export default async function AssinaturaPage() {
           </a>
           {" · "}
           <a
-            href={linkEnderecoEvm("base-sepolia", REDES_EVM["base-sepolia"].endereco)}
+            href={evmAddressLink("base-sepolia", EVM_NETWORKS["base-sepolia"].address)}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
@@ -77,7 +77,7 @@ export default async function AssinaturaPage() {
           </a>
           {" · "}
           <a
-            href={linkEnderecoEvm("robinhood-testnet", REDES_EVM["robinhood-testnet"].endereco)}
+            href={evmAddressLink("robinhood-testnet", EVM_NETWORKS["robinhood-testnet"].address)}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
@@ -86,16 +86,16 @@ export default async function AssinaturaPage() {
           </a>
           {" · "}
           <a
-            href={linkEnderecoEvm("hyperevm-testnet", REDES_EVM["hyperevm-testnet"].endereco)}
+            href={evmAddressLink("hyperevm-testnet", EVM_NETWORKS["hyperevm-testnet"].address)}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
           >
-            {t.assinatura.leitorHyperEvm}
+            {t.signing.hyperEvmReader}
           </a>
           {" · "}
           <a
-            href={linkEnderecoEvm("tempo-testnet", REDES_EVM["tempo-testnet"].endereco)}
+            href={evmAddressLink("tempo-testnet", EVM_NETWORKS["tempo-testnet"].address)}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
@@ -105,33 +105,33 @@ export default async function AssinaturaPage() {
           .
         </p>
         <p className="mt-3 font-body text-sm text-slate">
-          {t.assinatura.solanaPrefixo}
+          {t.signing.solanaPrefix}
           <a
-            href={linkExplorerSolana("address", ID_PROGRAMA_SOLANA.toBase58())}
+            href={solanaExplorerLink("address", SOLANA_PROGRAM_ID.toBase58())}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
           >
             niara-register-solana
           </a>
-          {t.assinatura.solanaSufixo}
+          {t.signing.solanaSuffix}
         </p>
       </div>
 
       <div className="mt-14 border-t border-slate/15 pt-8">
         <h2 className="font-display text-xl text-ink">
-          {t.assinatura.historicoTitulo}
+          {t.signing.historyTitle}
         </h2>
         <p className="mt-2 max-w-xl font-body text-sm leading-relaxed text-slate">
-          {t.assinatura.historicoLede}
+          {t.signing.historyLede}
         </p>
 
-        {registros.length > 0 ? (
+        {records.length > 0 ? (
           <div className="mt-6">
-            {registros.map((registro) => (
-              <AssinaturaEntry
-                key={registro.id}
-                registro={registro}
+            {records.map((record) => (
+              <SignatureEntry
+                key={record.id}
+                record={record}
                 locale={locale}
               />
             ))}
@@ -139,9 +139,9 @@ export default async function AssinaturaPage() {
         ) : (
           <div className="mt-6 border border-dashed border-slate/30 px-6 py-10">
             <p className="font-body text-sm text-slate">
-              {indexadorDesconectado
-                ? t.assinatura.desconectado
-                : t.assinatura.vazio}
+              {indexerDisconnected
+                ? t.signing.disconnected
+                : t.signing.empty}
             </p>
           </div>
         )}

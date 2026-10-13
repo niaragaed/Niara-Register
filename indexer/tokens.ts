@@ -1,22 +1,22 @@
 import { ethers } from "ethers";
 
 /**
- * Tudo o que o indexer precisa saber sobre os tokens de uma oferta, lido da
- * chain — nunca assumido.
+ * Everything the indexer needs to know about an offering's tokens, read from
+ * the chain, never assumed.
  *
- * Casas decimais: tratar 18 como constante funcionava por acidente. Nada no
- * contrato garante isso, e um token futuro com 6 casas gravaria valores mil
- * trilhões de vezes errados sem nenhum erro aparente. Aqui vem de `decimals()`.
+ * Decimals: treating 18 as a constant worked by accident. Nothing in the
+ * contract guarantees it, and a future token with 6 decimals would record
+ * values a trillion times off with no visible error. Here it comes from
+ * `decimals()`.
  *
- * Moeda: cada OfertaCaptacao declara o próprio token de pagamento em `moeda()`.
- * As 11 legadas usam um MockBRL e as do OfertaOrquestrador outro, então o
- * endereço é perguntado a cada oferta, e o símbolo gravado em `dados` é o
- * `symbol()` desse token (hoje "mBRL" nos dois), não um literal.
+ * Currency: each OfertaCaptacao declares its own payment token in `moeda()`.
+ * The 11 legacy offerings use one MockBRL and the OfertaOrquestrador ones
+ * another, so the address is asked for each offering, and the symbol stored in
+ * `dados` is that token's `symbol()` (currently "mBRL" in both), not a literal.
  *
- * Cada leitura é feita no máximo uma vez por processo: o resultado fica em
- * cache, e a promessa em andamento também, para chamadas simultâneas não
- * dispararem duas requisições ao RPC. Em erro a entrada sai do cache, para a
- * próxima tentativa perguntar de novo.
+ * Each read happens at most once per process: the result is cached, and so is
+ * the in-flight promise, so simultaneous calls do not fire two requests at the
+ * RPC. On error the entry leaves the cache, so the next attempt asks again.
  */
 
 const ERC20_ABI = [
@@ -24,30 +24,30 @@ const ERC20_ABI = [
   "function symbol() view returns (string)",
 ];
 
-// A OfertaCaptacao expõe o token de pagamento por `moeda()` e o token de
-// participação por `token()`.
-const OFERTA_TOKENS_ABI = [
+// OfertaCaptacao exposes the payment token through `moeda()` and the
+// participation token through `token()`.
+const OFFERING_TOKENS_ABI = [
   "function moeda() view returns (address)",
   "function token() view returns (address)",
 ];
 
-// ParticipacaoToken: além do ERC-20, guarda a empresa emissora.
-const PARTICIPACAO_TOKEN_ABI = [
+// ParticipacaoToken: on top of ERC-20, it stores the issuing company.
+const SHARE_TOKEN_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function empresa() view returns (string)",
 ];
 
-export type MetadadosToken = {
-  nome: string | null;
-  simbolo: string | null;
-  empresa: string | null;
+export type TokenMetadata = {
+  name: string | null;
+  symbol: string | null;
+  company: string | null;
 };
 
-/** O que o indexador usa dos tokens — o teste injeta uma versão falsa. */
-export type LeitorTokens = Pick<
+/** What the indexer uses from the tokens; the test injects a fake version. */
+export type TokenReader = Pick<
   Tokens,
-  "daMoeda" | "simboloDaMoeda" | "moedaDaOferta" | "doTokenDeCotas" | "metadados"
+  "currencyDecimals" | "currencySymbol" | "offeringCurrency" | "shareTokenDecimals" | "metadata"
 >;
 
 export class Tokens {
@@ -55,88 +55,90 @@ export class Tokens {
 
   constructor(private readonly provider: ethers.Provider) {}
 
-  private lembrar<T>(chave: string, ler: () => Promise<T>, descricao: string): Promise<T> {
-    const emCache = this.cache.get(chave);
-    if (emCache) return emCache as Promise<T>;
+  private remember<T>(key: string, read: () => Promise<T>, description: string): Promise<T> {
+    const cached = this.cache.get(key);
+    if (cached) return cached as Promise<T>;
 
-    const promessa = ler().catch((erro: unknown) => {
-      // Sem o dado não há como formatar sem inventar: deixa o erro subir para o
-      // chamador decidir (o indexer registra e tenta de novo no próximo ciclo).
-      this.cache.delete(chave);
-      throw new Error(`Falha ao ler ${descricao}: ${(erro as Error).message}`, { cause: erro });
+    const promise = read().catch((error: unknown) => {
+      // Without the data there is no way to format without making things up:
+      // let the error go up for the caller to decide (the indexer logs it and
+      // tries again in the next cycle).
+      this.cache.delete(key);
+      throw new Error(`Failed to read ${description}: ${(error as Error).message}`, { cause: error });
     });
-    this.cache.set(chave, promessa);
-    return promessa;
+    this.cache.set(key, promise);
+    return promise;
   }
 
-  /** Casas decimais de um ERC-20 qualquer. */
-  de(endereco: string): Promise<number> {
-    return this.lembrar(
-      `decimals:${endereco.toLowerCase()}`,
-      async () => Number(await new ethers.Contract(endereco, ERC20_ABI, this.provider).decimals()),
-      `decimals() de ${endereco}`,
+  /** Decimals of any ERC-20. */
+  decimals(address: string): Promise<number> {
+    return this.remember(
+      `decimals:${address.toLowerCase()}`,
+      async () => Number(await new ethers.Contract(address, ERC20_ABI, this.provider).decimals()),
+      `decimals() of ${address}`,
     );
   }
 
-  /** symbol() de um ERC-20 qualquer. */
-  simbolo(endereco: string): Promise<string> {
-    return this.lembrar(
-      `symbol:${endereco.toLowerCase()}`,
-      async () => String(await new ethers.Contract(endereco, ERC20_ABI, this.provider).symbol()),
-      `symbol() de ${endereco}`,
+  /** symbol() of any ERC-20. */
+  symbol(address: string): Promise<string> {
+    return this.remember(
+      `symbol:${address.toLowerCase()}`,
+      async () => String(await new ethers.Contract(address, ERC20_ABI, this.provider).symbol()),
+      `symbol() of ${address}`,
     );
   }
 
-  /** Endereço do token de pagamento declarado pela própria oferta (moeda()). */
-  moedaDaOferta(oferta: string): Promise<string> {
-    return this.lembrar(
-      `moeda:${oferta.toLowerCase()}`,
-      async () => String(await new ethers.Contract(oferta, OFERTA_TOKENS_ABI, this.provider).moeda()),
-      `moeda() da oferta ${oferta}`,
+  /** Address of the payment token declared by the offering itself (moeda()). */
+  offeringCurrency(offering: string): Promise<string> {
+    return this.remember(
+      `moeda:${offering.toLowerCase()}`,
+      async () => String(await new ethers.Contract(offering, OFFERING_TOKENS_ABI, this.provider).moeda()),
+      `moeda() of offering ${offering}`,
     );
   }
 
-  /** Casas decimais do token de pagamento usado por uma oferta. */
-  async daMoeda(oferta: string): Promise<number> {
-    return this.de(await this.moedaDaOferta(oferta));
+  /** Decimals of the payment token used by an offering. */
+  async currencyDecimals(offering: string): Promise<number> {
+    return this.decimals(await this.offeringCurrency(offering));
   }
 
-  /** symbol() do token de pagamento usado por uma oferta. */
-  async simboloDaMoeda(oferta: string): Promise<string> {
-    return this.simbolo(await this.moedaDaOferta(oferta));
+  /** symbol() of the payment token used by an offering. */
+  async currencySymbol(offering: string): Promise<string> {
+    return this.symbol(await this.offeringCurrency(offering));
   }
 
   /**
-   * Casas decimais do token de participação (cotas) de uma oferta. Usa o
-   * endereço conhecido quando existe; senão pergunta à própria oferta.
+   * Decimals of an offering's participation (share) token. Uses the known
+   * address when there is one; otherwise asks the offering itself.
    */
-  async doTokenDeCotas(oferta: string, tokenConhecido: string | null): Promise<number> {
+  async shareTokenDecimals(offering: string, knownToken: string | null): Promise<number> {
     const token =
-      tokenConhecido ??
-      (await this.lembrar(
-        `token:${oferta.toLowerCase()}`,
-        async () => String(await new ethers.Contract(oferta, OFERTA_TOKENS_ABI, this.provider).token()),
-        `token() da oferta ${oferta}`,
+      knownToken ??
+      (await this.remember(
+        `token:${offering.toLowerCase()}`,
+        async () => String(await new ethers.Contract(offering, OFFERING_TOKENS_ABI, this.provider).token()),
+        `token() of offering ${offering}`,
       ));
-    return this.de(token);
+    return this.decimals(token);
   }
 
   /**
-   * name(), symbol() e empresa() do ParticipacaoToken. Cada campo é opcional:
-   * um token que não exponha empresa() (a chamada reverte) não impede o
-   * registro da oferta. Erro de rede, ao contrário, sobe — senão a oferta
-   * ficaria gravada sem empresa por uma falha momentânea.
+   * name(), symbol() and empresa() of the ParticipacaoToken. Each field is
+   * optional: a token that does not expose empresa() (the call reverts) does
+   * not block registering the offering. A network error, on the other hand,
+   * goes up; otherwise the offering would be stored without a company because
+   * of a momentary failure.
    */
-  async metadados(token: string): Promise<MetadadosToken> {
-    const c = new ethers.Contract(token, PARTICIPACAO_TOKEN_ABI, this.provider);
-    const ler = async (f: "name" | "symbol" | "empresa") => {
+  async metadata(token: string): Promise<TokenMetadata> {
+    const c = new ethers.Contract(token, SHARE_TOKEN_ABI, this.provider);
+    const read = async (f: "name" | "symbol" | "empresa") => {
       try {
         return String(await c[f]());
-      } catch (erro) {
-        if (ethers.isError(erro, "CALL_EXCEPTION") || ethers.isError(erro, "BAD_DATA")) return null;
-        throw erro;
+      } catch (error) {
+        if (ethers.isError(error, "CALL_EXCEPTION") || ethers.isError(error, "BAD_DATA")) return null;
+        throw error;
       }
     };
-    return { nome: await ler("name"), simbolo: await ler("symbol"), empresa: await ler("empresa") };
+    return { name: await read("name"), symbol: await read("symbol"), company: await read("empresa") };
   }
 }

@@ -1,89 +1,89 @@
-import type { RegistroTransacao } from "@/lib/supabase";
-import { dictionaries, rotuloEvento } from "@/lib/i18n/dictionaries";
-import { formatarData } from "@/lib/i18n/formato";
+import type { LedgerTransaction } from "@/lib/supabase";
+import { dictionaries, eventLabel } from "@/lib/i18n/dictionaries";
+import { formatDate } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/locale";
-import { lerDadosEvento } from "@/lib/dados-evento";
-import { FraseEvento } from "@/components/frase-evento";
+import { parseEventData } from "@/lib/event-data";
+import { EventPhrase } from "@/components/event-phrase";
 
-function truncarHash(hash: string) {
+function truncateHash(hash: string) {
   if (hash.length <= 14) return hash;
   return `${hash.slice(0, 8)}...${hash.slice(-4)}`;
 }
 
 export function LedgerEntry({
-  registro,
+  entry,
   locale,
-  empresas,
+  companies,
 }: {
-  registro: RegistroTransacao;
+  entry: LedgerTransaction;
   locale: Locale;
-  /** Empresa por endereço de oferta (minúsculo), de registro_ofertas. */
-  empresas?: Map<string, string>;
+  /** Company by offering address (lowercase), from registro_ofertas. */
+  companies?: Map<string, string>;
 }) {
   const t = dictionaries[locale];
 
-  const rotulo = rotuloEvento(t, registro.tipo_evento) ?? registro.tipo_evento;
+  const label = eventLabel(t, entry.tipo_evento) ?? entry.tipo_evento;
 
-  // Caminho principal: a frase é montada a partir da coluna `dados`, em cada
-  // idioma, com valor, oferta e endereços. Fallback para as linhas anteriores à
-  // migration 003, que ainda têm `dados` nulo: em português sobra a `descricao`
-  // gravada pelo indexer; em inglês ela não serve (está em português), então
-  // fica só o rótulo do evento.
-  const dados = lerDadosEvento(registro.dados);
-  // Linhas anteriores à migration 010 não têm `rede`: eram todas da Sepolia.
-  const solana = registro.rede === "solana-devnet";
-  const linkTx = solana
-    ? `https://explorer.solana.com/tx/${registro.tx_hash}?cluster=devnet`
-    : `https://sepolia.etherscan.io/tx/${registro.tx_hash}`;
-  const detalhe = dados ? null : locale === "pt" ? registro.descricao : null;
+  // Main path: the sentence is built from the `dados` column, in each
+  // language, with amount, offering and addresses. Fallback for rows from
+  // before migration 003, which still have a null `dados`: in Portuguese the
+  // `descricao` written by the indexer is left; in English it is no use (it is
+  // in Portuguese), so only the event label remains.
+  const data = parseEventData(entry.dados);
+  // Rows from before migration 010 have no `rede`: they were all Sepolia.
+  const solana = entry.rede === "solana-devnet";
+  const txLink = solana
+    ? `https://explorer.solana.com/tx/${entry.tx_hash}?cluster=devnet`
+    : `https://sepolia.etherscan.io/tx/${entry.tx_hash}`;
+  const detail = data ? null : locale === "pt" ? entry.descricao : null;
 
   return (
     <div className="ledger-rule flex gap-5 py-5 pl-6">
       <div className="w-16 shrink-0 pt-0.5 font-mono text-xs text-slate">
-        {t.entrada.numeroPrefixo}{" "}
-        {String(registro.numero_sequencial).padStart(4, "0")}
+        {t.entry.numberPrefix}{" "}
+        {String(entry.numero_sequencial).padStart(4, "0")}
       </div>
       <div className="flex-1">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <p className="font-body text-[15px] text-ink">
-            {rotulo}
-            {dados && (
+            {label}
+            {data && (
               <span className="text-slate">
                 {" · "}
-                <FraseEvento
-                  dados={dados}
+                <EventPhrase
+                  data={data}
                   locale={locale}
-                  rede={solana ? "solana-devnet" : "sepolia"}
-                  empresa={empresas?.get(dados.ofertaEndereco.toLowerCase())}
+                  network={solana ? "solana-devnet" : "sepolia"}
+                  company={companies?.get(data.ofertaEndereco.toLowerCase())}
                 />
               </span>
             )}
-            {detalhe && <span className="text-slate"> · {detalhe}</span>}
+            {detail && <span className="text-slate"> · {detail}</span>}
           </p>
           <time className="font-mono text-xs text-slate">
-            {formatarData(registro.ocorrido_em, locale)}
+            {formatDate(entry.ocorrido_em, locale)}
           </time>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-3">
           <span className="border border-slate/30 px-1.5 py-px font-mono text-[11px] uppercase tracking-wide text-ink">
-            {solana ? t.entrada.redeSolana : t.entrada.redeSepolia}
+            {solana ? t.entry.networkSolana : t.entry.networkSepolia}
           </span>
           <span
             className={`font-mono text-xs ${
-              registro.confirmado ? "text-moss" : "text-slate"
+              entry.confirmado ? "text-moss" : "text-slate"
             }`}
           >
-            {registro.confirmado
-              ? t.entrada.confirmado
-              : t.entrada.aguardandoConfirmacao}
+            {entry.confirmado
+              ? t.entry.confirmed
+              : t.entry.awaitingConfirmation}
           </span>
           <a
-            href={linkTx}
+            href={txLink}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-xs text-brass underline decoration-brass/40 underline-offset-2 hover:decoration-brass"
           >
-            {truncarHash(registro.tx_hash)} ↗ {solana ? t.entrada.verNaSolana : t.entrada.verNaSepolia}
+            {truncateHash(entry.tx_hash)} ↗ {solana ? t.entry.viewOnSolana : t.entry.viewOnSepolia}
           </a>
         </div>
       </div>

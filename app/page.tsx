@@ -9,14 +9,14 @@ export default async function HomePage() {
   const areas = [
     { href: "/sme-registry", ...t.home.cards.pmes },
     { href: "/global-registry", ...t.home.cards.global },
-    { href: "/signatures", ...t.home.cards.assinatura },
+    { href: "/signatures", ...t.home.cards.signing },
   ];
 
   return (
     <div className="mx-auto max-w-5xl px-6">
-      {/* py-10 abaixo de lg: com py-20 o CTA caía 31px abaixo da dobra em
-          360x800 (PT, o caso mais apertado). Reduzir o topo libera 40px e
-          mantém o globo nos 150px. A partir de lg o py-20 de sempre. */}
+      {/* py-10 below lg: with py-20 the CTA fell 31px below the fold at
+          360x800 (PT, the tightest case). Reducing the top frees 40px and
+          keeps the globe at 150px. From lg up, the usual py-20. */}
       <section className="border-b border-slate/15 py-10 lg:py-20">
         <div className="flex flex-col lg:grid lg:grid-cols-12 lg:items-center lg:gap-8">
           <div className="lg:col-span-7">
@@ -41,14 +41,14 @@ export default async function HomePage() {
                 href="/signatures"
                 className="border border-ink px-5 py-2.5 font-body text-sm text-ink transition-colors hover:bg-ink hover:text-bone"
               >
-                {t.home.ctaAssinatura}
+                {t.home.ctaSigning}
               </Link>
             </div>
           </div>
 
-          {/* Um <video> só: abaixo de lg o `order-first` sobe o globo para cima
-              do título; a partir de lg o `lg:order-none` devolve a ordem do DOM
-              e ele volta para a coluna da direita. O tamanho muda só por CSS. */}
+          {/* A single <video>: below lg, `order-first` moves the globe above
+              the title; from lg up, `lg:order-none` restores the DOM order and
+              it goes back to the right column. The size changes through CSS only. */}
           <div className="order-first mb-8 flex justify-center lg:order-none lg:col-span-5 lg:mb-0 lg:items-center">
             <NiaraGlobe />
           </div>

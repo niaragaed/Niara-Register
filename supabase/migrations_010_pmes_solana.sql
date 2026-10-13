@@ -1,16 +1,18 @@
--- Migração 010: o livro do Niara-PMEs (registro_transacoes, fonte 'pmes') e o
--- catálogo de ofertas (registro_ofertas) passam a receber também o Niara-PMEs
--- na Solana devnet (programa niara-pmes-solana, niaragaed/niara-pmes-solana).
+-- Migration 010: the Niara-PMEs ledger (registro_transacoes, fonte 'pmes') and
+-- the offering catalog (registro_ofertas) also start receiving Niara-PMEs on
+-- Solana devnet (program niara-pmes-solana, niaragaed/niara-pmes-solana).
 --
--- Rodar UMA vez no SQL Editor do Supabase (projeto niara-register-dev) ANTES de
--- publicar o indexer com a fonte pmes-solana. Idempotente: pode rodar de novo.
+-- Run ONCE in the Supabase SQL Editor (project niara-register-dev) BEFORE
+-- publishing the indexer with the pmes-solana source. Idempotent: it can run again.
 --
--- 1. registro_transacoes: coluna `rede` (toda linha existente é da Sepolia),
---    `slot` da Solana e `bloco` passa a aceitar null (não existe bloco EVM lá).
--- 2. registro_ofertas: coluna `rede`; os CHECKs de minúsculas valem só para a
---    Sepolia (base58 diferencia maiúsculas); origem ganha 'solana'; e o número
---    da oferta passa a ser único POR REDE — a Solana tem numeração própria
---    (oferta 1, 2… da Solana), e os dois laços do indexador nunca disputam número.
+-- 1. registro_transacoes: a `rede` column (every existing row is from
+--    Sepolia), the Solana `slot`, and `bloco` accepts null (there is no EVM
+--    block there).
+-- 2. registro_ofertas: a `rede` column; the lowercase CHECKs only apply to
+--    Sepolia (base58 is case-sensitive); origem gains 'solana'; and the
+--    offering number becomes unique PER NETWORK: Solana has its own numbering
+--    (Solana offering 1, 2…), and the indexer's two loops never compete for a
+--    number.
 
 -- 1. registro_transacoes ------------------------------------------------------------
 alter table registro_transacoes
@@ -56,5 +58,5 @@ begin
   end if;
 end $$;
 
--- 3. checkpoint da nova fonte: registro_checkpoints.fonte ganha 'pmes-solana' (o
---    último SLOT processado, em ultimo_bloco). Sem mudança de schema.
+-- 3. checkpoint of the new source: registro_checkpoints.fonte gains
+--    'pmes-solana' (the last processed SLOT, in ultimo_bloco). No schema change.

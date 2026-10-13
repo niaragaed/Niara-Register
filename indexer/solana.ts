@@ -1,51 +1,54 @@
 import { PublicKey } from "@solana/web3.js";
-import type { NovaAssinatura } from "./db";
-import { comBackoff, type OpcoesBackoff } from "./limite";
+import type { NewSignature } from "./db";
+import { withBackoff, type BackoffOptions } from "./rate-limit";
 
 /**
- * Fonte `solana-assinaturas`: registros do programa niara-register-solana
- * (Anchor) na Solana devnet, gravados na MESMA tabela registro_assinaturas que
- * a Sepolia, com rede = 'solana-devnet'.
+ * Source `solana-assinaturas`: records of the niara-register-solana (Anchor)
+ * program on Solana devnet, written to the SAME registro_assinaturas table as
+ * Sepolia, with rede = 'solana-devnet'.
  *
- * Roda num laço próprio, independente do lote EVM (indexador.ts): erro ou
- * lentidão de um RPC nunca atrasa o outro.
+ * Runs in its own loop, independent of the EVM batch (indexer.ts): an error or
+ * slowness in one RPC never delays the other.
  *
- * Cada ciclo:
- * 1. Lista as assinaturas de transação que tocam o programa
- *    (getSignaturesForAddress, da mais nova para a mais antiga), até chegar ao
- *    slot do checkpoint.
- * 2. Da mais antiga para a mais nova, para cada transação bem-sucedida, lê os
- *    logs e extrai o evento DocumentoRegistrado — só quando quem emitiu o
- *    "Program data:" foi o NOSSO programa (pilha de invoke), para que outro
- *    programa não consiga forjar uma linha no livro só citando nosso endereço.
- * 3. Confere o evento contra a conta PDA ["assinatura", hash] on-chain e grava
- *    o que está NA CONTA (fonte de verdade), não o que veio no log.
- * 4. Salva o checkpoint = maior slot processado.
+ * Each cycle:
+ * 1. Lists the transaction signatures that touch the program
+ *    (getSignaturesForAddress, newest to oldest), until it reaches the
+ *    checkpoint slot.
+ * 2. Oldest to newest, for each successful transaction, reads the logs and
+ *    extracts the DocumentoRegistrado event, only when the one that emitted the
+ *    "Program data:" was OUR program (invoke stack), so another program cannot
+ *    forge a ledger row just by mentioning our address.
+ * 3. Checks the event against the on-chain ["assinatura", hash] PDA account and
+ *    stores what is IN THE ACCOUNT (the source of truth), not what came in the log.
+ * 4. Saves the checkpoint = highest processed slot.
  *
- * Gravação idempotente por (rede, hash_sha256): reprocessar um slot não duplica.
- * Commitment "finalized": o livro só mostra o que não pode mais ser revertido.
+ * Idempotent writes by (rede, hash_sha256): reprocessing a slot does not
+ * duplicate. Commitment "finalized": the ledger only shows what can no longer
+ * be reverted.
  */
 
-export const FONTE_SOLANA = "solana-assinaturas";
-export const REDE_SOLANA = "solana-devnet" as const;
+// Stored values (checkpoint source and network): they stay as they are.
+export const SOURCE_SOLANA = "solana-assinaturas";
+export const SOLANA_NETWORK = "solana-devnet" as const;
 
-const SEED_ASSINATURA = Buffer.from("assinatura");
-// Discriminadores do IDL do programa (target/idl/niara_register_solana.json).
-const DISC_EVENTO = Buffer.from([206, 226, 126, 15, 74, 52, 33, 1]);
-const DISC_CONTA = Buffer.from([68, 120, 123, 196, 84, 89, 85, 188]);
+// On-chain PDA seed of the program.
+const SIGNATURE_SEED = Buffer.from("assinatura");
+// Discriminators from the program IDL (target/idl/niara_register_solana.json).
+const EVENT_DISC = Buffer.from([206, 226, 126, 15, 74, 52, 33, 1]);
+const ACCOUNT_DISC = Buffer.from([68, 120, 123, 196, 84, 89, 85, 188]);
 
-const PAGINA = 1000; // máximo do getSignaturesForAddress
+const PAGE_SIZE = 1000; // getSignaturesForAddress maximum
 
-// ── decodificação (Borsh) ────────────────────────────────────────────────────────
+// ── decoding (Borsh) ─────────────────────────────────────────────────────────────
 
-export class Leitor {
+export class BorshReader {
   private pos = 0;
   constructor(private readonly buf: Buffer) {}
   bytes(n: number): Buffer {
-    if (this.pos + n > this.buf.length) throw new Error("dados truncados");
-    const fatia = this.buf.subarray(this.pos, this.pos + n);
+    if (this.pos + n > this.buf.length) throw new Error("truncated data");
+    const slice = this.buf.subarray(this.pos, this.pos + n);
     this.pos += n;
-    return fatia;
+    return slice;
   }
   i64(): bigint {
     return this.bytes(8).readBigInt64LE();
@@ -54,230 +57,230 @@ export class Leitor {
     return this.bytes(8).readBigUInt64LE();
   }
   string(): string {
-    const tamanho = this.bytes(4).readUInt32LE();
-    return this.bytes(tamanho).toString("utf8");
+    const length = this.bytes(4).readUInt32LE();
+    return this.bytes(length).toString("utf8");
   }
 }
 
-export type DocumentoSolana = {
-  hashHex: string; // 64 caracteres, minúsculo, sem 0x
-  assinante: string; // base58
-  nomeDocumento: string;
-  tipoDocumento: string;
-  timestamp: number; // unix, segundos
+export type SolanaDocument = {
+  hashHex: string; // 64 characters, lowercase, no 0x
+  signer: string; // base58
+  documentName: string;
+  documentType: string;
+  timestamp: number; // unix, seconds
   slot: number;
 };
 
-/** Evento DocumentoRegistrado a partir do payload de "Program data:" (base64). */
-export function decodificarEvento(base64: string): DocumentoSolana | null {
+/** DocumentoRegistrado event from a "Program data:" payload (base64). */
+export function decodeEvent(base64: string): SolanaDocument | null {
   const buf = Buffer.from(base64, "base64");
-  if (buf.length < 8 || !buf.subarray(0, 8).equals(DISC_EVENTO)) return null;
+  if (buf.length < 8 || !buf.subarray(0, 8).equals(EVENT_DISC)) return null;
   try {
-    const l = new Leitor(buf.subarray(8));
-    const hash = l.bytes(32);
-    const assinante = new PublicKey(l.bytes(32)).toBase58();
-    const nomeDocumento = l.string();
-    const tipoDocumento = l.string();
-    const timestamp = Number(l.i64());
-    const slot = Number(l.u64());
-    return { hashHex: hash.toString("hex"), assinante, nomeDocumento, tipoDocumento, timestamp, slot };
+    const r = new BorshReader(buf.subarray(8));
+    const hash = r.bytes(32);
+    const signer = new PublicKey(r.bytes(32)).toBase58();
+    const documentName = r.string();
+    const documentType = r.string();
+    const timestamp = Number(r.i64());
+    const slot = Number(r.u64());
+    return { hashHex: hash.toString("hex"), signer, documentName, documentType, timestamp, slot };
   } catch {
     return null;
   }
 }
 
-/** Conta Assinatura (PDA). Mesmo layout de state.rs. */
-export function decodificarConta(dados: Buffer): DocumentoSolana | null {
-  if (dados.length < 8 || !dados.subarray(0, 8).equals(DISC_CONTA)) return null;
+/** Assinatura account (PDA). Same layout as state.rs. */
+export function decodeAccount(data: Buffer): SolanaDocument | null {
+  if (data.length < 8 || !data.subarray(0, 8).equals(ACCOUNT_DISC)) return null;
   try {
-    const l = new Leitor(dados.subarray(8));
-    const assinante = new PublicKey(l.bytes(32)).toBase58();
-    const hash = l.bytes(32);
-    const timestamp = Number(l.i64());
-    const slot = Number(l.u64());
-    const nomeDocumento = l.string();
-    const tipoDocumento = l.string();
-    return { hashHex: hash.toString("hex"), assinante, nomeDocumento, tipoDocumento, timestamp, slot };
+    const r = new BorshReader(data.subarray(8));
+    const signer = new PublicKey(r.bytes(32)).toBase58();
+    const hash = r.bytes(32);
+    const timestamp = Number(r.i64());
+    const slot = Number(r.u64());
+    const documentName = r.string();
+    const documentType = r.string();
+    return { hashHex: hash.toString("hex"), signer, documentName, documentType, timestamp, slot };
   } catch {
     return null;
   }
 }
 
 /**
- * Eventos do nosso programa nos logs de uma transação. Acompanha a pilha de
- * invoke/success/failed para atribuir cada "Program data:" ao programa que
- * estava executando naquele momento.
+ * Our program's events in a transaction's logs. Follows the
+ * invoke/success/failed stack to attribute each "Program data:" to the program
+ * that was running at that moment.
  */
-export function extrairEventos(logs: string[], programId: string): DocumentoSolana[] {
-  const eventos: DocumentoSolana[] = [];
-  for (const base64 of dadosDoPrograma(logs, programId)) {
-    const evento = decodificarEvento(base64);
-    if (evento) eventos.push(evento);
+export function extractEvents(logs: string[], programId: string): SolanaDocument[] {
+  const events: SolanaDocument[] = [];
+  for (const base64 of programDataPayloads(logs, programId)) {
+    const event = decodeEvent(base64);
+    if (event) events.push(event);
   }
-  return eventos;
+  return events;
 }
 
 /**
- * Payloads base64 de "Program data:" emitidos por `programId` — só quando ele está no topo da
- * pilha de invoke naquele momento (outro programa não consegue forjar um evento nosso). Usado
- * também pela fonte do PMEs na Solana (pmes-solana.ts).
+ * Base64 "Program data:" payloads emitted by `programId`, only when it is at
+ * the top of the invoke stack at that moment (another program cannot forge an
+ * event of ours). Also used by the PMEs source on Solana (pmes-solana.ts).
  */
-export function dadosDoPrograma(logs: string[], programId: string): string[] {
-  const pilha: string[] = [];
-  const dados: string[] = [];
-  for (const linha of logs) {
-    const invoke = /^Program (\S+) invoke \[\d+\]$/.exec(linha);
+export function programDataPayloads(logs: string[], programId: string): string[] {
+  const stack: string[] = [];
+  const payloads: string[] = [];
+  for (const line of logs) {
+    const invoke = /^Program (\S+) invoke \[\d+\]$/.exec(line);
     if (invoke) {
-      pilha.push(invoke[1]);
+      stack.push(invoke[1]);
       continue;
     }
-    // Ancorado num endereço base58: "Program log: success…" não pode desempilhar.
-    if (/^Program [1-9A-HJ-NP-Za-km-z]{32,44} (success|failed)/.test(linha)) {
-      pilha.pop();
+    // Anchored to a base58 address: "Program log: success…" must not pop the stack.
+    if (/^Program [1-9A-HJ-NP-Za-km-z]{32,44} (success|failed)/.test(line)) {
+      stack.pop();
       continue;
     }
-    if (linha.startsWith("Program data: ") && pilha[pilha.length - 1] === programId) {
-      dados.push(linha.slice("Program data: ".length).trim());
+    if (line.startsWith("Program data: ") && stack[stack.length - 1] === programId) {
+      payloads.push(line.slice("Program data: ".length).trim());
     }
   }
-  return dados;
+  return payloads;
 }
 
-export function enderecoDoRegistro(hashHex: string, programa: PublicKey): PublicKey {
+export function recordAddress(hashHex: string, program: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
-    [SEED_ASSINATURA, Buffer.from(hashHex, "hex")],
-    programa,
+    [SIGNATURE_SEED, Buffer.from(hashHex, "hex")],
+    program,
   )[0];
 }
 
-// ── laço ─────────────────────────────────────────────────────────────────────────
+// ── loop ─────────────────────────────────────────────────────────────────────────
 
-/** O pedaço do Connection do @solana/web3.js que esta fonte usa (injetável em teste). */
-export type RpcSolana = {
+/** The part of @solana/web3.js's Connection this source uses (injectable in tests). */
+export type SolanaRpc = {
   getSignaturesForAddress(
-    endereco: PublicKey,
-    opcoes: { before?: string; limit: number },
+    address: PublicKey,
+    options: { before?: string; limit: number },
     commitment: "finalized",
   ): Promise<{ signature: string; slot: number; err: unknown }[]>;
   getTransaction(
-    assinatura: string,
-    opcoes: { commitment: "finalized"; maxSupportedTransactionVersion: 0 },
+    signature: string,
+    options: { commitment: "finalized"; maxSupportedTransactionVersion: 0 },
   ): Promise<{ meta: { err: unknown; logMessages?: string[] | null } | null } | null>;
-  getAccountInfo(endereco: PublicKey, commitment: "finalized"): Promise<{ owner: PublicKey; data: Buffer } | null>;
+  getAccountInfo(address: PublicKey, commitment: "finalized"): Promise<{ owner: PublicKey; data: Buffer } | null>;
 };
 
-export type BancoSolana = {
-  gravarAssinatura(assinatura: NovaAssinatura): Promise<void>;
-  lerCheckpoint(fonte: string, fallback: number): Promise<number>;
-  salvarCheckpoints(fontes: string[], bloco: number): Promise<void>;
+export type SolanaDb = {
+  saveSignature(signature: NewSignature): Promise<void>;
+  readCheckpoint(source: string, fallback: number): Promise<number>;
+  saveCheckpoints(sources: string[], block: number): Promise<void>;
 };
 
-export function criarIndexadorSolana(deps: {
-  rpc: RpcSolana;
-  banco: BancoSolana;
+export function createSolanaIndexer(deps: {
+  rpc: SolanaRpc;
+  db: SolanaDb;
   programId: string;
-  slotInicial: number;
-  backoff: Omit<OpcoesBackoff, "dormir">;
-  dormir: (ms: number) => Promise<void>;
+  startSlot: number;
+  backoff: Omit<BackoffOptions, "sleep">;
+  sleep: (ms: number) => Promise<void>;
 }) {
-  const { rpc, banco } = deps;
-  const programa = new PublicKey(deps.programId);
-  const opcoes: OpcoesBackoff = { ...deps.backoff, dormir: deps.dormir };
-  const rede = <T,>(fn: () => Promise<T>, contexto: string) =>
-    comBackoff(fn, `solana: ${contexto}`, opcoes);
+  const { rpc, db } = deps;
+  const program = new PublicKey(deps.programId);
+  const options: BackoffOptions = { ...deps.backoff, sleep: deps.sleep };
+  const net = <T,>(fn: () => Promise<T>, context: string) =>
+    withBackoff(fn, `solana: ${context}`, options);
 
   let checkpoint = 0;
 
-  async function iniciar(): Promise<void> {
-    checkpoint = await banco.lerCheckpoint(FONTE_SOLANA, deps.slotInicial);
+  async function start(): Promise<void> {
+    checkpoint = await db.readCheckpoint(SOURCE_SOLANA, deps.startSlot);
   }
 
-  /** Assinaturas com slot > checkpoint, da mais antiga para a mais nova. */
-  async function novasAssinaturas() {
-    const novas: { signature: string; slot: number; err: unknown }[] = [];
+  /** Signatures with slot > checkpoint, oldest to newest. */
+  async function newSignatures() {
+    const found: { signature: string; slot: number; err: unknown }[] = [];
     let before: string | undefined;
     for (;;) {
-      const pagina = await rede(
-        () => rpc.getSignaturesForAddress(programa, { before, limit: PAGINA }, "finalized"),
+      const page = await net(
+        () => rpc.getSignaturesForAddress(program, { before, limit: PAGE_SIZE }, "finalized"),
         "getSignaturesForAddress",
       );
-      let chegou = false;
-      for (const s of pagina) {
+      let reached = false;
+      for (const s of page) {
         if (s.slot <= checkpoint) {
-          chegou = true;
+          reached = true;
           break;
         }
-        novas.push(s);
+        found.push(s);
       }
-      if (chegou || pagina.length < PAGINA) break;
-      before = pagina[pagina.length - 1].signature;
+      if (reached || page.length < PAGE_SIZE) break;
+      before = page[page.length - 1].signature;
     }
-    return novas.reverse();
+    return found.reverse();
   }
 
-  async function processarTransacao(assinatura: string, slotTx: number): Promise<number> {
-    const tx = await rede(
-      () => rpc.getTransaction(assinatura, { commitment: "finalized", maxSupportedTransactionVersion: 0 }),
-      `getTransaction ${assinatura.slice(0, 8)}`,
+  async function processTransaction(signature: string, txSlot: number): Promise<number> {
+    const tx = await net(
+      () => rpc.getTransaction(signature, { commitment: "finalized", maxSupportedTransactionVersion: 0 }),
+      `getTransaction ${signature.slice(0, 8)}`,
     );
     if (!tx?.meta || tx.meta.err) return 0;
 
-    const eventos = extrairEventos(tx.meta.logMessages ?? [], deps.programId);
-    let gravados = 0;
-    for (const [indice, evento] of eventos.entries()) {
-      const pda = enderecoDoRegistro(evento.hashHex, programa);
-      const conta = await rede(() => rpc.getAccountInfo(pda, "finalized"), `getAccountInfo ${pda.toBase58().slice(0, 8)}`);
-      const doc = conta && conta.owner.equals(programa) ? decodificarConta(Buffer.from(conta.data)) : null;
+    const events = extractEvents(tx.meta.logMessages ?? [], deps.programId);
+    let saved = 0;
+    for (const [index, event] of events.entries()) {
+      const pda = recordAddress(event.hashHex, program);
+      const account = await net(() => rpc.getAccountInfo(pda, "finalized"), `getAccountInfo ${pda.toBase58().slice(0, 8)}`);
+      const doc = account && account.owner.equals(program) ? decodeAccount(Buffer.from(account.data)) : null;
 
-      // A conta é a fonte de verdade. Se não bate com o evento, não grava.
-      if (!doc || doc.hashHex !== evento.hashHex || doc.assinante !== evento.assinante || doc.timestamp !== evento.timestamp) {
+      // The account is the source of truth. If it does not match the event, do not save.
+      if (!doc || doc.hashHex !== event.hashHex || doc.signer !== event.signer || doc.timestamp !== event.timestamp) {
         console.warn(
-          `[indexer] solana: evento em ${assinatura} não confere com a conta ${pda.toBase58()} — ignorado`,
+          `[indexer] solana: event in ${signature} does not match account ${pda.toBase58()}; ignored`,
         );
         continue;
       }
 
-      await banco.gravarAssinatura({
-        rede: REDE_SOLANA,
-        documento_nome: doc.nomeDocumento,
-        tipo_documento: doc.tipoDocumento,
+      await db.saveSignature({
+        rede: SOLANA_NETWORK,
+        documento_nome: doc.documentName,
+        tipo_documento: doc.documentType,
         hash_sha256: `0x${doc.hashHex}`,
-        assinante_endereco: doc.assinante,
-        tx_hash: assinatura,
-        log_index: indice,
+        assinante_endereco: doc.signer,
+        tx_hash: signature,
+        log_index: index,
         endereco_contrato: deps.programId,
         bloco: null,
-        slot: doc.slot || slotTx,
+        slot: doc.slot || txSlot,
         assinado_em: new Date(doc.timestamp * 1000).toISOString(),
         status: "assinado_onchain",
       });
-      gravados++;
+      saved++;
       console.log(
-        `[indexer] solana: Documento registrado — "${doc.nomeDocumento}" (${doc.tipoDocumento}) — assinante ${doc.assinante.slice(0, 4)}...${doc.assinante.slice(-4)} — slot ${doc.slot} — ${assinatura}`,
+        `[indexer] solana: Document recorded — "${doc.documentName}" (${doc.documentType}) — signer ${doc.signer.slice(0, 4)}...${doc.signer.slice(-4)} — slot ${doc.slot} — ${signature}`,
       );
     }
-    return gravados;
+    return saved;
   }
 
-  /** Um ciclo completo. Lança em erro; o checkpoint só avança se tudo deu certo. */
-  async function ciclo(): Promise<{ transacoes: number; gravados: number }> {
-    const novas = await novasAssinaturas();
-    let gravados = 0;
-    for (const s of novas) {
-      if (s.err) continue; // transação que falhou on-chain não registrou nada
-      gravados += await processarTransacao(s.signature, s.slot);
+  /** A full cycle. Throws on error; the checkpoint only moves if everything worked. */
+  async function cycle(): Promise<{ transactions: number; saved: number }> {
+    const found = await newSignatures();
+    let saved = 0;
+    for (const s of found) {
+      if (s.err) continue; // a transaction that failed on-chain recorded nothing
+      saved += await processTransaction(s.signature, s.slot);
     }
-    if (novas.length > 0) {
-      const maiorSlot = Math.max(...novas.map((s) => s.slot));
-      await banco.salvarCheckpoints([FONTE_SOLANA], maiorSlot);
-      checkpoint = maiorSlot;
+    if (found.length > 0) {
+      const highestSlot = Math.max(...found.map((s) => s.slot));
+      await db.saveCheckpoints([SOURCE_SOLANA], highestSlot);
+      checkpoint = highestSlot;
     }
-    return { transacoes: novas.length, gravados };
+    return { transactions: found.length, saved };
   }
 
   return {
-    iniciar,
-    ciclo,
+    start,
+    cycle,
     get checkpoint() {
       return checkpoint;
     },
