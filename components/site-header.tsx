@@ -6,28 +6,27 @@ import type { Locale } from "@/lib/i18n/locale";
 export function SiteHeader({ locale }: { locale: Locale }) {
   const t = dictionaries[locale];
 
-  // As rotas não mudam com o idioma — só os rótulos.
+  // Routes do not change with the language, only the labels.
   const areas = [
     { href: "/sme-registry", label: t.nav.pmes },
     { href: "/global-registry", label: t.nav.global },
-    { href: "/signatures", label: t.nav.assinatura },
+    { href: "/signatures", label: t.nav.signing },
   ];
 
   return (
     <header className="border-b border-slate/15 bg-bone">
       {/*
-        Um DOM só, em duas formas.
+        A single DOM, in two shapes.
 
-        Abaixo de lg: primeira linha com a marca à esquerda e o seletor à
-        direita; os três links descem juntos para uma segunda linha alinhada
-        pela mesma margem da marca. Antes eles quebravam em três linhas
-        desencontradas em inglês ("Document Signing" sobrava sozinho) e, pior,
-        os rótulos longos empurravam a largura da página e criavam rolagem
-        horizontal.
+        Below lg: a first row with the brand on the left and the selector on
+        the right; the three links drop together to a second row aligned on
+        the brand's margin. Before, they broke into three misaligned rows in
+        English ("Document Signing" was left on its own) and, worse, the long
+        labels pushed the page width and created horizontal scrolling.
 
-        A partir de lg: marca à esquerda, navegação e seletor à direita, que é
-        exatamente o cabeçalho de sempre. A ordem é trocada por `order`, sem
-        repetir nenhum elemento no HTML.
+        From lg up: brand on the left, navigation and selector on the right,
+        which is exactly the usual header. The order is swapped with `order`,
+        without repeating any element in the HTML.
       */}
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-6 py-5 lg:flex-nowrap lg:gap-x-6">
         <Link href="/" className="order-1 flex items-baseline gap-2">

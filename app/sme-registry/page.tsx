@@ -1,17 +1,17 @@
 import { LedgerEntry } from "@/components/ledger-entry";
-import { supabase, supabaseConfigurado } from "@/lib/supabase";
-import type { RegistroOferta, RegistroTransacao } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import type { OfferingRow, LedgerTransaction } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 export const dynamic = "force-dynamic";
-export default async function RegistroPmesPage() {
+export default async function SmeRegistryPage() {
   const locale = await getLocale();
   const t = dictionaries[locale];
 
-  // Lê direto da tabela indexada pelo Register — nunca gerada na hora.
-  // Se as variáveis de ambiente do Supabase ainda não estiverem configuradas
-  // neste ambiente, cai no estado vazio abaixo em vez de mostrar erro cru.
-  const [transacoes, respostaOfertas] = supabaseConfigurado
+  // Reads straight from the table indexed by the Register, never generated on
+  // the fly. If the Supabase environment variables are not configured yet in
+  // this environment, it falls into the empty state below instead of a raw error.
+  const [transactions, offeringsResponse] = isSupabaseConfigured
     ? await Promise.all([
         supabase
           .from("registro_transacoes")
@@ -22,20 +22,21 @@ export default async function RegistroPmesPage() {
         supabase.from("registro_ofertas").select("endereco,empresa"),
       ])
     : [null, null];
-  const data = transacoes?.data;
-  const error = transacoes?.error;
-  const dadosOfertas = respostaOfertas?.data;
+  const data = transactions?.data;
+  const error = transactions?.error;
+  const offeringsData = offeringsResponse?.data;
 
-  const registros = (data ?? []) as RegistroTransacao[];
+  const entries = (data ?? []) as LedgerTransaction[];
 
-  // Empresa de cada oferta, para a frase do ledger. Se registro_ofertas falhar,
-  // as frases saem sem empresa — o ledger em si não depende dela.
-  const empresas = new Map(
-    ((dadosOfertas ?? []) as Pick<RegistroOferta, "endereco" | "empresa">[])
+  // Company of each offering, for the ledger sentence. If registro_ofertas
+  // fails, the sentences come out without a company; the ledger itself does
+  // not depend on it.
+  const companies = new Map(
+    ((offeringsData ?? []) as Pick<OfferingRow, "endereco" | "empresa">[])
       .filter((o) => o.empresa)
       .map((o) => [o.endereco.toLowerCase(), o.empresa as string]),
   );
-  const indexadorDesconectado = !supabaseConfigurado || Boolean(error);
+  const indexerDisconnected = !isSupabaseConfigured || Boolean(error);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-14">
@@ -48,25 +49,25 @@ export default async function RegistroPmesPage() {
           {t.pmes.lede}
         </p>
         <p className="mt-2 max-w-xl font-body text-xs leading-relaxed text-slate/80">
-          {t.pmes.notaNumeracao}
+          {t.pmes.numberingNote}
         </p>
       </header>
 
-      {registros.length > 0 ? (
+      {entries.length > 0 ? (
         <div className="mt-2">
-          {registros.map((registro) => (
+          {entries.map((entry) => (
             <LedgerEntry
-              key={registro.id}
-              registro={registro}
+              key={entry.id}
+              entry={entry}
               locale={locale}
-              empresas={empresas}
+              companies={companies}
             />
           ))}
         </div>
       ) : (
         <div className="mt-10 border border-dashed border-slate/30 px-6 py-10">
           <p className="font-body text-sm text-slate">
-            {indexadorDesconectado ? t.pmes.desconectado : t.pmes.vazio}
+            {indexerDisconnected ? t.pmes.disconnected : t.pmes.empty}
           </p>
         </div>
       )}

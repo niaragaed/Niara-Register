@@ -11,7 +11,7 @@ Each source has its own checkpoint in `registro_checkpoints`:
 | **`pmes`** | Ethereum Sepolia | Events of the Niara SMEs `OfertaCaptacao` contracts listed in `registro_ofertas` (see `niara-contracts-PMEs/src/captacao/OfertaCaptacao.sol`): `Aporte` (investment), `OfertaEncerrada` (offering closed), `OfertaCancelada` (cancelled), `CotasResgatadas` (shares redeemed), `RecursosLiberados` (funds released), `Reembolso` (refund). |
 | **`orquestrador`** | Ethereum Sepolia | `OfertaCompletaCriada` from the `OfertaOrquestrador` (self-service offering creation, `src/orquestracao/OfertaOrquestrador.sol`). Each new offering is saved to `registro_ofertas` with the next number (12, 13… in creation order), becomes an "Offering created" row in the ledger and joins the `pmes` batch. Its earlier events are fetched by a backfill, which stores its progress in the same table and resumes if the process stops. |
 | **`assinaturas`** | Ethereum Sepolia | `DocumentoRegistrado` (document registered) from `RegistroAssinaturas`. |
-| **`base-sepolia-assinaturas`**, **`robinhood-testnet-assinaturas`**, **`hyperevm-testnet-assinaturas`**, **`tempo-testnet-assinaturas`** | Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet, Tempo Testnet | `DocumentoRegistrado` from the same `RegistroAssinaturas`, deployed at the same address. See [Additional EVM networks](#additional-evm-networks-evm-assinaturasts). |
+| **`base-sepolia-assinaturas`**, **`robinhood-testnet-assinaturas`**, **`hyperevm-testnet-assinaturas`**, **`tempo-testnet-assinaturas`** | Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet, Tempo Testnet | `DocumentoRegistrado` from the same `RegistroAssinaturas`, deployed at the same address. See [Additional EVM networks](#additional-evm-networks-evm-signaturests). |
 | **`solana-assinaturas`** | Solana devnet | `DocumentoRegistrado` from the `niara-register-solana` program (`9RPHqLou…`). See [Solana sources](#solana-sources-solanats-and-pmes-solanats). |
 | **`pmes-solana`** | Solana devnet | Offering and investment events from the `niara-pmes-solana` program (`FKefGFhU…`), written to the same SMEs ledger as Sepolia. See [Solana sources](#solana-sources-solanats-and-pmes-solanats). |
 
@@ -25,9 +25,9 @@ In normal operation, the three Sepolia sources are at the same block, and each c
 
 A source that is behind (the orchestrator's initial scan, or a backfill) is caught up in separate calls, **after** each cycle's normal batch: at most `CHUNKS_ATRASO_POR_CICLO` calls, spaced by `ATRASO_INTERVALO_MS`. An error during catch-up does not affect the normal batch. New events keep coming in every cycle, and catch-up resumes from the saved point on the next cycle.
 
-Rate limits (HTTP 429 / "compute units per second"): ethers' silent retry is turned off. Every RPC call goes through `limite.ts`, which waits 1 s, 2 s, 4 s… (capped at 30 s, up to 6 attempts) and logs one line per wait. Once the attempts run out, only that part of the cycle is aborted.
+Rate limits (HTTP 429 / "compute units per second"): ethers' silent retry is turned off. Every RPC call goes through `rate-limit.ts`, which waits 1 s, 2 s, 4 s… (capped at 30 s, up to 6 attempts) and logs one line per wait. Once the attempts run out, only that part of the cycle is aborted.
 
-## Additional EVM networks (`evm-assinaturas.ts`)
+## Additional EVM networks (`evm-signatures.ts`)
 
 The same `RegistroAssinaturas` (`0x5627…d93a`) on **Base Sepolia**, **Robinhood Chain Testnet** (chain ID 46630), **HyperEVM Testnet** (chain ID 998) and **Tempo Testnet** (chain ID 42431). Each network has its own provider (without ethers' silent retry), its own checkpoint (`<network>-assinaturas`) and its own loop, running in parallel with Sepolia and Solana. Each cycle goes from the checkpoint up to `head − confirmations`, in chunks, up to 20 chunks, saving the checkpoint after each chunk. The date comes from the event's own `timestamp` field.
 
@@ -52,7 +52,7 @@ Each Solana source has its own loop, in parallel with the EVM sources. An error 
    **SMEs (`pmes-solana`):** it decodes the offering events (`OfertaCriada`, `Aporte`, `OfertaEncerrada`, `OfertaCancelada`, `CotasResgatadas`, `RecursosLiberados`, `Reembolso`) and writes them to the same SMEs ledger (`registro_transacoes`, source `pmes`, `rede = 'solana-devnet'`). Offerings go to `registro_ofertas`, numbered separately per network. Amounts use the same format as Sepolia: MockBRL with 6 decimals, whole shares, base58 addresses.
 4. It saves the checkpoint as the highest processed slot.
 
-Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/migrations_005_assinaturas_multichain.sql`. SMEs on Solana require `supabase/migrations_010_pmes_solana.sql`. **Deploy order:** run the migration in Supabase **before** deploying the indexer with that source. The Sepolia upsert also uses `rede,hash_sha256` since migration 005.
+Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/migrations_005_signatures_multichain.sql`. SMEs on Solana require `supabase/migrations_010_pmes_solana.sql`. **Deploy order:** run the migration in Supabase **before** deploying the indexer with that source. The Sepolia upsert also uses `rede,hash_sha256` since migration 005.
 
 | Variable | Default | |
 |---|---|---|
@@ -68,10 +68,12 @@ Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/mig
 
 ## Tests
 
-`npm run teste` runs `teste/atraso.teste.ts`, `teste/solana.teste.ts`, `teste/base.teste.ts` and `teste/pmes-solana.teste.ts`.
+`npm test` runs `test/backlog.test.ts`, `test/solana.test.ts`, `test/evm-signatures.test.ts` and `test/pmes-solana.test.ts`.
 
-- **`solana.teste.ts`** tests event decoding and attribution offline (an event forged by another program is ignored), then runs one cycle against the real devnet with an in-memory database. `SOLANA_TESTE_REDE=0` skips the devnet part.
-- **`atraso.teste.ts`** uses a fake RPC, fake tokens and an in-memory database, so it touches neither the network nor Supabase. It simulates a long catch-up with intermittent 429s and a burst that exhausts the backoff, and checks that the normal batch keeps writing new events during catch-up and that, at the end, there are no gaps and no duplicates.
+- **`solana.test.ts`** tests event decoding and attribution offline (an event forged by another program is ignored), then runs one cycle against the real devnet with an in-memory database. `SOLANA_TEST_NETWORK=0` skips the devnet part.
+- **`evm-signatures.test.ts`** tests the additional EVM networks' loop with an in-memory RPC and database: chunks, the confirmation margin, the address filter and resuming after an error.
+- **`pmes-solana.test.ts`** tests the SMEs-on-Solana event decoding offline; set `PMES_SOLANA_TEST_RPC` to also run cycles against a real RPC.
+- **`backlog.test.ts`** uses a fake RPC, fake tokens and an in-memory database, so it touches neither the network nor Supabase. It simulates a long catch-up with intermittent 429s and a burst that exhausts the backoff, and checks that the normal batch keeps writing new events during catch-up and that, at the end, there are no gaps and no duplicates.
 
 ## Running
 
@@ -88,7 +90,13 @@ Before running, apply `../supabase/schema.sql` and the `../supabase/migrations_0
 
 `npx tsx index.ts --dry-run` (or `DRY_RUN=1`) reads the chain and the database for real but writes nothing, not even checkpoints. It runs until it catches up with the chain and prints the offerings and the rows it would insert, with a per-offering reconciliation (investments = total at closing = amount to the issuer + fee).
 
+### Backfilling `dados`
+
+`npx tsx scripts/backfill-data.ts` fills the `dados` column of rows written before migration 003, always reading from the chain. It is a dry run by default; `--write` applies it. `--sample=N` and `--numbers=12,8,7` choose which rows are printed.
+
 ### Optional variables
+
+Environment variable names are kept as they were (some are in Portuguese, e.g. `CHUNKS_ATRASO_POR_CICLO`) so existing deployments keep working.
 
 | Variable | Default | |
 |---|---|---|

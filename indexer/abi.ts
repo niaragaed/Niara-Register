@@ -1,6 +1,7 @@
-// ABIs mínimas (só os eventos que o Register precisa indexar), extraídas diretamente
-// de niara-contracts-PMEs/src/captacao/OfertaCaptacao.sol. Ver aquele repositório
-// como fonte da verdade — se os contratos mudarem, atualizar aqui também.
+// Minimal ABIs (only the events the Register needs to index), taken directly
+// from niara-contracts-PMEs/src/captacao/OfertaCaptacao.sol. That repository is
+// the source of truth: if the contracts change, update here too. Event, field
+// and contract names are on-chain names and stay as deployed.
 
 export const OFERTA_CAPTACAO_ABI = [
   "event Aporte(address indexed investidor, uint256 valor, uint256 totalArrecadadoAtual)",
@@ -11,16 +12,16 @@ export const OFERTA_CAPTACAO_ABI = [
   "event Reembolso(address indexed investidor, uint256 valor)",
 ];
 
-// enum Estado { Aberta, EncerradaSucesso, EncerradaFalha } — em OfertaCaptacao.sol
-export const ESTADO_LABELS = ["Aberta", "EncerradaSucesso", "EncerradaFalha"] as const;
+// enum Estado { Aberta, EncerradaSucesso, EncerradaFalha } in OfertaCaptacao.sol
+export const STATE_LABELS = ["Aberta", "EncerradaSucesso", "EncerradaFalha"] as const;
 
-// De niaragaed/niara-contracts-Register, src/registro/RegistroAssinaturas.sol
+// From niaragaed/niara-contracts-Register, src/registro/RegistroAssinaturas.sol
 export const REGISTRO_ASSINATURAS_ABI = [
   "event DocumentoRegistrado(bytes32 indexed hashDocumento, address indexed assinante, string nomeDocumento, string tipoDocumento, uint256 timestamp)",
 ];
 
-// De niara-contracts-PMEs, src/orquestracao/OfertaOrquestrador.sol. Só o evento
-// de criação: os demais (allowlist, timelock) não viram linha no ledger.
+// From niara-contracts-PMEs, src/orquestracao/OfertaOrquestrador.sol. Only the
+// creation event: the others (allowlist, timelock) do not become ledger rows.
 export const OFERTA_ORQUESTRADOR_ABI = [
   "event OfertaCompletaCriada(address indexed emissor, address indexed token, address indexed oferta, uint256 metaMinima, uint256 metaMaxima, uint256 precoPorCota, uint256 prazo)",
 ];

@@ -1,11 +1,11 @@
-// Tipagem mínima do provider injetado por carteiras Solana (Phantom, Solflare
-// e compatíveis com a interface `window.solana`). Só o que a página de
-// assinatura usa: conectar e assinar uma transação.
+// Minimal typing of the provider injected by Solana wallets (Phantom, Solflare
+// and anything compatible with the `window.solana` interface). Only what the
+// signing page uses: connect and sign a transaction.
 import type { PublicKey, Transaction } from "@solana/web3.js";
 
 export {};
 
-export type ProviderSolana = {
+export type SolanaProvider = {
   isPhantom?: boolean;
   publicKey: PublicKey | null;
   connect: () => Promise<{ publicKey: PublicKey }>;
@@ -14,7 +14,7 @@ export type ProviderSolana = {
 
 declare global {
   interface Window {
-    solana?: ProviderSolana;
-    phantom?: { solana?: ProviderSolana };
+    solana?: SolanaProvider;
+    phantom?: { solana?: SolanaProvider };
   }
 }

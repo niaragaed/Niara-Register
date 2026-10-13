@@ -1,137 +1,143 @@
 import { createClient } from "@supabase/supabase-js";
 import { config } from "./config";
-import { paraMonitorada, type LinhaOferta, type OfertaMonitorada } from "./ofertas";
-import type { DadosEvento } from "./eventos";
-import type { NovaOfertaSolana, OfertaSolanaRegistrada } from "./pmes-solana";
+import { toTracked, type OfferingRow, type TrackedOffering } from "./offerings";
+import type { EventData } from "./events";
+import type { NewSolanaOffering, RegisteredSolanaOffering } from "./pmes-solana";
 
-// Client com a service role key — o indexer precisa gravar direto no Postgres,
-// contornando qualquer RLS que exista pro client público do site. Nunca reusar
-// esta chave no front do Niara-Register (lib/supabase.ts lá usa a anon key).
+// Client with the service role key: the indexer needs to write straight to
+// Postgres, bypassing any RLS that exists for the site's public client. Never
+// reuse this key in the Niara-Register frontend (lib/supabase.ts there uses
+// the anon key).
+//
+// Table and column names (registro_transacoes, tx_hash, ocorrido_em, ...) are
+// the database schema and stay as they are.
 export const supabase = createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
 
 /**
- * Em dry-run nada é gravado: cada escrita vira um registro em memória, que o
- * index.ts imprime ao final. As leituras (checkpoints, ofertas) continuam indo
- * ao banco de verdade.
+ * In dry-run nothing is written: each write becomes an in-memory record, which
+ * index.ts prints at the end. Reads (checkpoints, offerings) still go to the
+ * real database.
  */
-export const simulado = {
-  registros: [] as NovoRegistro[],
-  ofertas: [] as NovaOferta[],
+export const simulated = {
+  entries: [] as NewLedgerEntry[],
+  offerings: [] as NewOffering[],
 };
 
-export type NovoRegistro = {
+export type NewLedgerEntry = {
   fonte: "pmes";
-  /** Rede de origem (migration 010). Ausente = 'sepolia' (default da coluna). */
+  /** Source network (migration 010). Missing = 'sepolia' (the column default). */
   rede?: "sepolia" | "solana-devnet";
   tipo_evento: string;
   descricao: string;
   tx_hash: string;
   log_index: number;
   endereco_contrato: string;
-  /** Bloco EVM; null na Solana. */
+  /** EVM block; null on Solana. */
   bloco: number | null;
-  /** Slot da Solana (ausente na EVM). */
+  /** Solana slot (missing on EVM). */
   slot?: number;
   ocorrido_em: string;
   confirmado: boolean;
   /**
-   * Forma estruturada do evento (ver eventos.ts). Null para evento fora da ABI
-   * mínima — a exibição tem fallback. A `descricao` continua sendo gravada do
-   * mesmo jeito, em paralelo.
+   * Structured form of the event (see events.ts). Null for an event outside
+   * the minimal ABI; the display has a fallback. `descricao` is still written
+   * the same way, in parallel.
    */
-  dados: DadosEvento | null;
+  dados: EventData | null;
 };
 
-// onConflict em (tx_hash, log_index) — garante idempotência: se o indexer cair e
-// reprocessar um range de blocos já gravado, não duplica a linha no ledger.
-export async function gravarRegistro(registro: NovoRegistro): Promise<void> {
+// onConflict on (tx_hash, log_index) guarantees idempotency: if the indexer
+// crashes and reprocesses an already written block range, it does not
+// duplicate the ledger row.
+export async function saveLedgerEntry(entry: NewLedgerEntry): Promise<void> {
   if (config.dryRun) {
-    const chave = `${registro.tx_hash}#${registro.log_index}`;
-    if (!simulado.registros.some((r) => `${r.tx_hash}#${r.log_index}` === chave)) {
-      simulado.registros.push(registro);
+    const key = `${entry.tx_hash}#${entry.log_index}`;
+    if (!simulated.entries.some((r) => `${r.tx_hash}#${r.log_index}` === key)) {
+      simulated.entries.push(entry);
     }
     return;
   }
 
   const { error } = await supabase
     .from("registro_transacoes")
-    .upsert(registro, { onConflict: "tx_hash,log_index", ignoreDuplicates: true });
+    .upsert(entry, { onConflict: "tx_hash,log_index", ignoreDuplicates: true });
 
   if (error) {
-    throw new Error(`Falha ao gravar registro (${registro.tx_hash}#${registro.log_index}): ${error.message}`);
+    throw new Error(`Failed to save ledger entry (${entry.tx_hash}#${entry.log_index}): ${error.message}`);
   }
 }
 
-export type NovaAssinatura = {
-  /** Rede de origem (migration 005). */
+export type NewSignature = {
+  /** Source network (migration 005). */
   rede: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet" | "solana-devnet";
   documento_nome: string;
   tipo_documento: string;
-  /** Sempre "0x" + 64 hex minúsculos, nas duas redes. */
+  /** Always "0x" + 64 lowercase hex characters, on every network. */
   hash_sha256: string;
-  /** EVM: endereço 0x…; Solana: chave pública base58. */
+  /** EVM: 0x… address; Solana: base58 public key. */
   assinante_endereco: string;
-  /** EVM: hash da transação; Solana: assinatura da transação (base58). */
+  /** EVM: transaction hash; Solana: transaction signature (base58). */
   tx_hash: string;
   log_index: number;
-  /** EVM: contrato RegistroAssinaturas; Solana: program ID. */
+  /** EVM: RegistroAssinaturas contract; Solana: program ID. */
   endereco_contrato: string;
-  /** Bloco EVM (null na Solana). */
+  /** EVM block (null on Solana). */
   bloco: number | null;
-  /** Slot da Solana (ausente na EVM). */
+  /** Solana slot (missing on EVM). */
   slot?: number;
   assinado_em: string;
   status: "assinado_onchain";
 };
 
-// onConflict em (rede, hash_sha256) — cada contrato/programa só deixa registrar
-// um hash uma vez NA SUA REDE, então essa trava replica a mesma garantia no
-// banco (evita duplicar se o indexer reprocessar blocos/slots depois de
-// reiniciar), sem impedir o mesmo documento de ter prova em duas redes.
-export async function gravarAssinatura(registro: NovaAssinatura): Promise<void> {
+// onConflict on (rede, hash_sha256): each contract/program only lets a hash be
+// recorded once ON ITS NETWORK, so this constraint mirrors the same guarantee
+// in the database (it avoids duplicates if the indexer reprocesses
+// blocks/slots after a restart), without stopping the same document from
+// having proof on two networks.
+export async function saveSignature(record: NewSignature): Promise<void> {
   if (config.dryRun) {
     console.log(
-      `[dry-run] assinatura que seria gravada (${registro.rede}): ${registro.hash_sha256} — "${registro.documento_nome}" — ${registro.assinante_endereco}`,
+      `[dry-run] signature that would be saved (${record.rede}): ${record.hash_sha256} — "${record.documento_nome}" — ${record.assinante_endereco}`,
     );
     return;
   }
 
   const { error } = await supabase
     .from("registro_assinaturas")
-    .upsert(registro, { onConflict: "rede,hash_sha256", ignoreDuplicates: true });
+    .upsert(record, { onConflict: "rede,hash_sha256", ignoreDuplicates: true });
 
   if (error) {
-    throw new Error(`Falha ao gravar assinatura (${registro.hash_sha256}): ${error.message}`);
+    throw new Error(`Failed to save signature (${record.hash_sha256}): ${error.message}`);
   }
 }
 
-// ── Ofertas (registro_ofertas, migration 004) ──────────────────────────────────
+// ── Offerings (registro_ofertas, migration 004) ──────────────────────────────────
 
 /**
- * A lista de ofertas monitoradas, lida do banco a cada início do processo — é o
- * que faz uma oferta descoberta sobreviver a reinícios. Vazia significa que a
- * migration 004 não rodou (o seed traz as 11 legadas): falha alto em vez de
- * indexar nada em silêncio.
+ * The list of tracked offerings, read from the database every time the process
+ * starts: it is what lets a discovered offering survive restarts. Empty means
+ * migration 004 has not run (its seed brings the 11 legacy offerings): fail
+ * loudly instead of silently indexing nothing.
  */
-export async function carregarOfertas(): Promise<OfertaMonitorada[]> {
+export async function loadOfferings(): Promise<TrackedOffering[]> {
   const { data, error } = await supabase
     .from("registro_ofertas")
     .select("endereco,token,numero,origem,empresa,bloco_criacao,backfill_alvo,backfill_ate")
-    // Só as da Sepolia: as da Solana (migration 010) têm laço próprio (pmes-solana.ts) e
-    // endereço base58, que nunca pode entrar num getLogs da EVM.
+    // Sepolia only: the Solana ones (migration 010) have their own loop
+    // (pmes-solana.ts) and a base58 address, which must never go into an EVM getLogs.
     .eq("rede", "sepolia")
     .order("numero");
 
   if (error) {
-    throw new Error(`Falha ao carregar registro_ofertas (a migration 004 rodou?): ${error.message}`);
+    throw new Error(`Failed to load registro_ofertas (did migration 004 run?): ${error.message}`);
   }
   if (!data || data.length === 0) {
-    throw new Error("registro_ofertas está vazia — rode supabase/migrations_004_registro_ofertas.sql.");
+    throw new Error("registro_ofertas is empty — run supabase/migrations_004_offerings.sql.");
   }
-  return (data as LinhaOferta[]).map(paraMonitorada);
+  return (data as OfferingRow[]).map(toTracked);
 }
 
-export type NovaOferta = {
+export type NewOffering = {
   endereco: string;
   token: string;
   emissor: string;
@@ -149,54 +155,55 @@ export type NovaOferta = {
 };
 
 /**
- * Grava uma oferta descoberta pelo OfertaCompletaCriada. O número já vem
- * decidido pelo chamador (max + 1, na ordem dos eventos); a unique em `numero`
- * e a PK em `endereco` impedem que um reprocessamento duplique ou renumere.
+ * Saves an offering discovered through OfertaCompletaCriada. The number is
+ * already decided by the caller (max + 1, in event order); the unique
+ * constraint on `numero` and the PK on `endereco` stop a reprocess from
+ * duplicating or renumbering it.
  */
-export async function gravarOferta(oferta: NovaOferta): Promise<void> {
+export async function saveOffering(offering: NewOffering): Promise<void> {
   if (config.dryRun) {
-    simulado.ofertas.push(oferta);
+    simulated.offerings.push(offering);
     return;
   }
 
   const { error } = await supabase
     .from("registro_ofertas")
-    .upsert(oferta, { onConflict: "endereco", ignoreDuplicates: true });
+    .upsert(offering, { onConflict: "endereco", ignoreDuplicates: true });
 
   if (error) {
-    throw new Error(`Falha ao gravar oferta ${oferta.endereco}: ${error.message}`);
+    throw new Error(`Failed to save offering ${offering.endereco}: ${error.message}`);
   }
 }
 
-export function novaOfertaParaMonitorada(o: NovaOferta): OfertaMonitorada {
-  return paraMonitorada(o);
+export function newOfferingToTracked(o: NewOffering): TrackedOffering {
+  return toTracked(o);
 }
 
-/** Progresso do backfill de uma oferta (último bloco já varrido). */
-export async function salvarBackfill(endereco: string, ate: number): Promise<void> {
+/** Backfill progress of an offering (last block already scanned). */
+export async function saveBackfill(address: string, until: number): Promise<void> {
   if (config.dryRun) return;
 
   const { error } = await supabase
     .from("registro_ofertas")
-    .update({ backfill_ate: ate })
-    .eq("endereco", endereco.toLowerCase());
+    .update({ backfill_ate: until })
+    .eq("endereco", address.toLowerCase());
 
   if (error) {
-    throw new Error(`Falha ao salvar backfill de ${endereco}: ${error.message}`);
+    throw new Error(`Failed to save backfill of ${address}: ${error.message}`);
   }
 }
 
-// ── Checkpoints ────────────────────────────────────────────────────────────────
+// ── Checkpoints ──────────────────────────────────────────────────────────────────
 
-export async function lerCheckpoint(fonte: string, fallback: number): Promise<number> {
+export async function readCheckpoint(source: string, fallback: number): Promise<number> {
   const { data, error } = await supabase
     .from("registro_checkpoints")
     .select("ultimo_bloco")
-    .eq("fonte", fonte)
+    .eq("fonte", source)
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Falha ao ler checkpoint (${fonte}): ${error.message}`);
+    throw new Error(`Failed to read checkpoint (${source}): ${error.message}`);
   }
 
   return data?.ultimo_bloco === undefined || data?.ultimo_bloco === null
@@ -204,61 +211,62 @@ export async function lerCheckpoint(fonte: string, fallback: number): Promise<nu
     : Number(data.ultimo_bloco);
 }
 
-/** Salva o checkpoint de várias fontes numa única escrita. */
-export async function salvarCheckpoints(fontes: string[], bloco: number): Promise<void> {
-  if (config.dryRun || fontes.length === 0) return;
+/** Saves the checkpoint of several sources in a single write. */
+export async function saveCheckpoints(sources: string[], block: number): Promise<void> {
+  if (config.dryRun || sources.length === 0) return;
 
-  const agora = new Date().toISOString();
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from("registro_checkpoints")
-    .upsert(fontes.map((fonte) => ({ fonte, ultimo_bloco: bloco, atualizado_em: agora })));
+    .upsert(sources.map((fonte) => ({ fonte, ultimo_bloco: block, atualizado_em: now })));
 
   if (error) {
-    throw new Error(`Falha ao salvar checkpoint (${fontes.join(", ")}): ${error.message}`);
+    throw new Error(`Failed to save checkpoint (${sources.join(", ")}): ${error.message}`);
   }
 }
 
-// ── Ofertas do PMEs na Solana (registro_ofertas com rede = 'solana-devnet', migration 010) ──
+// ── PMEs offerings on Solana (registro_ofertas with rede = 'solana-devnet', migration 010) ──
 
-export async function carregarOfertasSolana(): Promise<OfertaSolanaRegistrada[]> {
+export async function loadSolanaOfferings(): Promise<RegisteredSolanaOffering[]> {
   const { data, error } = await supabase
     .from("registro_ofertas")
     .select("endereco,numero,empresa")
     .eq("rede", "solana-devnet")
     .order("numero");
   if (error) {
-    throw new Error(`Falha ao carregar ofertas da Solana (a migration 010 rodou?): ${error.message}`);
+    throw new Error(`Failed to load Solana offerings (did migration 010 run?): ${error.message}`);
   }
-  return (data ?? []) as OfertaSolanaRegistrada[];
+  return (data ?? []) as RegisteredSolanaOffering[];
 }
 
-let numeroSimulado = 0;
+let simulatedNumber = 0;
 
 /**
- * Grava a oferta (idempotente por endereço) com o próximo número da Solana — numeração própria
- * por rede (unique (rede, numero)), então nunca disputa número com o laço da Sepolia. Se outro
- * processo pegar o mesmo número no meio, tenta de novo com o seguinte.
+ * Saves the offering (idempotent by address) with the next Solana number: each
+ * network has its own numbering (unique (rede, numero)), so it never competes
+ * for a number with the Sepolia loop. If another process takes the same number
+ * in between, it retries with the next one.
  */
-export async function registrarOfertaSolana(oferta: NovaOfertaSolana): Promise<number> {
-  if (config.dryRun) return ++numeroSimulado;
+export async function registerSolanaOffering(offering: NewSolanaOffering): Promise<number> {
+  if (config.dryRun) return ++simulatedNumber;
 
-  for (let tentativa = 0; tentativa < 5; tentativa++) {
-    const { data: existente } = await supabase.from("registro_ofertas").select("numero").eq("endereco", oferta.endereco).maybeSingle();
-    if (existente) return Number(existente.numero);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: existing } = await supabase.from("registro_ofertas").select("numero").eq("endereco", offering.endereco).maybeSingle();
+    if (existing) return Number(existing.numero);
 
-    const { data: ultima, error: erroMax } = await supabase
+    const { data: last, error: maxError } = await supabase
       .from("registro_ofertas")
       .select("numero")
       .eq("rede", "solana-devnet")
       .order("numero", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (erroMax) throw new Error(`Falha ao ler numeração das ofertas da Solana: ${erroMax.message}`);
-    const numero = (ultima ? Number(ultima.numero) : 0) + 1;
+    if (maxError) throw new Error(`Failed to read the Solana offering numbering: ${maxError.message}`);
+    const number = (last ? Number(last.numero) : 0) + 1;
 
-    const { error } = await supabase.from("registro_ofertas").insert({ ...oferta, numero, origem: "solana", rede: "solana-devnet" });
-    if (!error) return numero;
-    if (error.code !== "23505") throw new Error(`Falha ao gravar oferta ${oferta.endereco}: ${error.message}`);
+    const { error } = await supabase.from("registro_ofertas").insert({ ...offering, numero: number, origem: "solana", rede: "solana-devnet" });
+    if (!error) return number;
+    if (error.code !== "23505") throw new Error(`Failed to save offering ${offering.endereco}: ${error.message}`);
   }
-  throw new Error(`Não foi possível numerar a oferta ${oferta.endereco} depois de 5 tentativas.`);
+  throw new Error(`Could not number offering ${offering.endereco} after 5 attempts.`);
 }

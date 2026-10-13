@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# arquivos de referência de marca (GIF/PNG usados só como base de design, não vão para produção)
+# brand reference files (GIF/PNG used only as a design base, they do not go to production)
 public/brand/*-ref.*
