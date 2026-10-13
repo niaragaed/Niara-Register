@@ -1,180 +1,121 @@
-# Niara-Register — Indexer (Registro PMEs)
+# Niara Register: Indexer
 
-Worker de longa duração que lê eventos reais do `niara-contracts-PMEs` na Sepolia
-(via Alchemy) e grava no Postgres do Niara-Register. Não é a fonte de verdade —
-só espelha o que já aconteceu on-chain.
+A long-running worker that reads real on-chain events from every network Niara Register supports and writes them to the Register's Postgres database (Supabase). It is **not a source of truth**. It only mirrors what has already happened on-chain.
 
-## O que ele indexa
+## What it indexes
 
-Três fontes, cada uma com checkpoint próprio em `registro_checkpoints`:
+Each source has its own checkpoint in `registro_checkpoints`:
 
-- **`pmes`**: eventos das `OfertaCaptacao` listadas em `registro_ofertas`
-  (ver `niara-contracts-PMEs/src/captacao/OfertaCaptacao.sol`): `Aporte`,
-  `OfertaEncerrada`, `OfertaCancelada`, `CotasResgatadas`, `RecursosLiberados`,
-  `Reembolso`.
-- **`orquestrador`**: `OfertaCompletaCriada` do `OfertaOrquestrador` (criação
-  self-service, `src/orquestracao/OfertaOrquestrador.sol`). Cada oferta nova é
-  gravada em `registro_ofertas` com o próximo número (12, 13… na ordem de
-  criação), vira uma linha "Oferta criada" no ledger e entra no lote da fonte
-  `pmes`; os eventos dela anteriores a isso são buscados por um backfill, que
-  guarda o progresso na própria tabela e retoma se o processo cair.
-- **`assinaturas`**: `DocumentoRegistrado` do `RegistroAssinaturas`.
-- **`base-sepolia-assinaturas`** e **`robinhood-testnet-assinaturas`**:
-  `DocumentoRegistrado` do mesmo `RegistroAssinaturas` na Base Sepolia e na
-  Robinhood Chain Testnet. Ver seção abaixo.
-- **`solana-assinaturas`** (Solana devnet): `DocumentoRegistrado` do programa
-  `niara-register-solana` (`9RPHqLou…`). Ver seção abaixo.
-
-A lista de ofertas vem do banco (`registro_ofertas`, migration 004), não de
-variável de ambiente: as 11 legadas entram pelo seed da migration, as do
-orquestrador pelo próprio indexer. `OFERTAS_ONCHAIN` não é mais lida.
-
-Cada evento vira uma linha em `registro_transacoes`, idempotente por
-`(tx_hash, log_index)` — pode cair e reiniciar sem duplicar nem perder nada.
-
-### Consumo de RPC
-
-Em regime normal, as três fontes estão no mesmo bloco e cada ciclo faz **uma**
-chamada `eth_getLogs` com todos os endereços; os eventos são separados pelo
-endereço e os três checkpoints são salvos juntos.
-
-Uma fonte atrasada (a varredura inicial do orquestrador, ou um backfill) é
-recuperada em chamadas próprias, **depois** do lote normal de cada ciclo: no
-máximo `CHUNKS_ATRASO_POR_CICLO` chamadas, espaçadas por `ATRASO_INTERVALO_MS`.
-Erro na recuperação não afeta o lote normal — os eventos novos continuam
-entrando a cada ciclo, e a recuperação retoma do ponto salvo no ciclo seguinte.
-
-Limite de taxa (HTTP 429 / "compute units per second"): o retry silencioso do
-ethers está desligado; cada chamada ao RPC passa por `limite.ts`, que espera
-1s, 2s, 4s… (teto 30s, até 6 tentativas) e registra uma linha de log a cada
-espera. Esgotadas as tentativas, só aquela parte do ciclo é abortada.
-
-## Redes EVM adicionais (`evm-assinaturas.ts`)
-
-O mesmo `RegistroAssinaturas` (`0x5627…d93a`) em **Base Sepolia**,
-**Robinhood Chain Testnet** (chain ID 46630), **HyperEVM Testnet** (chain ID 998)
-e **Tempo Testnet** (chain ID 42431). Cada rede tem
-provider próprio (sem o retry silencioso do ethers), checkpoint próprio
-(`<rede>-assinaturas`) e laço próprio, em paralelo à Sepolia e à Solana. Por
-ciclo: do checkpoint até `topo − confirmações`, em pedaços, até 20 pedaços;
-checkpoint salvo a cada pedaço. A data vem do campo `timestamp` do próprio
-evento.
-
-| Rede | RPC padrão | Pedaço | Confirmações | Migration |
-|---|---|---|---|---|
-| `base-sepolia` | `https://sepolia.base.org` (limite de 200 blocos por `eth_getLogs`) | 200 | 5 | 006 |
-| `robinhood-testnet` | `https://rpc.testnet.chain.robinhood.com` | 2000 | 20 (blocos de ~250 ms) | 007 |
-| `hyperevm-testnet` | `https://rpc.hyperliquid-testnet.xyz/evm` (limite de 50 blocos por `eth_getLogs` e de taxa por IP; 1 s entre pedaços) | 50 | 2 | 008 |
-| `tempo-testnet` | `https://rpc.moderato.tempo.xyz` (blocos de ~0,5 s, finalidade determinística) | 5000 | 2 | 009 |
-
-Rodar a migration da rede **antes** de publicar o indexer com ela.
-
-Variáveis por rede, com prefixo `BASE_`, `ROBINHOOD_`, `HYPEREVM_` ou `TEMPO_`:
-`REGISTRO_ASSINATURAS_ENDERECO`, `START_BLOCK`, `BLOCK_RANGE_CHUNK`,
-`PEDACOS_POR_CICLO`, `INTERVALO_PEDACOS_MS`, `CONFIRMACOES`, `POLL_INTERVAL_MS`, `DESATIVADO=1`.
-RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL` / `HYPEREVM_RPC_URL` / `TEMPO_RPC_URL`.
-
-## Fonte Solana (`solana.ts`)
-
-Laço próprio, em paralelo ao lote EVM — erro ou lentidão de um RPC nunca atrasa
-o outro, e um erro na Solana nunca derruba o processo. A cada
-`SOLANA_POLL_INTERVAL_MS`:
-
-1. `getSignaturesForAddress(programa)` (commitment `finalized`) até o slot do
-   checkpoint `solana-assinaturas`;
-2. para cada transação bem-sucedida, extrai `DocumentoRegistrado` dos logs —
-   **só** quando o `Program data:` foi emitido dentro do frame do nosso
-   programa (pilha de `invoke`), então outro programa não forja linha citando
-   nosso endereço;
-3. confere o evento contra a conta PDA `["assinatura", hash]` e grava o que
-   está **na conta** em `registro_assinaturas`, com `rede = 'solana-devnet'`,
-   `slot`, `bloco = null`, hash `0x…` (mesmo formato da Sepolia);
-4. salva o checkpoint com o maior slot processado.
-
-Idempotente por `(rede, hash_sha256)` — exige a
-`supabase/migrations_005_assinaturas_multichain.sql`. **Ordem de deploy:**
-rodar a migration 005 no Supabase **antes** de publicar este indexer (o upsert
-da Sepolia também passou a usar `rede,hash_sha256`).
-
-| Variável | Padrão | |
+| Source | Network | What |
 |---|---|---|
-| `SOLANA_RPC_URL` | `https://api.devnet.solana.com` | RPC público tem limite baixo; Helius/QuickNode free é melhor |
-| `SOLANA_PROGRAM_ID` | `9RPHqLouFjoUbPdcmA1GyHMeDoWvjZMuCyYFPBWLmTcR` | |
-| `SOLANA_START_SLOT` | `509235000` | slot do deploy; início sem checkpoint |
+| **`pmes`** | Ethereum Sepolia | Events of the Niara SMEs `OfertaCaptacao` contracts listed in `registro_ofertas` (see `niara-contracts-PMEs/src/captacao/OfertaCaptacao.sol`): `Aporte` (investment), `OfertaEncerrada` (offering closed), `OfertaCancelada` (cancelled), `CotasResgatadas` (shares redeemed), `RecursosLiberados` (funds released), `Reembolso` (refund). |
+| **`orquestrador`** | Ethereum Sepolia | `OfertaCompletaCriada` from the `OfertaOrquestrador` (self-service offering creation, `src/orquestracao/OfertaOrquestrador.sol`). Each new offering is saved to `registro_ofertas` with the next number (12, 13… in creation order), becomes an "Offering created" row in the ledger and joins the `pmes` batch. Its earlier events are fetched by a backfill, which stores its progress in the same table and resumes if the process stops. |
+| **`assinaturas`** | Ethereum Sepolia | `DocumentoRegistrado` (document registered) from `RegistroAssinaturas`. |
+| **`base-sepolia-assinaturas`**, **`robinhood-testnet-assinaturas`**, **`hyperevm-testnet-assinaturas`**, **`tempo-testnet-assinaturas`** | Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet, Tempo Testnet | `DocumentoRegistrado` from the same `RegistroAssinaturas`, deployed at the same address. See [Additional EVM networks](#additional-evm-networks-evm-assinaturasts). |
+| **`solana-assinaturas`** | Solana devnet | `DocumentoRegistrado` from the `niara-register-solana` program (`9RPHqLou…`). See [Solana sources](#solana-sources-solanats-and-pmes-solanats). |
+| **`pmes-solana`** | Solana devnet | Offering and investment events from the `niara-pmes-solana` program (`FKefGFhU…`), written to the same SMEs ledger as Sepolia. See [Solana sources](#solana-sources-solanats-and-pmes-solanats). |
+
+The list of Sepolia offerings comes from the database (`registro_ofertas`, migration 004), not from an environment variable. The 11 legacy offerings are added by the migration's seed, and the orchestrator's offerings are added by the indexer itself. `OFERTAS_ONCHAIN` is no longer read.
+
+Each event becomes a row in `registro_transacoes` (SMEs ledger) or `registro_assinaturas` (document ledger). Writes are idempotent per `(tx_hash, log_index)`, or per `(network, hash_sha256)` for documents, so the worker can stop and restart without duplicating or losing anything.
+
+### RPC usage (Sepolia)
+
+In normal operation, the three Sepolia sources are at the same block, and each cycle makes **one** `eth_getLogs` call covering every address. Events are split by address, and the three checkpoints are saved together.
+
+A source that is behind (the orchestrator's initial scan, or a backfill) is caught up in separate calls, **after** each cycle's normal batch: at most `CHUNKS_ATRASO_POR_CICLO` calls, spaced by `ATRASO_INTERVALO_MS`. An error during catch-up does not affect the normal batch. New events keep coming in every cycle, and catch-up resumes from the saved point on the next cycle.
+
+Rate limits (HTTP 429 / "compute units per second"): ethers' silent retry is turned off. Every RPC call goes through `limite.ts`, which waits 1 s, 2 s, 4 s… (capped at 30 s, up to 6 attempts) and logs one line per wait. Once the attempts run out, only that part of the cycle is aborted.
+
+## Additional EVM networks (`evm-assinaturas.ts`)
+
+The same `RegistroAssinaturas` (`0x5627…d93a`) on **Base Sepolia**, **Robinhood Chain Testnet** (chain ID 46630), **HyperEVM Testnet** (chain ID 998) and **Tempo Testnet** (chain ID 42431). Each network has its own provider (without ethers' silent retry), its own checkpoint (`<network>-assinaturas`) and its own loop, running in parallel with Sepolia and Solana. Each cycle goes from the checkpoint up to `head − confirmations`, in chunks, up to 20 chunks, saving the checkpoint after each chunk. The date comes from the event's own `timestamp` field.
+
+| Network | Default RPC | Chunk | Confirmations | Migration |
+|---|---|---|---|---|
+| `base-sepolia` | `https://sepolia.base.org` (limit of 200 blocks per `eth_getLogs`) | 200 | 5 | 006 |
+| `robinhood-testnet` | `https://rpc.testnet.chain.robinhood.com` | 2000 | 20 (~250 ms blocks) | 007 |
+| `hyperevm-testnet` | `https://rpc.hyperliquid-testnet.xyz/evm` (limit of 50 blocks per `eth_getLogs` and a per-IP rate limit; 1 s between chunks) | 50 | 2 | 008 |
+| `tempo-testnet` | `https://rpc.moderato.tempo.xyz` (~0.5 s blocks, deterministic finality) | 5000 | 2 | 009 |
+
+Run a network's migration **before** deploying the indexer with that network.
+
+Per-network variables, prefixed with `BASE_`, `ROBINHOOD_`, `HYPEREVM_` or `TEMPO_`: `REGISTRO_ASSINATURAS_ENDERECO`, `START_BLOCK`, `BLOCK_RANGE_CHUNK`, `PEDACOS_POR_CICLO`, `INTERVALO_PEDACOS_MS`, `CONFIRMACOES`, `POLL_INTERVAL_MS`, `DESATIVADO=1`. RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL` / `HYPEREVM_RPC_URL` / `TEMPO_RPC_URL`.
+
+## Solana sources (`solana.ts` and `pmes-solana.ts`)
+
+Each Solana source has its own loop, in parallel with the EVM sources. An error or a slow response from one RPC never delays another, and an error on Solana never brings the process down. Every poll interval:
+
+1. `getSignaturesForAddress(program)` (commitment `finalized`), back to the checkpoint slot.
+2. For each successful transaction, it extracts the program's events from the logs, **only** when the `Program data:` line was emitted inside our own program's frame (tracked through the `invoke` stack). Another program cannot forge a ledger row by citing our address.
+3. **Documents (`solana-assinaturas`):** it checks the event against the PDA account `["assinatura", hash]` and writes what is **in the account** to `registro_assinaturas`, with `rede = 'solana-devnet'`, the `slot`, `bloco = null` and the hash as `0x…` (the same format as Sepolia).
+   **SMEs (`pmes-solana`):** it decodes the offering events (`OfertaCriada`, `Aporte`, `OfertaEncerrada`, `OfertaCancelada`, `CotasResgatadas`, `RecursosLiberados`, `Reembolso`) and writes them to the same SMEs ledger (`registro_transacoes`, source `pmes`, `rede = 'solana-devnet'`). Offerings go to `registro_ofertas`, numbered separately per network. Amounts use the same format as Sepolia: MockBRL with 6 decimals, whole shares, base58 addresses.
+4. It saves the checkpoint as the highest processed slot.
+
+Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/migrations_005_assinaturas_multichain.sql`. SMEs on Solana require `supabase/migrations_010_pmes_solana.sql`. **Deploy order:** run the migration in Supabase **before** deploying the indexer with that source. The Sepolia upsert also uses `rede,hash_sha256` since migration 005.
+
+| Variable | Default | |
+|---|---|---|
+| `SOLANA_RPC_URL` | `https://api.devnet.solana.com` | The public RPC has a low rate limit; a free Helius or QuickNode endpoint works better. Shared by both Solana sources. |
+| `SOLANA_PROGRAM_ID` | `9RPHqLouFjoUbPdcmA1GyHMeDoWvjZMuCyYFPBWLmTcR` | Register program |
+| `SOLANA_START_SLOT` | `509235000` | Deploy slot; starting point when there is no checkpoint |
 | `SOLANA_POLL_INTERVAL_MS` | `30000` | |
-| `SOLANA_DESATIVADO` | — | `1` desliga só a fonte Solana |
+| `SOLANA_DESATIVADO` | (unset) | `1` turns off only the document source |
+| `PMES_SOLANA_PROGRAM_ID` | `FKefGFhUmgXBM1xCtSFBWpoNnp3wuPJs6Yddpsp67J2y` | Niara SMEs program |
+| `PMES_SOLANA_START_SLOT` | `0` | With no checkpoint, reads the program's whole history (it has few transactions) |
+| `PMES_SOLANA_POLL_INTERVAL_MS` | `30000` | |
+| `PMES_SOLANA_DESATIVADO` | (unset) | `1` turns off only the SMEs source |
 
-## Teste
+## Tests
 
-`npm run teste` roda `teste/atraso.teste.ts`, `teste/solana.teste.ts` e `teste/base.teste.ts`. O da
-Solana testa offline a decodificação e a atribuição de eventos (evento forjado
-por outro programa é ignorado) e depois roda um ciclo contra a devnet real com
-banco em memória (`SOLANA_TESTE_REDE=0` pula essa parte).
+`npm run teste` runs `teste/atraso.teste.ts`, `teste/solana.teste.ts`, `teste/base.teste.ts` and `teste/pmes-solana.teste.ts`.
 
-`teste/atraso.teste.ts`: RPC, tokens e banco falsos, em
-memória — não usa rede nem o Supabase. Simula uma recuperação longa com 429
-intermitente e uma rajada que esgota o backoff, e verifica que o lote normal
-grava eventos novos durante a recuperação e que, ao fim, não há lacuna nem
-duplicata.
+- **`solana.teste.ts`** tests event decoding and attribution offline (an event forged by another program is ignored), then runs one cycle against the real devnet with an in-memory database. `SOLANA_TESTE_REDE=0` skips the devnet part.
+- **`atraso.teste.ts`** uses a fake RPC, fake tokens and an in-memory database, so it touches neither the network nor Supabase. It simulates a long catch-up with intermittent 429s and a burst that exhausts the backoff, and checks that the normal batch keeps writing new events during catch-up and that, at the end, there are no gaps and no duplicates.
 
-## Rodando
+## Running
 
 ```bash
 cd indexer
 npm install
-cp .env.example .env
-# preencher .env com: ALCHEMY_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# create .env with: ALCHEMY_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 npm start
 ```
 
-Antes de rodar, aplicar `../supabase/schema.sql` e as migrations
-`../supabase/migrations_00*.sql` no projeto Supabase do Register (SQL editor do
-Supabase). Sem a 004 o indexer não inicia: a lista de ofertas está nela.
+Before running, apply `../supabase/schema.sql` and the `../supabase/migrations_0*.sql` files, in order, to the Register's Supabase project (Supabase SQL editor). Without migration 004 the indexer does not start, because the offering list lives there.
 
-### Dry-run
+### Dry run
 
-`npx tsx index.ts --dry-run` (ou `DRY_RUN=1`) lê a chain e o banco de verdade,
-mas não grava nada, nem checkpoint. Roda até alcançar a chain e imprime as
-ofertas e as linhas que seriam inseridas, com a conferência por oferta (aportes
-= total encerrado = valor ao emissor + taxa).
+`npx tsx index.ts --dry-run` (or `DRY_RUN=1`) reads the chain and the database for real but writes nothing, not even checkpoints. It runs until it catches up with the chain and prints the offerings and the rows it would insert, with a per-offering reconciliation (investments = total at closing = amount to the issuer + fee).
 
-### Variáveis opcionais
+### Optional variables
 
-| Variável | Padrão | |
+| Variable | Default | |
 |---|---|---|
-| `POLL_INTERVAL_MS` | `30000` | intervalo entre ciclos |
-| `BLOCK_RANGE_CHUNK` | `500` | blocos por `eth_getLogs` (10 no plano free da Alchemy) |
-| `CHUNKS_ATRASO_POR_CICLO` | `60` | teto de chamadas por ciclo para atraso e backfill |
-| `ATRASO_INTERVALO_MS` | `300` | pausa entre chamadas de atraso (~3/s, ~250 CU/s) |
-| `BACKOFF_TENTATIVAS` / `BACKOFF_BASE_MS` / `BACKOFF_TETO_MS` | `6` / `1000` / `30000` | backoff em 429 |
-| `START_BLOCK` | `0` | início da fonte `pmes` sem checkpoint |
+| `POLL_INTERVAL_MS` | `30000` | Interval between cycles |
+| `BLOCK_RANGE_CHUNK` | `500` | Blocks per `eth_getLogs` (10 on Alchemy's free plan) |
+| `CHUNKS_ATRASO_POR_CICLO` | `60` | Max calls per cycle for catch-up and backfill |
+| `ATRASO_INTERVALO_MS` | `300` | Pause between catch-up calls (~3/s, ~250 CU/s) |
+| `BACKOFF_TENTATIVAS` / `BACKOFF_BASE_MS` / `BACKOFF_TETO_MS` | `6` / `1000` / `30000` | Backoff on 429 |
+| `START_BLOCK` | `0` | Starting block of the `pmes` source when there is no checkpoint |
 | `ORQUESTRADOR_ENDERECO` / `START_BLOCK_ORQUESTRADOR` | `0xde9c…96e5` / `11733723` | |
 | `REGISTRO_ASSINATURAS_ENDERECO` / `START_BLOCK_ASSINATURAS` | `0x5627…d93a` / `11691290` | |
 
-## Operação contínua (produção)
+## Continuous operation (production)
 
-Este processo precisa ficar sempre rodando (`while (true)` com polling) — não é
-serverless/cron. Não roda no Vercel (que não suporta processo de longa duração).
-Opções pra hospedar:
+This process must always be running (a `while (true)` polling loop). It is not serverless or a cron job, so it does not run on Vercel, which does not support long-running processes. In production it runs on **Railway** as a worker service (Root Directory `/indexer`, start command `npm start`). Other options:
 
-- **Railway** ou **Render** (worker service, mais simples de configurar)
-- **Fly.io** (`fly launch` com um `Dockerfile` mínimo — não incluído ainda)
-- VM própria com `systemd` ou `pm2` reiniciando o processo se cair
+- **Render** (worker service)
+- **Fly.io** (`fly launch` with a minimal `Dockerfile`, not included yet)
+- A VM with `systemd` or `pm2` restarting the process if it stops
 
-Qualquer que seja a opção, configurar as mesmas variáveis do `.env` no ambiente
-do serviço, e apontar `npm start` como comando de execução.
+Whichever option you choose, set the same variables as the `.env` file in the service environment.
 
-## Ajustar o intervalo de polling
+## Polling interval
 
-`POLL_INTERVAL_MS` (padrão 30s) — não precisa ser agressivo, a Sepolia produz
-um bloco a cada ~12s e o Register não tem requisito de tempo real. Cada ciclo
-custa uma chamada `eth_getLogs` (mais um `eth_blockNumber`), então o intervalo
-é o que define o consumo mensal da Alchemy.
+`POLL_INTERVAL_MS` (30 s by default) does not need to be aggressive. Sepolia produces a block about every 12 s, and the Register has no real-time requirement. Each Sepolia cycle costs one `eth_getLogs` call (plus one `eth_blockNumber`), so the interval sets the monthly Alchemy usage.
 
-## Extensões futuras (fora do escopo desta primeira versão)
+## Future extensions (out of scope for this version)
 
-- Indexar `EmissaoGateway` (mint de cotas) e `LiquidacaoSecundaria` (mercado
-  secundário) — mesma lógica, ABI e endereço diferentes
-- Área "Registro Global" (Exchange) — aguardando a Exchange ter transações
-  reais na Sepolia antes de escrever qualquer indexer pra ela (ver
-  `app/registro-global/page.tsx` no site)
+- Index `EmissaoGateway` (share minting) and `LiquidacaoSecundaria` (secondary market): same logic, different ABI and address.
+- The Global Registry area (Niara Exchange) is waiting for the Exchange to have real transactions before any indexer is written for it (see `app/global-registry/page.tsx` in the site).
