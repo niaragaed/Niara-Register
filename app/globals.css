@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 @theme {
-  /* Paleta — Niara Register: sóbria, cartorial, sem gradiente */
-  --color-ink: #0F1B2B;        /* azul-marinho quase preto — texto principal */
-  --color-bone: #F7F6F2;       /* branco-osso — fundo base */
-  --color-deep: #1C2E44;       /* azul profundo — superfícies elevadas */
-  --color-brass: #8A6D3B;      /* bronze/latão — único accent, só em "prova" */
-  --color-slate: #4A5568;      /* cinza-ardósia — texto secundário, bordas */
-  --color-moss: #2D5F4C;       /* verde-musgo — status confirmado on-chain */
+  /* Palette — Niara Register: sober, notarial, no gradients */
+  --color-ink: #0F1B2B;        /* near-black navy — main text */
+  --color-bone: #F7F6F2;       /* bone white — base background */
+  --color-deep: #1C2E44;       /* deep blue — raised surfaces */
+  --color-brass: #8A6D3B;      /* bronze/brass — the only accent, only on "proof" */
+  --color-slate: #4A5568;      /* slate gray — secondary text, borders */
+  --color-moss: #2D5F4C;       /* moss green — confirmed on-chain status */
 
   --font-display: "Fraunces", ui-serif, Georgia, serif;
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -41,20 +41,21 @@
   }
 }
 
-/* régua cronológica à esquerda das entradas do livro-razão */
+/* chronological rule to the left of the ledger entries */
 .ledger-rule {
   border-left: 1px solid color-mix(in srgb, var(--color-slate) 35%, transparent);
 }
 
-/* ─── globo do hero (components/niara-globe.tsx) ─────────────────────────────
-   O vídeo tem fundo branco, herdado do GIF de marca. O multiply faz o branco
-   virar exatamente o bone do fundo (branco x bone = bone), então o quadro some
-   e sobra só o globo. Sob prefers-reduced-motion o elemento fica sem <source>
-   e exibe apenas o poster — a troca acontece no componente, não aqui. */
-/* Um único elemento em quatro tamanhos. 380px é o corte para os aparelhos mais
-   estreitos (360x800 e similares), onde o hero não fecha com o globo maior;
-   768 e 1024 são o md e o lg do Tailwind, que é onde o layout troca de coluna
-   única para o grid de 12. */
+/* ─── hero globe (components/niara-globe.tsx) ───────────────────────────────
+   The video has a white background, inherited from the brand GIF. Multiply
+   turns the white into exactly the background bone (white x bone = bone), so
+   the frame disappears and only the globe is left. Under
+   prefers-reduced-motion the element has no <source> and shows only the
+   poster; the switch happens in the component, not here. */
+/* A single element in four sizes. 380px is the cut for the narrowest devices
+   (360x800 and similar), where the hero does not fit with the bigger globe;
+   768 and 1024 are Tailwind's md and lg, which is where the layout switches
+   from a single column to the 12-column grid. */
 .niara-globe__video {
   display: block;
   width: 120px;
