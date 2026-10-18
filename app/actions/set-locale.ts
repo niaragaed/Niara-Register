@@ -3,24 +3,25 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import {
-  COOKIE_IDIOMA,
+  LOCALE_COOKIE,
   COOKIE_MAX_AGE,
-  normalizarLocale,
+  normalizeLocale,
 } from "@/lib/i18n/locale";
 
 /**
- * Grava o idioma escolhido e força o layout inteiro a renderizar de novo, para
- * o cabeçalho e a página trocarem juntos.
+ * Stores the chosen language and forces the whole layout to render again, so
+ * the header and the page switch together.
  *
- * Recebe FormData porque o seletor é um <form> com dois botões submit: assim ele
- * continua sendo server component e funciona mesmo sem JS no cliente. A rota não
- * muda — o server action responde na própria URL em que o visitante está.
+ * Takes FormData because the selector is a <form> with two submit buttons: that
+ * way it stays a server component and works even without JS on the client. The
+ * route does not change: the server action answers on the same URL the visitor
+ * is on.
  */
-export async function trocarIdioma(formData: FormData) {
-  const escolhido = normalizarLocale(formData.get("locale")?.toString());
+export async function switchLocale(formData: FormData) {
+  const chosen = normalizeLocale(formData.get("locale")?.toString());
 
   const store = await cookies();
-  store.set(COOKIE_IDIOMA, escolhido, {
+  store.set(LOCALE_COOKIE, chosen, {
     path: "/",
     maxAge: COOKIE_MAX_AGE,
     sameSite: "lax",

@@ -1,12 +1,13 @@
 /**
- * Textos visíveis do site, em inglês e português.
+ * The site's visible text, in English and Portuguese.
  *
- * O inglês é o padrão e serve de fonte do tipo: `Dictionary` é derivado de `en`,
- * e `pt` precisa satisfazer esse tipo. Qualquer chave que falte ou sobre em `pt`
- * vira erro de compilação, então os dois idiomas não têm como divergir em
- * silêncio.
+ * English is the default and is the source of the type: `Dictionary` is derived
+ * from `en`, and `pt` must satisfy that type. Any key missing from or extra in
+ * `pt` becomes a compile error, so the two languages cannot drift apart
+ * silently.
  *
- * Nada de texto visível fora daqui.
+ * No visible text outside this file. The Portuguese copy is the product's
+ * Brazilian UI and stays in Portuguese.
  */
 
 export const en = {
@@ -15,7 +16,7 @@ export const en = {
     product: "Register",
     pmes: "SME Registry",
     global: "Global Registry",
-    assinatura: "Document Signing",
+    signing: "Document Signing",
     languageLabel: "Language",
   },
 
@@ -26,7 +27,7 @@ export const en = {
     lede:
       "Every transaction and every document signature across Niara's products is recorded on the blockchain and mirrored here — with the hash and the link for independent verification on the block explorer.",
     ctaPmes: "View the Niara-SMEs registry",
-    ctaAssinatura: "Verify a signature",
+    ctaSigning: "Verify a signature",
     cards: {
       pmes: {
         title: "SME Registry",
@@ -36,7 +37,7 @@ export const en = {
         title: "Global Registry",
         text: "Transactions from the Niara Exchange. The Exchange is not yet in production — this section opens empty.",
       },
-      assinatura: {
+      signing: {
         title: "Document Signing",
         text: "SHA-256 document hashes, anchored on-chain as proof of authorship and integrity.",
       },
@@ -48,10 +49,10 @@ export const en = {
     title: "Niara-SMEs transactions",
     lede:
       "A mirror of the transactions executed on the Niara-SMEs contracts on the Sepolia test network and on the niara-pmes-solana program on Solana Devnet. Each entry shows its network and points to the transaction on that network's explorer.",
-    notaNumeracao:
+    numberingNote:
       "Entries are numbered in the order the Register recorded them. Events indexed retroactively keep their original on-chain date.",
-    vazio: "No transactions indexed yet.",
-    desconectado:
+    empty: "No transactions indexed yet.",
+    disconnected:
       "The indexer is not connected to a Postgres database on this instance. This does not mean there are no transactions — it means the read path has not been switched on yet.",
   },
 
@@ -59,145 +60,145 @@ export const en = {
     eyebrow: "Global Registry",
     title: "Niara Exchange transactions",
     lede: "A mirror of Niara Exchange transactions, once it is operating.",
-    vazioTitulo: "No transactions recorded.",
-    vazioTexto:
+    emptyTitle: "No transactions recorded.",
+    emptyText:
       "The Niara Exchange is not yet in production — the contracts are deployed and tested locally only. This section will be connected to the indexer as soon as there are real transactions on the network.",
   },
 
-  assinatura: {
+  signing: {
     eyebrow: "Document Signing",
     title: "Prove that a document is authentic",
     lede:
       "Compute a document's SHA-256 hash and record it on-chain as proof of existence and authorship. The document never leaves your browser — only the hash is recorded.",
-    contratoPrefixo: "The signature registry contract (",
-    contratoSufixo:
+    contractPrefix: "The signature registry contract (",
+    contractSuffix:
       ") is the same contract on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet and Tempo Testnet. The hash is computed in your browser and each signature becomes a real transaction, verifiable on the network's explorer: ",
-    historicoTitulo: "Documents already recorded",
-    historicoLede:
+    historyTitle: "Documents already recorded",
+    historyLede:
       "A mirror of every document recorded on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet, Tempo Testnet and Solana Devnet, most recent first. Each entry links to its transaction on the network's own block explorer — except HyperEVM Testnet, which has no working public explorer: there the link opens a page that reads the transaction live from the network's official RPC.",
-    leitorHyperEvm: "HyperEVM (read from RPC)",
-    solanaPrefixo: "The Solana program (",
-    solanaSufixo:
+    hyperEvmReader: "HyperEVM (read from RPC)",
+    solanaPrefix: "The Solana program (",
+    solanaSuffix:
       ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
-    vazio: "No documents recorded yet.",
-    desconectado:
+    empty: "No documents recorded yet.",
+    disconnected:
       "The indexer is not connected to a Postgres database on this instance. This does not mean there are no documents — it means the read path has not been switched on yet.",
   },
 
-  verificador: {
-    selecione: "Select a document to compute its hash",
-    calculando: "Computing hash...",
-    arquivo: "File:",
-    hashTitulo: "SHA-256 hash",
-    hashExplicacao:
+  verifier: {
+    selectPrompt: "Select a document to compute its hash",
+    computing: "Computing hash...",
+    file: "File:",
+    hashTitle: "SHA-256 hash",
+    hashExplanation:
       "This hash is computed locally, in your browser — the document itself is never uploaded. To record this proof on-chain you sign with a self-custody wallet on the network selected above.",
-    jaRegistrado: "already recorded on-chain",
-    assinadoPor: "signed by",
-    assinadoEm: "on",
-    campoNome: "Document name",
-    campoTipo: "Document type",
-    placeholderNome: 'e.g. "Shareholders meeting minutes — 09/10/2026"',
-    placeholderTipo: 'e.g. "minutes", "agreement", "cap table"',
-    conectar: "Connect wallet",
-    conectando: "Connecting...",
-    verificandoBotao: "Checking...",
-    assinar: "Sign and record on-chain",
-    assinarBloqueado: "Fill in the document name and type before signing",
-    aguardando:
+    alreadyRecorded: "already recorded on-chain",
+    signedBy: "signed by",
+    signedOn: "on",
+    nameField: "Document name",
+    typeField: "Document type",
+    namePlaceholder: 'e.g. "Shareholders meeting minutes — 09/10/2026"',
+    typePlaceholder: 'e.g. "minutes", "agreement", "cap table"',
+    connect: "Connect wallet",
+    connecting: "Connecting...",
+    checkingButton: "Checking...",
+    sign: "Sign and record on-chain",
+    signBlocked: "Fill in the document name and type before signing",
+    waiting:
       "Waiting for confirmation in your wallet and for the transaction to be mined...",
-    sucesso: "recorded on-chain successfully",
-    carteiraConectada: "connected wallet:",
-    semCarteira:
+    success: "recorded on-chain successfully",
+    connectedWallet: "connected wallet:",
+    noWallet:
       "No wallet detected. Install MetaMask (or another compatible wallet) to continue.",
-    erroConexao: "Could not connect the wallet.",
-    erroRegistro: "Failed to record the document.",
-    erroJaRegistrado:
+    connectionError: "Could not connect the wallet.",
+    recordError: "Failed to record the document.",
+    alreadyRecordedError:
       "That hash was recorded by another transaction while you were filling in the form.",
-    verNaSepolia: "view on Sepolia",
-    redeTitulo: "Network",
-    redeSepolia: "Ethereum Sepolia",
-    redeSolana: "Solana Devnet",
-    redeBase: "Base Sepolia",
-    verNaBase: "view on BaseScan",
-    redeRobinhood: "Robinhood Chain Testnet",
-    verNaRobinhood: "view on Robinhood Explorer",
-    redeHyperEvm: "HyperEVM Testnet",
-    verNaHyperEvm: "verify on-chain",
-    redeTempo: "Tempo Testnet",
-    verNaTempo: "view on Tempo Explorer",
-    carteiraSepolia: "MetaMask or compatible",
-    carteiraSolana: "Phantom or Solflare",
-    semCarteiraSolana:
+    viewOnSepolia: "view on Sepolia",
+    networkTitle: "Network",
+    networkSepolia: "Ethereum Sepolia",
+    networkSolana: "Solana Devnet",
+    networkBase: "Base Sepolia",
+    viewOnBase: "view on BaseScan",
+    networkRobinhood: "Robinhood Chain Testnet",
+    viewOnRobinhood: "view on Robinhood Explorer",
+    networkHyperEvm: "HyperEVM Testnet",
+    viewOnHyperEvm: "verify on-chain",
+    networkTempo: "Tempo Testnet",
+    viewOnTempo: "view on Tempo Explorer",
+    walletEvm: "MetaMask or compatible",
+    walletSolana: "Phantom or Solflare",
+    noSolanaWallet:
       "No Solana wallet detected. Install Phantom (or Solflare) to continue.",
-    limiteSolana:
+    solanaLimit:
       "On Solana the name is limited to 128 bytes and the type to 32 bytes.",
-    verNaSolana: "view on Solana Explorer",
-    naoRegistrado: "not recorded on this network yet",
-    erroPhantom:
+    viewOnSolana: "view on Solana Explorer",
+    notRecorded: "not recorded on this network yet",
+    phantomError:
       "Could not connect to the Solana wallet. Unlock Phantom (and finish its setup, if it is new), then try again.",
-    conexaoRecusada: "The connection request was rejected in the wallet.",
+    connectionRejected: "The connection request was rejected in the wallet.",
   },
 
   /**
-   * Frase de cada evento, montada a partir da coluna `dados`. Os marcadores
-   * {chave} são substituídos na exibição — endereços viram link truncado para o
-   * Etherscan, o resto entra como texto.
+   * Sentence for each event, built from the `dados` column. The {key}
+   * placeholders are replaced at display time: addresses become a truncated
+   * link to the explorer, the rest goes in as text.
    */
-  frases: {
+  phrases: {
     offering_created:
-      "Offering {oferta} created directly by issuer {emissor} — target {metaMinima} to {metaMaxima} {moeda}, {precoPorCota} {moeda} per share, closes {prazo}",
+      "Offering {offering} created directly by issuer {issuer} — target {minTarget} to {maxTarget} {currency}, {pricePerShare} {currency} per share, closes {deadline}",
     investment:
-      "Investor {investidor} invested {valor} {moeda} in offering {oferta}",
+      "Investor {investor} invested {amount} {currency} in offering {offering}",
     offering_closed:
-      "Offering {oferta} {desfecho} — {totalArrecadado} {moeda} raised",
-    offering_cancelled: "Offering {oferta} was cancelled",
+      "Offering {offering} {outcome} — {totalRaised} {currency} raised",
+    offering_cancelled: "Offering {offering} was cancelled",
     shares_redeemed:
-      "Investor {investidor} redeemed {cotas} shares in offering {oferta}",
+      "Investor {investor} redeemed {shares} shares in offering {offering}",
     funds_released:
-      "{valorEmissor} {moeda} released to issuer {emissor}, {taxa} {moeda} protocol fee ({protocolo}), in offering {oferta}",
+      "{issuerAmount} {currency} released to issuer {issuer}, {fee} {currency} protocol fee ({protocol}), in offering {offering}",
     refund:
-      "Investor {investidor} refunded {valor} {moeda} in offering {oferta}",
+      "Investor {investor} refunded {amount} {currency} in offering {offering}",
   },
 
-  // Frase verbal inteira, não um adjetivo: as duas línguas constroem o
-  // encerramento de formas diferentes demais para um único molde.
-  desfechos: {
+  // A whole verb phrase, not an adjective: the two languages phrase the
+  // closing too differently for a single template.
+  outcomes: {
     success: "closed successfully",
     failure: "closed without reaching its target",
     unknown: "closed with an undetermined outcome",
   },
 
-  entrada: {
-    numeroPrefixo: "no.",
-    confirmado: "confirmed on-chain",
-    aguardandoConfirmacao: "awaiting confirmation",
-    // o status de assinatura e outro campo do banco ("assinado_onchain" |
-    // "pendente"), com os termos proprios do glossario
-    assinadoOnchain: "Signed on-chain",
-    // chave espelha o valor "pendente" do banco; o rótulo é o texto decidido
-    pendente: "Awaiting confirmation",
-    verNaSepolia: "view on Sepolia",
-    verNaSolana: "view on Solana Explorer",
-    verNaBase: "view on BaseScan",
-    verNaRobinhood: "view on Robinhood Explorer",
-    verNaHyperEvm: "verify on-chain",
-    redeHyperEvm: "HyperEVM Testnet",
-    verNaTempo: "view on Tempo Explorer",
-    redeTempo: "Tempo Testnet",
-    redeSepolia: "Ethereum Sepolia",
-    redeSolana: "Solana Devnet",
-    redeBase: "Base Sepolia",
-    redeRobinhood: "Robinhood Chain Testnet",
+  entry: {
+    numberPrefix: "no.",
+    confirmed: "confirmed on-chain",
+    awaitingConfirmation: "awaiting confirmation",
+    // the signature status is another database field ("assinado_onchain" |
+    // "pendente"), with its own glossary terms
+    signedOnchain: "Signed on-chain",
+    // the key mirrors the database value "pendente"; the label is the chosen text
+    pending: "Awaiting confirmation",
+    viewOnSepolia: "view on Sepolia",
+    viewOnSolana: "view on Solana Explorer",
+    viewOnBase: "view on BaseScan",
+    viewOnRobinhood: "view on Robinhood Explorer",
+    viewOnHyperEvm: "verify on-chain",
+    networkHyperEvm: "HyperEVM Testnet",
+    viewOnTempo: "view on Tempo Explorer",
+    networkTempo: "Tempo Testnet",
+    networkSepolia: "Ethereum Sepolia",
+    networkSolana: "Solana Devnet",
+    networkBase: "Base Sepolia",
+    networkRobinhood: "Robinhood Chain Testnet",
     hash: "hash",
-    assinante: "signer",
+    signer: "signer",
   },
 
   /**
-   * Rótulo por tipo de evento. O indexer grava `descricao` em português no
-   * Postgres e nós não mexemos nem no banco nem no indexer, então o rótulo vem
-   * daqui pelo `tipo_evento` e a `descricao` só aparece como fallback.
+   * Label per event type. The indexer stores `tipo_evento` and `descricao` in
+   * Portuguese in Postgres (existing data), so the label comes from here, keyed
+   * by `tipo_evento`, and `descricao` only shows as a fallback.
    */
-  eventos: {
+  events: {
     "Oferta criada": "Offering created",
     Aporte: "Investment",
     "Oferta encerrada": "Offering closed",
@@ -208,133 +209,135 @@ export const en = {
     "Documento assinado": "Document signed",
   },
 
-  carregando: "Loading...",
+  loading: "Loading...",
 
   /**
-   * Rótulo por tipo de documento, SÓ para exibição. O campo é texto livre no
-   * formulário, então este mapa cobre os valores em uso; qualquer valor novo
-   * aparece como foi digitado. O que está gravado on-chain nunca muda.
+   * Label per document type, for display ONLY. The field is free text in the
+   * form, so this map covers the values in use; any new value shows as it was
+   * typed. What is recorded on-chain never changes.
    */
-  tiposDocumento: {
+  documentTypes: {
     NDA: "NDA",
     "Contrato de Locação": "Lease Agreement",
     Ata: "Minutes",
   },
 
   /**
-   * Rótulo de exibição da moeda, pelo symbol() que o indexer grava em `dados`.
-   * O token de teste se chama "mBRL" on-chain; na tela aparece "MockBRL", para
-   * não haver dúvida de que não é real. Símbolo fora do mapa aparece como veio.
+   * Display label of the currency, by the symbol() the indexer stores in
+   * `dados`. The test token is called "mBRL" on-chain; on screen it shows as
+   * "MockBRL", so there is no doubt it is not real. A symbol outside the map
+   * shows as it came.
    */
-  moedas: {
+  currencies: {
     mBRL: "MockBRL",
   },
 
-  explorador: {
+  explorer: {
     eyebrowTx: "Transaction",
-    eyebrowEndereco: "Address",
-    fontePrefixo: "Read live from the official RPC of ",
-    fonteSufixo:
+    eyebrowAddress: "Address",
+    sourcePrefix: "Read live from the official RPC of ",
+    sourceSuffix:
       " when this page loaded — not from Niara's database. Anyone can repeat the same query (see below).",
     status: "Status",
-    sucesso: "Success",
-    revertida: "Reverted — nothing was recorded",
-    pendente: "Pending — not yet included in a block",
-    bloco: "Block",
-    confirmacoes: "confirmations",
-    data: "Block time",
-    de: "From (signer)",
-    para: "To",
-    contratoNiara: "Niara Register contract",
-    contratoCriado: "Contract created",
-    gasUsado: "Gas used",
-    registroTitulo: "Document recorded — DocumentoRegistrado event",
-    documento: "Document",
-    tipo: "Type",
-    hashDocumento: "SHA-256 hash",
-    assinante: "Signer",
-    registradoEm: "Recorded at",
-    verificacaoTitulo: "Checked now on the contract — verificar(hash)",
-    confere:
+    success: "Success",
+    reverted: "Reverted — nothing was recorded",
+    pending: "Pending — not yet included in a block",
+    block: "Block",
+    confirmations: "confirmations",
+    blockTime: "Block time",
+    from: "From (signer)",
+    to: "To",
+    niaraContract: "Niara Register contract",
+    createdContract: "Contract created",
+    gasUsed: "Gas used",
+    recordTitle: "Document recorded — DocumentoRegistrado event",
+    document: "Document",
+    type: "Type",
+    documentHash: "SHA-256 hash",
+    signer: "Signer",
+    recordedAt: "Recorded at",
+    checkTitle: "Checked now on the contract — verificar(hash)",
+    matches:
       "The contract confirms this record: same hash, signer and timestamp. It cannot be changed or overwritten.",
-    naoConfere:
+    mismatch:
       "The contract currently returns different data for this hash than the event above.",
-    verificacaoFalhou:
+    checkFailed:
       "The RPC did not answer the verificar(hash) call just now. The event above is still on-chain; reload to try again.",
-    semRegistro:
+    noRecord:
       "This transaction did not emit a DocumentoRegistrado event from the Niara Register contract.",
-    deployTexto:
+    deployText:
       "Deployment of the Niara Register contract (RegistroAssinaturas) on this network.",
-    naoEncontradaTitulo: "Transaction not found",
-    naoEncontradaTexto:
+    notFoundTitle: "Transaction not found",
+    notFoundText:
       "The network's RPC does not know this transaction hash. Check the hash and the network.",
-    rpcTitulo: "The network did not answer",
-    rpcTexto:
+    rpcTitle: "The network did not answer",
+    rpcText:
       "The official RPC is unavailable or rate-limited right now. Nothing is wrong with the record — reload in a few seconds.",
-    tipoConta: "Type",
-    contaContrato: "Contract",
-    contaComum: "Account (no code)",
-    tamanhoCodigo: "Bytecode size",
+    accountType: "Type",
+    contractAccount: "Contract",
+    plainAccount: "Account (no code)",
+    codeSize: "Bytecode size",
     bytes: "bytes",
     nonce: "Transactions sent (nonce)",
-    txDeploy: "Deployment transaction",
-    registrosTitulo: "Documents recorded on this network",
-    registrosLede:
+    deployTx: "Deployment transaction",
+    recordsTitle: "Documents recorded on this network",
+    recordsLede:
       "From the Niara Register indexer (mirror of the contract's events). Each one opens the transaction read live from the RPC.",
-    confiraTitulo: "Check it yourself",
-    confiraTexto: "The same data, straight from the network, with no Niara code in between:",
-    voltar: "Back to Document Signing",
+    checkYourselfTitle: "Check it yourself",
+    checkYourselfText: "The same data, straight from the network, with no Niara code in between:",
+    back: "Back to Document Signing",
   },
 
-  naoEncontrado: {
-    titulo: "Page not found",
-    texto: "The address you tried does not exist in the Niara Register.",
-    voltar: "Back to home",
+  notFound: {
+    title: "Page not found",
+    text: "The address you tried does not exist in the Niara Register.",
+    back: "Back to home",
   },
 
-  erro: {
-    titulo: "Something went wrong",
-    texto:
+  error: {
+    title: "Something went wrong",
+    text:
       "We could not load this page. The record itself is on-chain and unaffected — only this view failed.",
-    tentar: "Try again",
+    retry: "Try again",
   },
 
   meta: {
-    titulo: "Niara Register",
-    descricao:
+    title: "Niara Register",
+    description:
       "Niara's ledger of transactions and signatures — on-chain proofs, queryable and verifiable.",
   },
 };
 
 /**
- * O tipo sai do inglês, que é o padrão. Sem `as const` de propósito: com ele os
- * valores virariam tipos literais e o português nunca satisfaria o tipo.
+ * The type comes from English, the default. No `as const` on purpose: with it
+ * the values would become literal types and Portuguese would never satisfy the
+ * type.
  */
 export type Dictionary = typeof en;
 
 /**
- * O `tipo_evento` vem do banco como string livre, então a busca precisa de um
- * acesso dinâmico. Fica isolada aqui para o dicionário seguir com as chaves
- * estritamente tipadas — se um idioma esquecer um evento, o build acusa.
+ * `tipo_evento` comes from the database as a free string, so the lookup needs
+ * dynamic access. It is isolated here so the dictionary keeps strictly typed
+ * keys: if a language forgets an event, the build complains.
  */
-export function rotuloEvento(dict: Dictionary, tipoEvento: string): string | undefined {
-  return (dict.eventos as Record<string, string>)[tipoEvento];
+export function eventLabel(dict: Dictionary, eventType: string): string | undefined {
+  return (dict.events as Record<string, string>)[eventType];
 }
 
 /**
- * Rótulo de exibição do tipo de documento. O valor vem de um input livre e há
- * registros gravados com espaço sobrando, então a busca é feita sobre o valor
- * aparado. Sem correspondência, devolve o próprio valor aparado — nunca some
- * informação que o usuário registrou.
+ * Display label of the document type. The value comes from a free input and
+ * some records were stored with extra spaces, so the lookup uses the trimmed
+ * value. With no match, it returns the trimmed value itself: information the
+ * user recorded never disappears.
  */
-export function rotuloTipoDocumento(dict: Dictionary, tipoDocumento: string): string {
-  const chave = tipoDocumento.trim();
-  return (dict.tiposDocumento as Record<string, string>)[chave] ?? chave;
+export function documentTypeLabel(dict: Dictionary, documentType: string): string {
+  const key = documentType.trim();
+  return (dict.documentTypes as Record<string, string>)[key] ?? key;
 }
 
-/** Rótulo de exibição da moeda; sem correspondência, o próprio símbolo. */
-export function rotuloMoeda(dict: Dictionary, simbolo: string): string {
-  return (dict.moedas as Record<string, string>)[simbolo] ?? simbolo;
+/** Display label of the currency; with no match, the symbol itself. */
+export function currencyLabel(dict: Dictionary, symbol: string): string {
+  return (dict.currencies as Record<string, string>)[symbol] ?? symbol;
 }
 
 export const pt: Dictionary = {
@@ -343,7 +346,7 @@ export const pt: Dictionary = {
     product: "Register",
     pmes: "Registro PMEs",
     global: "Registro Global",
-    assinatura: "Assinatura",
+    signing: "Assinatura",
     languageLabel: "Idioma",
   },
 
@@ -354,7 +357,7 @@ export const pt: Dictionary = {
     lede:
       "Cada transação e cada assinatura de documento dos produtos Niara fica registrada na blockchain e espelhada aqui — com o hash e o link para conferência independente no explorador da rede.",
     ctaPmes: "Consultar registro do Niara-PMEs",
-    ctaAssinatura: "Verificar uma assinatura",
+    ctaSigning: "Verificar uma assinatura",
     cards: {
       pmes: {
         title: "Registro PMEs",
@@ -364,7 +367,7 @@ export const pt: Dictionary = {
         title: "Registro Global",
         text: "Transações da Niara Exchange. A Exchange ainda não opera em produção — esta área abre vazia.",
       },
-      assinatura: {
+      signing: {
         title: "Assinatura de documentos",
         text: "Hash SHA-256 de documentos, ancorado on-chain como prova de autoria e integridade.",
       },
@@ -376,10 +379,10 @@ export const pt: Dictionary = {
     title: "Transações do Niara-PMEs",
     lede:
       "Espelho das transações reais executadas nos contratos do Niara-PMEs na rede de testes Sepolia e no programa niara-pmes-solana na Solana Devnet. Cada linha mostra a rede e aponta para a transação no explorador dela.",
-    notaNumeracao:
+    numberingNote:
       "A numeração segue a ordem em que o Register registrou cada evento. Eventos indexados retroativamente mantêm a data original on-chain.",
-    vazio: "Nenhuma transação indexada ainda.",
-    desconectado:
+    empty: "Nenhuma transação indexada ainda.",
+    disconnected:
       "O indexador ainda não está conectado a um Postgres nesta instância. Isto não significa ausência de transações — significa que a leitura ainda não foi ligada.",
   },
 
@@ -387,130 +390,130 @@ export const pt: Dictionary = {
     eyebrow: "Registro Global",
     title: "Transações da Niara Exchange",
     lede: "Espelho das transações da Niara Exchange, quando em operação.",
-    vazioTitulo: "Nenhuma transação registrada.",
-    vazioTexto:
+    emptyTitle: "Nenhuma transação registrada.",
+    emptyText:
       "A Niara Exchange ainda não opera em produção — os contratos estão deployados e testados apenas localmente. Esta área será ligada ao indexador assim que houver transações reais na rede.",
   },
 
-  assinatura: {
+  signing: {
     eyebrow: "Assinatura de documentos",
     title: "Prove que um documento é original",
     lede:
       "Calcule o hash SHA-256 de um documento e registre-o on-chain como prova de existência e autoria. O documento nunca sai do seu navegador — só o hash é registrado.",
-    contratoPrefixo: "O contrato de registro de assinaturas (",
-    contratoSufixo:
+    contractPrefix: "O contrato de registro de assinaturas (",
+    contractSuffix:
       ") é o mesmo contrato na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet e na Tempo Testnet. O hash é calculado no seu navegador e cada assinatura vira uma transação de verdade, verificável no explorador da rede: ",
-    historicoTitulo: "Documentos já registrados",
-    historicoLede:
+    historyTitle: "Documentos já registrados",
+    historyLede:
       "Espelho de todos os documentos registrados na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet, na Tempo Testnet e na Solana Devnet, mais recentes primeiro. Cada registro aponta para a transação no explorador da própria rede — menos na HyperEVM Testnet, que não tem explorador público funcionando: lá o link abre uma página que lê a transação na hora, direto do RPC oficial da rede.",
-    leitorHyperEvm: "HyperEVM (lido do RPC)",
-    solanaPrefixo: "O programa na Solana (",
-    solanaSufixo:
+    hyperEvmReader: "HyperEVM (lido do RPC)",
+    solanaPrefix: "O programa na Solana (",
+    solanaSuffix:
       ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
-    vazio: "Nenhum documento registrado ainda.",
-    desconectado:
+    empty: "Nenhum documento registrado ainda.",
+    disconnected:
       "O indexador ainda não está conectado a um Postgres nesta instância. Isto não significa ausência de documentos — significa que a leitura ainda não foi ligada.",
   },
 
-  verificador: {
-    selecione: "Selecione um documento para calcular o hash",
-    calculando: "Calculando hash...",
-    arquivo: "Arquivo:",
-    hashTitulo: "Hash SHA-256",
-    hashExplicacao:
+  verifier: {
+    selectPrompt: "Selecione um documento para calcular o hash",
+    computing: "Calculando hash...",
+    file: "Arquivo:",
+    hashTitle: "Hash SHA-256",
+    hashExplanation:
       "Este hash é calculado localmente, no seu navegador — o documento em si nunca é enviado. Para registrar esta prova on-chain, você assina com uma carteira de autocustódia na rede selecionada acima.",
-    jaRegistrado: "já registrado on-chain",
-    assinadoPor: "assinado por",
-    assinadoEm: "em",
-    campoNome: "Nome do documento",
-    campoTipo: "Tipo de documento",
-    placeholderNome: 'ex.: "Ata de reunião de sócios — 10/09/2026"',
-    placeholderTipo: 'ex.: "ata", "contrato", "cap table"',
-    conectar: "Conectar carteira",
-    conectando: "Conectando...",
-    verificandoBotao: "Verificando...",
-    assinar: "Assinar e registrar on-chain",
-    assinarBloqueado: "Preencha nome e tipo do documento antes de assinar",
-    aguardando:
+    alreadyRecorded: "já registrado on-chain",
+    signedBy: "assinado por",
+    signedOn: "em",
+    nameField: "Nome do documento",
+    typeField: "Tipo de documento",
+    namePlaceholder: 'ex.: "Ata de reunião de sócios — 10/09/2026"',
+    typePlaceholder: 'ex.: "ata", "contrato", "cap table"',
+    connect: "Conectar carteira",
+    connecting: "Conectando...",
+    checkingButton: "Verificando...",
+    sign: "Assinar e registrar on-chain",
+    signBlocked: "Preencha nome e tipo do documento antes de assinar",
+    waiting:
       "Aguardando confirmação na sua carteira e mineração da transação...",
-    sucesso: "registrado on-chain com sucesso",
-    carteiraConectada: "carteira conectada:",
-    semCarteira:
+    success: "registrado on-chain com sucesso",
+    connectedWallet: "carteira conectada:",
+    noWallet:
       "Nenhuma carteira detectada. Instale a MetaMask (ou outra carteira compatível) para continuar.",
-    erroConexao: "Não foi possível conectar a carteira.",
-    erroRegistro: "Falha ao registrar o documento.",
-    erroJaRegistrado:
+    connectionError: "Não foi possível conectar a carteira.",
+    recordError: "Falha ao registrar o documento.",
+    alreadyRecordedError:
       "Esse hash já foi registrado por outra transação enquanto você preenchia o formulário.",
-    verNaSepolia: "ver na Sepolia",
-    redeTitulo: "Rede",
-    redeSepolia: "Ethereum Sepolia",
-    redeSolana: "Solana Devnet",
-    redeBase: "Base Sepolia",
-    verNaBase: "ver no BaseScan",
-    redeRobinhood: "Robinhood Chain Testnet",
-    verNaRobinhood: "ver no Robinhood Explorer",
-    redeHyperEvm: "HyperEVM Testnet",
-    verNaHyperEvm: "verificar on-chain",
-    redeTempo: "Tempo Testnet",
-    verNaTempo: "ver no Tempo Explorer",
-    carteiraSepolia: "MetaMask ou compatível",
-    carteiraSolana: "Phantom ou Solflare",
-    semCarteiraSolana:
+    viewOnSepolia: "ver na Sepolia",
+    networkTitle: "Rede",
+    networkSepolia: "Ethereum Sepolia",
+    networkSolana: "Solana Devnet",
+    networkBase: "Base Sepolia",
+    viewOnBase: "ver no BaseScan",
+    networkRobinhood: "Robinhood Chain Testnet",
+    viewOnRobinhood: "ver no Robinhood Explorer",
+    networkHyperEvm: "HyperEVM Testnet",
+    viewOnHyperEvm: "verificar on-chain",
+    networkTempo: "Tempo Testnet",
+    viewOnTempo: "ver no Tempo Explorer",
+    walletEvm: "MetaMask ou compatível",
+    walletSolana: "Phantom ou Solflare",
+    noSolanaWallet:
       "Nenhuma carteira Solana detectada. Instale a Phantom (ou Solflare) para continuar.",
-    limiteSolana:
+    solanaLimit:
       "Na Solana, o nome é limitado a 128 bytes e o tipo a 32 bytes.",
-    verNaSolana: "ver no Solana Explorer",
-    naoRegistrado: "ainda não registrado nesta rede",
-    erroPhantom:
+    viewOnSolana: "ver no Solana Explorer",
+    notRecorded: "ainda não registrado nesta rede",
+    phantomError:
       "Não foi possível conectar à carteira Solana. Desbloqueie a Phantom (e termine a configuração, se ela for nova) e tente de novo.",
-    conexaoRecusada: "O pedido de conexão foi recusado na carteira.",
+    connectionRejected: "O pedido de conexão foi recusado na carteira.",
   },
 
-  frases: {
+  phrases: {
     offering_created:
-      "Oferta {oferta} criada diretamente pelo emissor {emissor} — meta de {metaMinima} a {metaMaxima} {moeda}, {precoPorCota} {moeda} por cota, encerra em {prazo}",
+      "Oferta {offering} criada diretamente pelo emissor {issuer} — meta de {minTarget} a {maxTarget} {currency}, {pricePerShare} {currency} por cota, encerra em {deadline}",
     investment:
-      "Investidor {investidor} aportou {valor} {moeda} na oferta {oferta}",
+      "Investidor {investor} aportou {amount} {currency} na oferta {offering}",
     offering_closed:
-      "Oferta {oferta} {desfecho} — {totalArrecadado} {moeda} arrecadados",
-    offering_cancelled: "Oferta {oferta} foi cancelada",
+      "Oferta {offering} {outcome} — {totalRaised} {currency} arrecadados",
+    offering_cancelled: "Oferta {offering} foi cancelada",
     shares_redeemed:
-      "Investidor {investidor} resgatou {cotas} cotas na oferta {oferta}",
+      "Investidor {investor} resgatou {shares} cotas na oferta {offering}",
     funds_released:
-      "{valorEmissor} {moeda} liberados ao emissor {emissor}, {taxa} {moeda} de taxa do protocolo ({protocolo}), na oferta {oferta}",
+      "{issuerAmount} {currency} liberados ao emissor {issuer}, {fee} {currency} de taxa do protocolo ({protocol}), na oferta {offering}",
     refund:
-      "Investidor {investidor} reembolsado em {valor} {moeda} na oferta {oferta}",
+      "Investidor {investor} reembolsado em {amount} {currency} na oferta {offering}",
   },
 
-  desfechos: {
+  outcomes: {
     success: "encerrada com sucesso",
     failure: "encerrada sem atingir a meta",
     unknown: "encerrada com desfecho indeterminado",
   },
 
-  entrada: {
-    numeroPrefixo: "nº",
-    confirmado: "confirmado on-chain",
-    aguardandoConfirmacao: "aguardando confirmação",
-    assinadoOnchain: "Assinado on-chain",
-    pendente: "Aguardando confirmação",
-    verNaSepolia: "ver na Sepolia",
-    verNaSolana: "ver no Solana Explorer",
-    verNaBase: "ver no BaseScan",
-    verNaRobinhood: "ver no Robinhood Explorer",
-    verNaHyperEvm: "verificar on-chain",
-    redeHyperEvm: "HyperEVM Testnet",
-    verNaTempo: "ver no Tempo Explorer",
-    redeTempo: "Tempo Testnet",
-    redeSepolia: "Ethereum Sepolia",
-    redeSolana: "Solana Devnet",
-    redeBase: "Base Sepolia",
-    redeRobinhood: "Robinhood Chain Testnet",
+  entry: {
+    numberPrefix: "nº",
+    confirmed: "confirmado on-chain",
+    awaitingConfirmation: "aguardando confirmação",
+    signedOnchain: "Assinado on-chain",
+    pending: "Aguardando confirmação",
+    viewOnSepolia: "ver na Sepolia",
+    viewOnSolana: "ver no Solana Explorer",
+    viewOnBase: "ver no BaseScan",
+    viewOnRobinhood: "ver no Robinhood Explorer",
+    viewOnHyperEvm: "verificar on-chain",
+    networkHyperEvm: "HyperEVM Testnet",
+    viewOnTempo: "ver no Tempo Explorer",
+    networkTempo: "Tempo Testnet",
+    networkSepolia: "Ethereum Sepolia",
+    networkSolana: "Solana Devnet",
+    networkBase: "Base Sepolia",
+    networkRobinhood: "Robinhood Chain Testnet",
     hash: "hash",
-    assinante: "assinante",
+    signer: "assinante",
   },
 
-  eventos: {
+  events: {
     "Oferta criada": "Oferta criada",
     Aporte: "Aporte",
     "Oferta encerrada": "Oferta encerrada",
@@ -521,90 +524,90 @@ export const pt: Dictionary = {
     "Documento assinado": "Documento assinado",
   },
 
-  carregando: "Carregando...",
+  loading: "Carregando...",
 
-  tiposDocumento: {
+  documentTypes: {
     NDA: "NDA",
     "Contrato de Locação": "Contrato de Locação",
     Ata: "Ata",
   },
 
-  moedas: {
+  currencies: {
     mBRL: "MockBRL",
   },
 
-  explorador: {
+  explorer: {
     eyebrowTx: "Transação",
-    eyebrowEndereco: "Endereço",
-    fontePrefixo: "Lido na hora do RPC oficial da ",
-    fonteSufixo:
+    eyebrowAddress: "Endereço",
+    sourcePrefix: "Lido na hora do RPC oficial da ",
+    sourceSuffix:
       " quando esta página carregou — não do banco da Niara. Qualquer pessoa pode repetir a mesma consulta (veja abaixo).",
     status: "Status",
-    sucesso: "Sucesso",
-    revertida: "Revertida — nada foi registrado",
-    pendente: "Pendente — ainda não incluída em um bloco",
-    bloco: "Bloco",
-    confirmacoes: "confirmações",
-    data: "Data do bloco",
-    de: "De (quem assinou)",
-    para: "Para",
-    contratoNiara: "contrato do Niara Register",
-    contratoCriado: "Contrato criado",
-    gasUsado: "Gás usado",
-    registroTitulo: "Documento registrado — evento DocumentoRegistrado",
-    documento: "Documento",
-    tipo: "Tipo",
-    hashDocumento: "Hash SHA-256",
-    assinante: "Assinante",
-    registradoEm: "Registrado em",
-    verificacaoTitulo: "Conferido agora no contrato — verificar(hash)",
-    confere:
+    success: "Sucesso",
+    reverted: "Revertida — nada foi registrado",
+    pending: "Pendente — ainda não incluída em um bloco",
+    block: "Bloco",
+    confirmations: "confirmações",
+    blockTime: "Data do bloco",
+    from: "De (quem assinou)",
+    to: "Para",
+    niaraContract: "contrato do Niara Register",
+    createdContract: "Contrato criado",
+    gasUsed: "Gás usado",
+    recordTitle: "Documento registrado — evento DocumentoRegistrado",
+    document: "Documento",
+    type: "Tipo",
+    documentHash: "Hash SHA-256",
+    signer: "Assinante",
+    recordedAt: "Registrado em",
+    checkTitle: "Conferido agora no contrato — verificar(hash)",
+    matches:
       "O contrato confirma este registro: mesmo hash, mesmo assinante e mesma data. Ele não pode ser alterado nem sobrescrito.",
-    naoConfere:
+    mismatch:
       "O contrato devolve hoje dados diferentes do evento acima para este hash.",
-    verificacaoFalhou:
+    checkFailed:
       "O RPC não respondeu à chamada verificar(hash) agora. O evento acima continua on-chain; recarregue para tentar de novo.",
-    semRegistro:
+    noRecord:
       "Esta transação não emitiu o evento DocumentoRegistrado do contrato do Niara Register.",
-    deployTexto:
+    deployText:
       "Deploy do contrato do Niara Register (RegistroAssinaturas) nesta rede.",
-    naoEncontradaTitulo: "Transação não encontrada",
-    naoEncontradaTexto:
+    notFoundTitle: "Transação não encontrada",
+    notFoundText:
       "O RPC da rede não conhece este hash de transação. Confira o hash e a rede.",
-    rpcTitulo: "A rede não respondeu",
-    rpcTexto:
+    rpcTitle: "A rede não respondeu",
+    rpcText:
       "O RPC oficial está indisponível ou limitando requisições agora. Não há nada de errado com o registro — recarregue em alguns segundos.",
-    tipoConta: "Tipo",
-    contaContrato: "Contrato",
-    contaComum: "Conta (sem código)",
-    tamanhoCodigo: "Tamanho do bytecode",
+    accountType: "Tipo",
+    contractAccount: "Contrato",
+    plainAccount: "Conta (sem código)",
+    codeSize: "Tamanho do bytecode",
     bytes: "bytes",
     nonce: "Transações enviadas (nonce)",
-    txDeploy: "Transação de deploy",
-    registrosTitulo: "Documentos registrados nesta rede",
-    registrosLede:
+    deployTx: "Transação de deploy",
+    recordsTitle: "Documentos registrados nesta rede",
+    recordsLede:
       "Do indexador do Niara Register (espelho dos eventos do contrato). Cada um abre a transação lida na hora do RPC.",
-    confiraTitulo: "Confira você mesmo",
-    confiraTexto: "Os mesmos dados, direto da rede, sem nenhum código da Niara no meio:",
-    voltar: "Voltar para Assinatura de documentos",
+    checkYourselfTitle: "Confira você mesmo",
+    checkYourselfText: "Os mesmos dados, direto da rede, sem nenhum código da Niara no meio:",
+    back: "Voltar para Assinatura de documentos",
   },
 
-  naoEncontrado: {
-    titulo: "Página não encontrada",
-    texto: "O endereço que você tentou não existe no Niara Register.",
-    voltar: "Voltar para o início",
+  notFound: {
+    title: "Página não encontrada",
+    text: "O endereço que você tentou não existe no Niara Register.",
+    back: "Voltar para o início",
   },
 
-  erro: {
-    titulo: "Algo deu errado",
-    texto:
+  error: {
+    title: "Algo deu errado",
+    text:
       "Não foi possível carregar esta página. O registro em si está on-chain e não foi afetado — só esta visualização falhou.",
-    tentar: "Tentar de novo",
+    retry: "Tentar de novo",
   },
 
   meta: {
-    titulo: "Niara Register",
-    descricao:
+    title: "Niara Register",
+    description:
       "Livro de registro de transações e assinaturas da Niara — provas on-chain, consultáveis e verificáveis.",
   },
 };

@@ -1,37 +1,39 @@
 /**
- * Globo da Niara no hero.
+ * Niara globe in the hero.
  *
- * É a própria animação do GIF de marca, convertida para vídeo — mesmos 40 frames
- * a 70 ms, mesmo sentido e mesma velocidade. Os arquivos em public/brand/ são
- * gerados a partir de public/brand/niara-globe-ref.gif (que fica fora do git) com
- * um recorte de 520x520 em (68,60), o menor quadrado que contém a arte nos 40
- * frames com margem.
+ * It is the brand GIF's own animation, converted to video: the same 40 frames
+ * at 70 ms, same direction and same speed. The files in public/brand/ are
+ * generated from public/brand/niara-globe-ref.gif (kept out of git) with a
+ * 520x520 crop at (68,60), the smallest square that holds the artwork across
+ * the 40 frames with a margin.
  *
- * Server component: só markup, sem estado e sem JS no navegador.
+ * Server component: markup only, no state and no JS in the browser.
  *
- * O `media` nos <source> resolve o "nada de vídeo sob prefers-reduced-motion":
- * quando o visitante pede menos movimento nenhuma fonte casa, o elemento fica
- * sem recurso e exibe apenas o poster — sem download. O mesmo markup é servido e
- * hidratado, então não há divergência entre servidor e cliente.
+ * The `media` on the <source> elements handles "no video under
+ * prefers-reduced-motion": when the visitor asks for less motion no source
+ * matches, the element has no resource and shows only the poster, with no
+ * download. The same markup is served and hydrated, so server and client do
+ * not diverge.
  *
- * O fundo branco do vídeo some no bone pelo mix-blend-mode em app/globals.css.
+ * The video's white background disappears on bone through mix-blend-mode in
+ * app/globals.css.
  */
 
-import { GloboAutoplay } from "@/components/globo-autoplay";
+import { GlobeAutoplay } from "@/components/globe-autoplay";
 
-const LADO = 340;
+const SIDE = 340;
 
-const SEM_MOVIMENTO_REDUZIDO = "(prefers-reduced-motion: no-preference)";
+const NO_REDUCED_MOTION = "(prefers-reduced-motion: no-preference)";
 
 export function NiaraGlobe({ className }: { className?: string }) {
   return (
-    // O <video> abaixo é renderizado no servidor e entregue como children: o
-    // GloboAutoplay só pendura o efeito de autoplay do iOS em volta dele.
-    <GloboAutoplay className={className}>
+    // The <video> below is rendered on the server and handed over as children:
+    // GlobeAutoplay only hangs the iOS autoplay effect around it.
+    <GlobeAutoplay className={className}>
       <video
         className="niara-globe__video"
-        width={LADO}
-        height={LADO}
+        width={SIDE}
+        height={SIDE}
         autoPlay
         muted
         loop
@@ -40,24 +42,24 @@ export function NiaraGlobe({ className }: { className?: string }) {
         poster="/brand/niara-globe-poster.png"
         aria-hidden="true"
       >
-        {/* MP4 PRIMEIRO, de propósito. O WebKit responde "probably" para
-            video/webm, escolhe essa fonte por ser a primeira e então trava sem
-            carregar — e o elemento não volta atrás para a fonte seguinte, então
-            sobrava o poster parado no iPhone. Com H.264 na frente todos os
-            navegadores pegam uma fonte que realmente toca. O webm fica como
-            reserva; custa 14 KB a menos, o que não paga o risco de ser o
-            primeiro. */}
+        {/* MP4 FIRST, on purpose. WebKit answers "probably" for video/webm,
+            picks that source for being first and then stalls without loading,
+            and the element does not fall back to the next source, so the
+            poster was left frozen on the iPhone. With H.264 first every
+            browser picks a source that really plays. The webm stays as a
+            backup; it is 14 KB smaller, which does not pay for the risk of
+            being first. */}
         <source
           src="/brand/niara-globe.mp4"
           type="video/mp4"
-          media={SEM_MOVIMENTO_REDUZIDO}
+          media={NO_REDUCED_MOTION}
         />
         <source
           src="/brand/niara-globe.webm"
           type="video/webm"
-          media={SEM_MOVIMENTO_REDUZIDO}
+          media={NO_REDUCED_MOTION}
         />
       </video>
-    </GloboAutoplay>
+    </GlobeAutoplay>
   );
 }

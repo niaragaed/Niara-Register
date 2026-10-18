@@ -1,295 +1,296 @@
-import "./log-seguro";
+import "./safe-log";
 import { ethers } from "ethers";
 import { config } from "./config";
 import * as db from "./db";
-import { simulado } from "./db";
-import { criarIndexador } from "./indexador";
-import { criarIndexadorSolana, FONTE_SOLANA } from "./solana";
-import { criarIndexadorPmesSolana, FONTE_PMES_SOLANA } from "./pmes-solana";
-import { criarIndexadorAssinaturasEvm } from "./evm-assinaturas";
+import { simulated } from "./db";
+import { createIndexer } from "./indexer";
+import { createSolanaIndexer, SOURCE_SOLANA } from "./solana";
+import { createPmesSolanaIndexer, SOURCE_PMES_SOLANA } from "./pmes-solana";
+import { createEvmSignatureIndexer } from "./evm-signatures";
 import { Tokens } from "./tokens";
 import { Connection } from "@solana/web3.js";
 
-// Ponto de entrada: liga o núcleo (indexador.ts) às dependências reais — RPC da
-// Alchemy, Supabase, relógio de verdade — e roda o laço.
+// Entry point: wires the core (indexer.ts) to the real dependencies (Alchemy
+// RPC, Supabase, the real clock) and runs the loop.
 
-// O ethers repete HTTP 429 sozinho, em silêncio, até 12 vezes. Desligado aqui:
-// o limite de taxa é tratado em limite.ts, com backoff de teto conhecido e log.
-const requisicao = new ethers.FetchRequest(config.rpcUrl);
-requisicao.retryFunc = async () => false;
-const provider = new ethers.JsonRpcProvider(requisicao, 11155111, { staticNetwork: true });
+// ethers retries HTTP 429 on its own, silently, up to 12 times. Turned off
+// here: the rate limit is handled in rate-limit.ts, with a known-cap backoff and logs.
+const request = new ethers.FetchRequest(config.rpcUrl);
+request.retryFunc = async () => false;
+const provider = new ethers.JsonRpcProvider(request, 11155111, { staticNetwork: true });
 
 const tokens = new Tokens(provider);
-const dormir = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-const indexador = criarIndexador({
+const indexer = createIndexer({
   rpc: provider,
   tokens,
-  banco: db,
+  db,
   cfg: config,
-  dormir,
+  sleep,
 });
 
-// Solana: laço próprio, com o retry interno do web3.js desligado — o 429 passa
-// pelo mesmo comBackoff da EVM (limite.ts).
-const indexadorSolana = config.solana.ativo
-  ? criarIndexadorSolana({
+// Solana: its own loop, with web3.js's internal retry turned off; a 429 goes
+// through the same withBackoff as the EVM (rate-limit.ts).
+const solanaIndexer = config.solana.enabled
+  ? createSolanaIndexer({
       rpc: new Connection(config.solana.rpcUrl, {
         commitment: "finalized",
         disableRetryOnRateLimit: true,
-      }) as unknown as Parameters<typeof criarIndexadorSolana>[0]["rpc"],
-      banco: db,
+      }) as unknown as Parameters<typeof createSolanaIndexer>[0]["rpc"],
+      db,
       programId: config.solana.programId,
-      slotInicial: config.solana.slotInicial,
+      startSlot: config.solana.startSlot,
       backoff: config.backoff,
-      dormir,
+      sleep,
     })
   : null;
 
-// Niara-PMEs na Solana: outro programa, mesmo RPC da Solana, laço e checkpoint próprios.
-const indexadorPmesSolana = config.pmesSolana.ativo
-  ? criarIndexadorPmesSolana({
+// Niara-PMEs on Solana: another program, same Solana RPC, its own loop and checkpoint.
+const pmesSolanaIndexer = config.pmesSolana.enabled
+  ? createPmesSolanaIndexer({
       rpc: new Connection(config.solana.rpcUrl, {
         commitment: "finalized",
         disableRetryOnRateLimit: true,
-      }) as unknown as Parameters<typeof criarIndexadorPmesSolana>[0]["rpc"],
-      banco: db,
+      }) as unknown as Parameters<typeof createPmesSolanaIndexer>[0]["rpc"],
+      db,
       programId: config.pmesSolana.programId,
-      slotInicial: config.pmesSolana.slotInicial,
+      startSlot: config.pmesSolana.startSlot,
       backoff: config.backoff,
-      dormir,
+      sleep,
     })
   : null;
 
-// Redes EVM adicionais (Base Sepolia, Robinhood Chain Testnet): o mesmo
-// RegistroAssinaturas, cada uma com provider próprio (sem o retry silencioso
-// do ethers), checkpoint próprio e laço próprio.
-const indexadoresEvmExtras = config.redesEvmExtras
-  .filter((r) => r.ativo)
-  .map((r) => {
-    const req = new ethers.FetchRequest(r.rpcUrl);
+// Additional EVM networks (Base Sepolia, Robinhood Chain Testnet, HyperEVM
+// Testnet, Tempo Testnet): the same RegistroAssinaturas, each with its own
+// provider (without ethers' silent retry), checkpoint and loop.
+const extraEvmIndexers = config.extraEvmNetworks
+  .filter((n) => n.enabled)
+  .map((n) => {
+    const req = new ethers.FetchRequest(n.rpcUrl);
     req.retryFunc = async () => false;
-    const providerRede = new ethers.JsonRpcProvider(req, r.chainId, { staticNetwork: true });
+    const networkProvider = new ethers.JsonRpcProvider(req, n.chainId, { staticNetwork: true });
     return {
-      cfg: r,
-      idx: criarIndexadorAssinaturasEvm({
-        rede: r.rede,
-        fonte: r.fonte,
-        rpc: providerRede,
-        banco: db,
-        endereco: r.endereco,
-        blocoDeploy: r.blocoDeploy,
-        chunk: r.chunk,
-        maxPedacosPorCiclo: r.maxPedacosPorCiclo,
-        confirmacoes: r.confirmacoes,
-        intervaloEntrePedacosMs: r.intervaloEntrePedacosMs,
+      cfg: n,
+      idx: createEvmSignatureIndexer({
+        network: n.network,
+        source: n.source,
+        rpc: networkProvider,
+        db,
+        address: n.address,
+        deployBlock: n.deployBlock,
+        chunk: n.chunk,
+        maxChunksPerCycle: n.maxChunksPerCycle,
+        confirmations: n.confirmations,
+        chunkIntervalMs: n.chunkIntervalMs,
         backoff: config.backoff,
-        dormir,
+        sleep,
       }),
     };
   });
 
-/** Mesmo contrato do loopSolana: nunca derruba o processo nem bloqueia as outras redes. */
-async function loopEvmExtra({ cfg, idx }: (typeof indexadoresEvmExtras)[number]): Promise<void> {
+/** Same contract as solanaLoop: never brings the process down or blocks the other networks. */
+async function extraEvmLoop({ cfg, idx }: (typeof extraEvmIndexers)[number]): Promise<void> {
   for (;;) {
-    let emDia = true;
+    let upToDate = true;
     try {
-      const r = await idx.ciclo();
-      emDia = r.emDia;
-      if (r.gravados > 0) {
-        console.log(`[indexer] ${cfg.rede}: ${r.gravados} documento(s) gravado(s) — checkpoint bloco ${idx.checkpoint}`);
+      const r = await idx.cycle();
+      upToDate = r.upToDate;
+      if (r.saved > 0) {
+        console.log(`[indexer] ${cfg.network}: ${r.saved} document(s) saved — checkpoint block ${idx.checkpoint}`);
       }
-    } catch (erro) {
-      console.error(`[indexer] ${cfg.rede}: erro no ciclo, tentando de novo no próximo:`, erro);
+    } catch (error) {
+      console.error(`[indexer] ${cfg.network}: cycle error, retrying in the next one:`, error);
     }
-    // Atrasado (ex.: primeira varredura desde o deploy): segue sem esperar.
-    if (emDia) await dormir(cfg.pollIntervalMs);
+    // Behind (e.g. the first scan since the deploy): carry on without waiting.
+    if (upToDate) await sleep(cfg.pollIntervalMs);
   }
 }
 
 /**
- * Nunca derruba o processo: erro na Solana é registrado e o ciclo seguinte
- * retoma do checkpoint. Também não bloqueia o laço EVM — roda em paralelo.
+ * Never brings the process down: a Solana error is logged and the next cycle
+ * resumes from the checkpoint. It does not block the EVM loop either; it runs
+ * in parallel.
  */
-async function loopSolana(): Promise<void> {
-  if (!indexadorSolana) return;
+async function solanaLoop(): Promise<void> {
+  if (!solanaIndexer) return;
   for (;;) {
     try {
-      const { transacoes, gravados } = await indexadorSolana.ciclo();
-      if (transacoes > 0) {
+      const { transactions, saved } = await solanaIndexer.cycle();
+      if (transactions > 0) {
         console.log(
-          `[indexer] solana: ${transacoes} transação(ões) nova(s), ${gravados} documento(s) gravado(s) — checkpoint slot ${indexadorSolana.checkpoint}`,
+          `[indexer] solana: ${transactions} new transaction(s), ${saved} document(s) saved — checkpoint slot ${solanaIndexer.checkpoint}`,
         );
       }
-    } catch (erro) {
-      console.error("[indexer] solana: erro no ciclo, tentando de novo no próximo:", erro);
+    } catch (error) {
+      console.error("[indexer] solana: cycle error, retrying in the next one:", error);
     }
-    await dormir(config.solana.pollIntervalMs);
+    await sleep(config.solana.pollIntervalMs);
   }
 }
 
-/** Mesmo contrato do loopSolana: nunca derruba o processo nem bloqueia os outros laços. */
-async function loopPmesSolana(): Promise<void> {
-  if (!indexadorPmesSolana) return;
+/** Same contract as solanaLoop: never brings the process down or blocks the other loops. */
+async function pmesSolanaLoop(): Promise<void> {
+  if (!pmesSolanaIndexer) return;
   for (;;) {
     try {
-      const { transacoes, gravados } = await indexadorPmesSolana.ciclo();
-      if (transacoes > 0) {
+      const { transactions, saved } = await pmesSolanaIndexer.cycle();
+      if (transactions > 0) {
         console.log(
-          `[indexer] pmes-solana: ${transacoes} transação(ões) nova(s), ${gravados} evento(s) gravado(s) — checkpoint slot ${indexadorPmesSolana.checkpoint}`,
+          `[indexer] pmes-solana: ${transactions} new transaction(s), ${saved} event(s) saved — checkpoint slot ${pmesSolanaIndexer.checkpoint}`,
         );
       }
-    } catch (erro) {
-      console.error("[indexer] pmes-solana: erro no ciclo, tentando de novo no próximo:", erro);
+    } catch (error) {
+      console.error("[indexer] pmes-solana: cycle error, retrying in the next one:", error);
     }
-    await dormir(config.pmesSolana.pollIntervalMs);
+    await sleep(config.pmesSolana.pollIntervalMs);
   }
 }
 
 async function loop(): Promise<void> {
-  await indexador.iniciar();
-  if (indexadorSolana) {
-    await indexadorSolana.iniciar();
+  await indexer.start();
+  if (solanaIndexer) {
+    await solanaIndexer.start();
     console.log(
-      `[indexer] Solana: programa ${config.solana.programId} em ${config.solana.rpcUrl} — checkpoint (${FONTE_SOLANA}) slot ${indexadorSolana.checkpoint}`,
+      `[indexer] Solana: program ${config.solana.programId} at ${config.solana.rpcUrl} — checkpoint (${SOURCE_SOLANA}) slot ${solanaIndexer.checkpoint}`,
     );
   } else {
-    console.log("[indexer] Solana: desativada (SOLANA_DESATIVADO=1)");
+    console.log("[indexer] Solana: disabled (SOLANA_DESATIVADO=1)");
   }
 
-  for (const r of config.redesEvmExtras.filter((r) => !r.ativo)) {
-    console.log(`[indexer] ${r.rede}: desativada`);
+  for (const n of config.extraEvmNetworks.filter((n) => !n.enabled)) {
+    console.log(`[indexer] ${n.network}: disabled`);
   }
-  for (const extra of indexadoresEvmExtras) {
-    await extra.idx.iniciar();
+  for (const extra of extraEvmIndexers) {
+    await extra.idx.start();
     console.log(
-      `[indexer] ${extra.cfg.rede}: RegistroAssinaturas em ${extra.cfg.endereco} via ${extra.cfg.rpcUrl} — checkpoint (${extra.cfg.fonte}) bloco ${extra.idx.checkpoint}`,
+      `[indexer] ${extra.cfg.network}: RegistroAssinaturas at ${extra.cfg.address} via ${extra.cfg.rpcUrl} — checkpoint (${extra.cfg.source}) block ${extra.idx.checkpoint}`,
     );
     if (config.dryRun) {
-      const r = await extra.idx.ciclo();
-      console.log(`[dry-run] ${extra.cfg.rede}: ${r.gravados} documento(s) seriam gravados (em dia: ${r.emDia})`);
+      const r = await extra.idx.cycle();
+      console.log(`[dry-run] ${extra.cfg.network}: ${r.saved} document(s) would be saved (up to date: ${r.upToDate})`);
     } else {
-      void loopEvmExtra(extra);
+      void extraEvmLoop(extra);
     }
   }
 
-  // Em dry-run, a Solana roda um ciclo só, antes, e imprime o que gravaria.
-  if (config.dryRun && indexadorSolana) {
-    const r = await indexadorSolana.ciclo();
-    console.log(`[dry-run] solana: ${r.transacoes} transação(ões), ${r.gravados} documento(s) seriam gravados`);
+  // In dry-run, Solana runs a single cycle first and prints what it would save.
+  if (config.dryRun && solanaIndexer) {
+    const r = await solanaIndexer.cycle();
+    console.log(`[dry-run] solana: ${r.transactions} transaction(s), ${r.saved} document(s) would be saved`);
   } else {
-    void loopSolana();
+    void solanaLoop();
   }
 
-  if (indexadorPmesSolana) {
+  if (pmesSolanaIndexer) {
     try {
-      await indexadorPmesSolana.iniciar();
+      await pmesSolanaIndexer.start();
       console.log(
-        `[indexer] PMEs Solana: programa ${config.pmesSolana.programId} — checkpoint (${FONTE_PMES_SOLANA}) slot ${indexadorPmesSolana.checkpoint}, ${indexadorPmesSolana.ofertas.size} oferta(s)`,
+        `[indexer] PMEs Solana: program ${config.pmesSolana.programId} — checkpoint (${SOURCE_PMES_SOLANA}) slot ${pmesSolanaIndexer.checkpoint}, ${pmesSolanaIndexer.offerings.size} offering(s)`,
       );
       if (config.dryRun) {
-        const r = await indexadorPmesSolana.ciclo();
-        console.log(`[dry-run] pmes-solana: ${r.transacoes} transação(ões), ${r.gravados} evento(s) seriam gravados`);
+        const r = await pmesSolanaIndexer.cycle();
+        console.log(`[dry-run] pmes-solana: ${r.transactions} transaction(s), ${r.saved} event(s) would be saved`);
       } else {
-        void loopPmesSolana();
+        void pmesSolanaLoop();
       }
-    } catch (erro) {
-      // Ex.: migration 010 ainda não rodou. Não derruba o resto do indexador.
-      console.error("[indexer] PMEs Solana: não iniciou — fonte desligada até o próximo deploy:", erro);
+    } catch (error) {
+      // E.g. migration 010 has not run yet. Does not bring the rest of the indexer down.
+      console.error("[indexer] PMEs Solana: did not start — source off until the next deploy:", error);
     }
   } else {
-    console.log("[indexer] PMEs Solana: desativada (PMES_SOLANA_DESATIVADO=1)");
+    console.log("[indexer] PMEs Solana: disabled (PMES_SOLANA_DESATIVADO=1)");
   }
 
-  if (config.dryRun) console.log("[indexer] DRY-RUN — nada será gravado no banco");
-  console.log(`[indexer] Niara-Register — checkpoints: ${JSON.stringify(indexador.checkpoints)}`);
+  if (config.dryRun) console.log("[indexer] DRY-RUN — nothing will be written to the database");
+  console.log(`[indexer] Niara-Register — checkpoints: ${JSON.stringify(indexer.checkpoints)}`);
   console.log(
-    `[indexer] monitorando ${indexador.ofertas.size} oferta(s) de registro_ofertas:`,
-    [...indexador.ofertas.values()].map((o) => `${o.numero}:${o.endereco}`),
+    `[indexer] tracking ${indexer.offerings.size} offering(s) from registro_ofertas:`,
+    [...indexer.offerings.values()].map((o) => `${o.number}:${o.address}`),
   );
-  console.log(`[indexer] OfertaOrquestrador em ${config.orquestradorEndereco}`);
-  console.log(`[indexer] RegistroAssinaturas em ${config.registroAssinaturasEndereco}`);
+  console.log(`[indexer] OfertaOrquestrador at ${config.orchestratorAddress}`);
+  console.log(`[indexer] RegistroAssinaturas at ${config.signatureRegistryAddress}`);
   console.log(
-    `[indexer] pedaço de ${config.blockRangeChunk} blocos; atraso: até ${config.chunksAtrasoPorCiclo} chamadas por ciclo, a cada ${config.atrasoIntervaloMs} ms; polling a cada ${config.pollIntervalMs / 1000}s`,
+    `[indexer] chunk of ${config.blockRangeChunk} blocks; backlog: up to ${config.backlogChunksPerCycle} calls per cycle, every ${config.backlogIntervalMs} ms; polling every ${config.pollIntervalMs / 1000}s`,
   );
 
   while (true) {
-    const { emDia, falhou } = await indexador.ciclo();
+    const { upToDate, failed } = await indexer.cycle();
 
-    if (config.dryRun && emDia) {
-      await relatorioDryRun();
+    if (config.dryRun && upToDate) {
+      await dryRunReport();
       process.exit(0);
     }
 
-    // Em dia (ou com erro): espera o intervalo normal. Recuperando atraso: segue
-    // direto para o próximo ciclo — as chamadas de atraso já são espaçadas por
-    // ATRASO_INTERVALO_MS, e o lote normal roda no início de cada ciclo.
-    if (emDia || falhou) await dormir(config.pollIntervalMs);
+    // Up to date (or with an error): wait the normal interval. Catching up:
+    // go straight to the next cycle; backlog calls are already spaced by
+    // ATRASO_INTERVALO_MS, and the normal batch runs at the start of every cycle.
+    if (upToDate || failed) await sleep(config.pollIntervalMs);
   }
 }
 
-// ── relatório do dry-run ─────────────────────────────────────────────────────────
+// ── dry-run report ───────────────────────────────────────────────────────────────
 
-async function relatorioDryRun(): Promise<void> {
-  console.log("\n════════ DRY-RUN — o que seria gravado ════════\n");
+async function dryRunReport(): Promise<void> {
+  console.log("\n════════ DRY-RUN — what would be written ════════\n");
 
-  console.log(`registro_ofertas — ${simulado.ofertas.length} oferta(s) nova(s):`);
-  for (const o of simulado.ofertas) {
+  console.log(`registro_ofertas — ${simulated.offerings.length} new offering(s):`);
+  for (const o of simulated.offerings) {
     console.log(
-      `  nº ${o.numero}  ${o.endereco}  ${o.simbolo ?? "?"} / ${o.empresa ?? "?"}  emissor ${o.emissor}  moeda ${o.moeda}  bloco ${o.bloco_criacao}  tx ${o.tx_criacao}`,
+      `  no. ${o.numero}  ${o.endereco}  ${o.simbolo ?? "?"} / ${o.empresa ?? "?"}  issuer ${o.emissor}  currency ${o.moeda}  block ${o.bloco_criacao}  tx ${o.tx_criacao}`,
     );
   }
 
-  const registros = [...simulado.registros].sort((a, b) => (a.bloco ?? 0) - (b.bloco ?? 0) || a.log_index - b.log_index);
-  console.log(`\nregistro_transacoes — ${registros.length} linha(s) nova(s):`);
-  for (const r of registros) {
-    console.log(`  bloco ${r.bloco} #${r.log_index}  ${r.tipo_evento}`);
+  const entries = [...simulated.entries].sort((a, b) => (a.bloco ?? 0) - (b.bloco ?? 0) || a.log_index - b.log_index);
+  console.log(`\nregistro_transacoes — ${entries.length} new row(s):`);
+  for (const r of entries) {
+    console.log(`  block ${r.bloco} #${r.log_index}  ${r.tipo_evento}`);
     console.log(`    descricao: ${r.descricao}`);
     console.log(`    dados:     ${JSON.stringify(r.dados)}`);
   }
-  console.log(`\nlinhas com dados nulo: ${registros.filter((r) => r.dados === null).length}`);
+  console.log(`\nrows with null dados: ${entries.filter((r) => r.dados === null).length}`);
 
-  // Conferência por oferta: soma dos aportes = total do encerramento =
-  // valor ao emissor + taxa. Em BigInt, com as casas da moeda da oferta.
-  console.log("\nconferência por oferta:");
-  const porOferta = new Map<string, typeof registros>();
-  for (const r of registros) {
+  // Per-offering check: sum of investments = closing total = amount to the
+  // issuer + fee. In BigInt, with the offering currency's decimals.
+  console.log("\nper-offering check:");
+  const byOffering = new Map<string, typeof entries>();
+  for (const r of entries) {
     const d = r.dados;
     if (!d || d.evento === "offering_created") continue;
-    porOferta.set(d.ofertaEndereco, [...(porOferta.get(d.ofertaEndereco) ?? []), r]);
+    byOffering.set(d.ofertaEndereco, [...(byOffering.get(d.ofertaEndereco) ?? []), r]);
   }
-  for (const [endereco, linhas] of porOferta) {
-    const casas = await tokens.daMoeda(endereco);
-    const u = (v: string) => ethers.parseUnits(v, casas);
-    const f = (v: bigint) => ethers.formatUnits(v, casas);
-    let aportes = BigInt(0);
-    let encerrado: bigint | null = null;
-    let liberado: { emissor: bigint; taxa: bigint } | null = null;
-    for (const { dados: d } of linhas) {
-      if (d?.evento === "investment") aportes += u(d.valor);
-      if (d?.evento === "offering_closed") encerrado = u(d.totalArrecadado);
-      if (d?.evento === "funds_released") liberado = { emissor: u(d.valorEmissor), taxa: u(d.taxa) };
+  for (const [address, rows] of byOffering) {
+    const decimals = await tokens.currencyDecimals(address);
+    const u = (v: string) => ethers.parseUnits(v, decimals);
+    const f = (v: bigint) => ethers.formatUnits(v, decimals);
+    let investments = BigInt(0);
+    let closed: bigint | null = null;
+    let released: { issuer: bigint; fee: bigint } | null = null;
+    for (const { dados: d } of rows) {
+      if (d?.evento === "investment") investments += u(d.valor);
+      if (d?.evento === "offering_closed") closed = u(d.totalArrecadado);
+      if (d?.evento === "funds_released") released = { issuer: u(d.valorEmissor), fee: u(d.taxa) };
     }
-    const oferta = indexador.ofertas.get(endereco);
-    console.log(`  ${oferta?.apelido ?? endereco}: aportes ${f(aportes)}`);
-    if (encerrado !== null) {
-      console.log(`    encerrada com ${f(encerrado)} — ${encerrado === aportes ? "bate com os aportes" : "NÃO BATE com os aportes"}`);
+    const offering = indexer.offerings.get(address);
+    console.log(`  ${offering?.label ?? address}: investments ${f(investments)}`);
+    if (closed !== null) {
+      console.log(`    closed with ${f(closed)} — ${closed === investments ? "matches the investments" : "DOES NOT MATCH the investments"}`);
     }
-    if (liberado) {
-      const soma = liberado.emissor + liberado.taxa;
+    if (released) {
+      const sum = released.issuer + released.fee;
       console.log(
-        `    liberado ${f(liberado.emissor)} + taxa ${f(liberado.taxa)} = ${f(soma)} — ${soma === encerrado ? "bate com o total encerrado" : "NÃO BATE com o total encerrado"}`,
+        `    released ${f(released.issuer)} + fee ${f(released.fee)} = ${f(sum)} — ${sum === closed ? "matches the closing total" : "DOES NOT MATCH the closing total"}`,
       );
     }
   }
 }
 
 process.on("SIGINT", () => {
-  console.log("\n[indexer] encerrando (SIGINT)...");
+  console.log("\n[indexer] shutting down (SIGINT)...");
   process.exit(0);
 });
 process.on("SIGTERM", () => {
-  console.log("[indexer] encerrando (SIGTERM)...");
+  console.log("[indexer] shutting down (SIGTERM)...");
   process.exit(0);
 });
 

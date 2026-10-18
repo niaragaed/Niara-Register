@@ -86,10 +86,14 @@ Indexer: create `indexer/.env` with `ALCHEMY_API_KEY`, `SUPABASE_URL` and `SUPAB
 cd indexer
 npm install
 npm start                          # or: npx tsx index.ts --dry-run (reads everything, writes nothing)
-npm run teste                      # offline tests + one cycle against Solana devnet
+npm test                           # offline tests + one cycle against Solana devnet
 ```
 
 Apply `supabase/schema.sql` and every `supabase/migrations_0*.sql` file, in order, before starting the indexer.
+
+## Naming
+
+Code, comments, docs and logs are in English. A few names stay in Portuguese because they are external interfaces: on-chain contract, event and field names (`RegistroAssinaturas`, `DocumentoRegistrado`, `OfertaCaptacao`, `Aporte`...), Supabase table and column names (`registro_transacoes`, `tipo_evento`, `ocorrido_em`...), the keys of the stored `dados` JSON, values already stored in the database (`tipo_evento`, `descricao`, `fonte`, `status`), and the indexer's environment variables. The Portuguese UI copy in `lib/i18n/dictionaries.ts` is the Brazilian version of the site.
 
 ## The Niara ecosystem
 
@@ -101,7 +105,7 @@ Niara has 8 repositories at [github.com/niaragaed](https://github.com/niaragaed)
 | [niara-register-solana](https://github.com/niaragaed/niara-register-solana) | Anchor program for Register on Solana devnet |
 | [niara-contracts-Register](https://github.com/niaragaed/niara-contracts-Register) | Solidity document-registration contract, deployed on 5 EVM testnets |
 | [niara-PMEs](https://github.com/niaragaed/niara-PMEs) | Niara SMEs web app: companies create offerings, investors invest with self-custody wallets |
-| [niara-contracts-PMEs](https://github.com/niaragaed/niara-contracts-PMEs) | Solidity contracts for SME fundraising under Brazil's CVM Resolution 88, on Sepolia (266 tests) |
+| [niara-contracts-PMEs](https://github.com/niaragaed/niara-contracts-PMEs) | Solidity contracts for SME fundraising under Brazil's CVM Resolution 88, on Sepolia (315 tests) |
 | [niara-pmes-solana](https://github.com/niaragaed/niara-pmes-solana) | Solana port of the SME fundraising flow, with an on-chain escrow, on devnet |
 | [niara-contracts](https://github.com/niaragaed/niara-contracts) | Base contracts for Niara Exchange: asset tokens backed by attested custody, atomic settlement, issuer cashback (tested locally, not deployed) |
 | [niara-site](https://github.com/niaragaed/niara-site) | Niara Exchange front-end prototype: trading terminal, order book, portfolio (simulated data) |

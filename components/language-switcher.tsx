@@ -1,18 +1,18 @@
-import { trocarIdioma } from "@/app/actions/set-locale";
+import { switchLocale } from "@/app/actions/set-locale";
 import type { Locale } from "@/lib/i18n/locale";
 
 /**
- * Seletor "EN · PT" à direita da navegação.
+ * "EN · PT" selector to the right of the navigation.
  *
- * É um <form> com dois botões submit chamando um server action, então continua
- * sendo server component, não vai JS nenhum para o cliente e a troca funciona
- * mesmo com o JS desligado. O server action responde na própria URL, então a
- * rota atual é preservada.
+ * It is a <form> with two submit buttons calling a server action, so it stays a
+ * server component, ships no JS to the client and switching works even with JS
+ * turned off. The server action answers on the same URL, so the current route
+ * is kept.
  */
 
-const IDIOMAS: { codigo: Locale; rotulo: string }[] = [
-  { codigo: "en", rotulo: "EN" },
-  { codigo: "pt", rotulo: "PT" },
+const LANGUAGES: { code: Locale; label: string }[] = [
+  { code: "en", label: "EN" },
+  { code: "pt", label: "PT" },
 ];
 
 export function LanguageSwitcher({
@@ -24,12 +24,12 @@ export function LanguageSwitcher({
 }) {
   return (
     <form
-      action={trocarIdioma}
+      action={switchLocale}
       aria-label={label}
       className="flex items-center gap-1.5"
     >
-      {IDIOMAS.map((idioma, i) => (
-        <span key={idioma.codigo} className="flex items-center gap-1.5">
+      {LANGUAGES.map((language, i) => (
+        <span key={language.code} className="flex items-center gap-1.5">
           {i > 0 && (
             <span aria-hidden="true" className="font-mono text-xs text-slate/50">
               ·
@@ -38,13 +38,13 @@ export function LanguageSwitcher({
           <button
             type="submit"
             name="locale"
-            value={idioma.codigo}
-            aria-current={locale === idioma.codigo ? "true" : undefined}
+            value={language.code}
+            aria-current={locale === language.code ? "true" : undefined}
             className={`font-mono text-xs uppercase underline-offset-4 transition-colors hover:underline ${
-              locale === idioma.codigo ? "text-ink" : "text-slate"
+              locale === language.code ? "text-ink" : "text-slate"
             }`}
           >
-            {idioma.rotulo}
+            {language.label}
           </button>
         </span>
       ))}

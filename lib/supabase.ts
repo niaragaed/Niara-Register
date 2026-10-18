@@ -1,32 +1,36 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Cliente do Supabase do Niara-Register.
-// IMPORTANTE (regra de honestidade do grupo Niara): este banco é próprio do
-// Register (ex.: "niara-register-dev"), separado do banco do Niara-PMEs.
-// O Register é um INDEXADOR — não guarda saldo nem executa transações,
-// só espelha o que já ocorreu on-chain. Nenhum dado aqui deve ser inventado
-// ou usado como demonstração de algo que não aconteceu de verdade.
+// Niara-Register Supabase client.
+// IMPORTANT (Niara group honesty rule): this database belongs to the Register
+// (e.g. "niara-register-dev"), separate from the Niara-PMEs database.
+// The Register is an INDEXER: it holds no balance and executes no transaction,
+// it only mirrors what already happened on-chain. No data here may be made up
+// or used to demonstrate something that did not really happen.
+//
+// Table and column names (registro_transacoes, tx_hash, ocorrido_em, ...) are
+// the database schema and stay as they are.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Enquanto as credenciais reais não estão configuradas (.env.local), o
-// client aponta para um projeto inexistente — as chamadas falham de forma
-// controlada (tratadas nas páginas como "indexador não conectado"), em vez
-// de derrubar o build ou fingir que há dados.
-export const supabaseConfigurado = Boolean(supabaseUrl && supabaseAnonKey);
+// While the real credentials are not configured (.env.local), the client
+// points at a non-existent project: calls fail in a controlled way (handled in
+// the pages as "indexer not connected"), instead of breaking the build or
+// pretending there is data.
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = createClient(
   supabaseUrl || "https://placeholder.supabase.co",
   supabaseAnonKey || "placeholder-anon-key"
 );
 
-// Origem de cada registro exibido — sempre explícita na UI, nunca implícita.
-export type FonteRegistro = "pmes" | "exchange";
+// Origin of each displayed record: always explicit in the UI, never implicit.
+export type LedgerSource = "pmes" | "exchange";
 
-export type RegistroTransacao = {
+/** A registro_transacoes row. */
+export type LedgerTransaction = {
   id: string;
   numero_sequencial: number;
-  fonte: FonteRegistro;
+  fonte: LedgerSource;
   tipo_evento: string;
   descricao: string;
   tx_hash: string;
@@ -35,20 +39,21 @@ export type RegistroTransacao = {
   bloco: number;
   ocorrido_em: string;
   confirmado: boolean;
-  /** Rede de origem (migration 010). Ausente antes dela: Sepolia. */
+  /** Source network (migration 010). Missing before it: Sepolia. */
   rede?: "sepolia" | "solana-devnet";
-  /** Slot da Solana (bloco fica null lá). */
+  /** Solana slot (bloco is null there). */
   slot?: number | null;
   /**
-   * Forma estruturada do evento, gravada pelo indexer (ver lib/dados-evento.ts).
-   * `unknown` porque vem de uma coluna jsonb: quem consome valida com
-   * `lerDadosEvento` antes de usar. Null nas linhas anteriores à migration 003.
+   * Structured form of the event, written by the indexer (see
+   * lib/event-data.ts). `unknown` because it comes from a jsonb column:
+   * consumers validate it with `parseEventData` before use. Null in rows from
+   * before migration 003.
    */
   dados: unknown;
 };
 
-/** Linha de registro_ofertas (migration 004): uma oferta monitorada pelo indexer. */
-export type RegistroOferta = {
+/** A registro_ofertas row (migration 004): an offering tracked by the indexer. */
+export type OfferingRow = {
   endereco: string;
   token: string;
   emissor: string;
@@ -63,14 +68,15 @@ export type RegistroOferta = {
   tx_criacao: string | null;
 };
 
-export type RegistroAssinatura = {
+/** A registro_assinaturas row. */
+export type SignatureRow = {
   id: string;
   /**
-   * Rede de origem (migration 005). Ausente antes da migration — tratar como
-   * "sepolia", que era a única rede.
+   * Source network (migration 005). Missing before the migration: treat it as
+   * "sepolia", which was the only network.
    */
   rede?: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet" | "solana-devnet";
-  /** Slot da Solana; null nas linhas da Sepolia. */
+  /** Solana slot; null in the Sepolia rows. */
   slot?: number | null;
   documento_nome: string;
   tipo_documento: string | null;

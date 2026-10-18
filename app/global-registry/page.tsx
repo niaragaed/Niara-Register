@@ -1,12 +1,12 @@
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 
-export default async function RegistroGlobalPage() {
-  // Área deliberadamente sem indexer ligado ainda: a Niara Exchange só tem
-  // contratos deployados e testados localmente, sem transação real na
-  // Sepolia. Mostrar qualquer dado aqui violaria a regra de honestidade do
-  // grupo Niara. Esta página populará sozinha quando a Exchange operar de
-  // verdade — não antes.
+export default async function GlobalRegistryPage() {
+  // Deliberately no indexer connected yet: the Niara Exchange only has
+  // contracts deployed and tested locally, with no real transaction on
+  // Sepolia. Showing any data here would break the Niara group's honesty
+  // rule. This page will fill itself once the Exchange really operates, not
+  // before.
   const t = dictionaries[await getLocale()];
 
   return (
@@ -22,9 +22,9 @@ export default async function RegistroGlobalPage() {
       </header>
 
       <div className="mt-10 border border-dashed border-slate/30 px-6 py-10">
-        <p className="font-body text-sm text-ink">{t.global.vazioTitulo}</p>
+        <p className="font-body text-sm text-ink">{t.global.emptyTitle}</p>
         <p className="mt-2 max-w-md font-body text-sm leading-relaxed text-slate">
-          {t.global.vazioTexto}
+          {t.global.emptyText}
         </p>
       </div>
     </div>
