@@ -13,7 +13,7 @@ Kept in Portuguese on purpose (external interfaces):
 ## v2 invariants
 
 - `lib/commitments.ts` must stay byte-identical to `SignatureRegistryV2.sol`'s test and to the Solana program's recipes; `tests/commitments.test.ts` pins the reference values.
-- The document, the salt and the name/type never leave the browser except in `POST /api/credentials`, which uses them once to check the on-chain commitments and stores nothing. Do not add logging there.
+- The document never leaves the browser. The salt, the file hash and the name/type leave it only in `POST /api/credentials`, which uses them once to check the on-chain commitments and stores nothing. Do not add logging there.
 - Hand-encoded Solana instructions/accounts (`lib/register-v2-solana.ts`, `indexer/v2.ts`) follow `idl/niara_register_solana.json` in niara-register-solana; update both when the program interface changes.
 - Describe transferable records as "aligned with MLETR", never "MLETR compliant".
 
