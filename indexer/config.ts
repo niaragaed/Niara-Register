@@ -49,8 +49,48 @@ function extraEvmNetwork(base: {
   };
 }
 
+/**
+ * v2 contracts (SignatureRegistryV2 + TransferableRecordRegistry) on one EVM
+ * network. Off until the contracts are deployed there: set
+ * <PREFIX>_V2_REGISTRY and/or <PREFIX>_V2_ETR plus <PREFIX>_V2_START_BLOCK
+ * (the deploy block, from niara-contracts-Register/broadcast/DeployV2.s.sol).
+ * <PREFIX>_V2_DESATIVADO=1 turns it off again.
+ */
+function v2EvmNetwork(base: {
+  network: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet";
+  prefix: string;
+  chainId: number;
+  rpcUrl: string;
+  chunk: number;
+  confirmations: number;
+  maxChunksPerCycle?: number;
+  chunkIntervalMs?: number;
+}) {
+  const env = (name: string) => process.env[`${base.prefix}_V2_${name}`];
+  const registry = env("REGISTRY");
+  const etr = env("ETR");
+  const startBlock = env("START_BLOCK");
+  return {
+    network: base.network,
+    source: `${base.network}-v2`,
+    chainId: base.chainId,
+    enabled: env("DESATIVADO") !== "1" && Boolean(startBlock) && Boolean(registry || etr),
+    rpcUrl: base.rpcUrl,
+    registry: registry?.toLowerCase(),
+    etr: etr?.toLowerCase(),
+    deployBlock: Number(startBlock ?? 0),
+    chunk: base.chunk,
+    maxChunksPerCycle: base.maxChunksPerCycle ?? 20,
+    chunkIntervalMs: base.chunkIntervalMs ?? 0,
+    confirmations: base.confirmations,
+    pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 30_000),
+  };
+}
+
+const alchemySepoliaUrl = () => `https://eth-sepolia.g.alchemy.com/v2/${required("ALCHEMY_API_KEY")}`;
+
 export const config = {
-  rpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${required("ALCHEMY_API_KEY")}`,
+  rpcUrl: alchemySepoliaUrl(),
   supabaseUrl: required("SUPABASE_URL"),
   supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
   // Block to start the pmes source from when there is no saved checkpoint.
@@ -184,6 +224,55 @@ export const config = {
       confirmations: 2,
     }),
   ],
+
+  // v2 sources (see v2.ts). Each EVM network is off until its v2 contracts are
+  // deployed and configured; Solana v2 runs over the same program as v1, with
+  // its own checkpoint ("solana-v2").
+  v2: {
+    evm: [
+      v2EvmNetwork({ network: "sepolia", prefix: "SEPOLIA", chainId: 11155111, rpcUrl: alchemySepoliaUrl(), chunk: 500, confirmations: 5 }),
+      v2EvmNetwork({
+        network: "base-sepolia",
+        prefix: "BASE",
+        chainId: 84532,
+        rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+        chunk: 200,
+        confirmations: 5,
+      }),
+      v2EvmNetwork({
+        network: "robinhood-testnet",
+        prefix: "ROBINHOOD",
+        chainId: 46630,
+        rpcUrl: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.testnet.chain.robinhood.com",
+        chunk: 2000,
+        confirmations: 20,
+      }),
+      v2EvmNetwork({
+        network: "hyperevm-testnet",
+        prefix: "HYPEREVM",
+        chainId: 998,
+        rpcUrl: process.env.HYPEREVM_RPC_URL ?? "https://rpc.hyperliquid-testnet.xyz/evm",
+        chunk: 50,
+        confirmations: 2,
+        maxChunksPerCycle: 30,
+        chunkIntervalMs: 1000,
+      }),
+      v2EvmNetwork({
+        network: "tempo-testnet",
+        prefix: "TEMPO",
+        chainId: 42431,
+        rpcUrl: process.env.TEMPO_RPC_URL ?? "https://rpc.moderato.tempo.xyz",
+        chunk: 5000,
+        confirmations: 2,
+      }),
+    ],
+    solana: {
+      enabled: process.env.SOLANA_V2_DESATIVADO !== "1",
+      // Slot of the program upgrade that added register_v2; earlier slots only have v1.
+      startSlot: Number(process.env.SOLANA_V2_START_SLOT ?? process.env.SOLANA_START_SLOT ?? 509235000),
+      pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
+    },
+  },
 
   // Validation mode: reads the chain and the database, but writes nothing (not
   // even the checkpoint). Prints what would be inserted and exits once it

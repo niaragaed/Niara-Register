@@ -1,7 +1,8 @@
-import { DocumentVerifier } from "./verifier";
+import { RegisterV2 } from "./register-v2";
 import { SignatureEntry } from "@/components/signature-entry";
+import { SignatureV2Entry } from "@/components/signature-v2-entry";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import type { SignatureRow } from "@/lib/supabase";
+import type { SignatureRow, SignatureV2Row } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 import { SOLANA_PROGRAM_ID, solanaExplorerLink } from "@/lib/register-solana";
@@ -23,6 +24,16 @@ export default async function SignaturesPage() {
     : { data: null, error: null };
 
   const records = (data ?? []) as SignatureRow[];
+
+  // v2 table (migration 011). Missing table or error: the section stays empty.
+  const { data: dataV2 } = isSupabaseConfigured
+    ? await supabase
+        .from("registro_assinaturas_v2")
+        .select("*")
+        .order("assinado_em", { ascending: false })
+        .limit(50)
+    : { data: null };
+  const recordsV2 = (dataV2 ?? []) as SignatureV2Row[];
   const indexerDisconnected = !isSupabaseConfigured || Boolean(error);
 
   return (
@@ -40,10 +51,10 @@ export default async function SignaturesPage() {
       </header>
 
       <div className="mt-10">
-        {/* The verifier is the only client component that needs text. It
-            gets only its slice of the dictionary through props: with a
-            single consumer, a context provider would be weight with no gain. */}
-        <DocumentVerifier t={t.verifier} locale={locale} />
+        {/* The client flow gets only its slices of the dictionary through
+            props: with a single consumer, a context provider would be weight
+            with no gain. */}
+        <RegisterV2 t={{ register: t.register, pades: t.pades, proof: t.proof }} locale={locale} />
       </div>
 
       <div className="mt-6 border border-dashed border-moss/40 px-6 py-6">
@@ -118,9 +129,21 @@ export default async function SignaturesPage() {
         </p>
       </div>
 
+      {recordsV2.length > 0 && (
+        <div className="mt-14 border-t border-slate/15 pt-8">
+          <h2 className="font-display text-xl text-ink">{t.signing.historyV2Title}</h2>
+          <p className="mt-2 max-w-xl font-body text-sm leading-relaxed text-slate">{t.signing.historyV2Lede}</p>
+          <div className="mt-6">
+            {recordsV2.map((record) => (
+              <SignatureV2Entry key={record.id} record={record} locale={locale} />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-14 border-t border-slate/15 pt-8">
         <h2 className="font-display text-xl text-ink">
-          {t.signing.historyTitle}
+          {recordsV2.length > 0 ? t.signing.legacyHistoryTitle : t.signing.historyTitle}
         </h2>
         <p className="mt-2 max-w-xl font-body text-sm leading-relaxed text-slate">
           {t.signing.historyLede}
