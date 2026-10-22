@@ -255,6 +255,10 @@ export const en = {
     vpValid: "Presentation signed by the holder wallet",
     vpInvalid: "Presentation signature INVALID:",
     x5c: "The issuer attached a certificate chain (x5c).",
+    issueFromPackage: "Get the verifiable credential for this package",
+    issuingFromPackage: "Issuing...",
+    issuedFromPackage: "Credential issued. Download the updated package and keep it instead of the old one.",
+    downloadUpdated: "Download updated proof package (.json)",
   },
 
   etr: {
@@ -741,6 +745,10 @@ export const pt: Dictionary = {
     vpValid: "Apresentação assinada pela carteira titular",
     vpInvalid: "Assinatura da apresentação INVÁLIDA:",
     x5c: "O emissor anexou uma cadeia de certificados (x5c).",
+    issueFromPackage: "Obter a credencial verificável para este pacote",
+    issuingFromPackage: "Emitindo...",
+    issuedFromPackage: "Credencial emitida. Baixe o pacote atualizado e guarde-o no lugar do antigo.",
+    downloadUpdated: "Baixar pacote de prova atualizado (.json)",
   },
 
   etr: {

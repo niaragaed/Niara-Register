@@ -15,7 +15,8 @@ import { isProofPackage, type ProofPackage } from "@/lib/proof-package";
 import { verifyCredentialJwt } from "@/lib/vc/verify-credential";
 import { verifyPresentation } from "@/lib/vc/presentation";
 import { PadesReport } from "@/components/v2/pades-report";
-import { Label, Notice, readFile } from "@/components/v2/ui";
+import { Label, Notice, primaryButton, readFile, secondaryButton } from "@/components/v2/ui";
+import { downloadBytes } from "@/lib/wallets";
 
 type Line = { tone: "ok" | "bad" | "neutral"; text: string };
 
@@ -31,9 +32,45 @@ export function VerifyTool({
   const tv = t.verify;
   const [lines, setLines] = useState<Line[]>([]);
   const [reports, setReports] = useState<PadesSignatureReport[] | null>(null);
+  // A v2 package without a credential (e.g. the issuer was down at registration
+  // time) can get one here: the server re-checks everything against the chain.
+  const [pending, setPending] = useState<ProofPackage | null>(null);
+  const [updated, setUpdated] = useState<ProofPackage | null>(null);
+  const [issuing, setIssuing] = useState(false);
+  const [issueError, setIssueError] = useState<string | null>(null);
+
+  async function issueForPackage() {
+    if (!pending) return;
+    setIssuing(true);
+    setIssueError(null);
+    try {
+      const res = await fetch("/api/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network,
+          recordHash: pending.recordHash,
+          fileSha256: pending.fileSha256,
+          salt: pending.salt,
+          metadata: pending.metadata ?? null,
+        }),
+      });
+      const body = (await res.json()) as { jwt?: string; error?: string };
+      if (!res.ok || !body.jwt) throw new Error(body.error ?? String(res.status));
+      setUpdated({ ...pending, credential: body.jwt });
+      setPending(null);
+    } catch (e) {
+      setIssueError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIssuing(false);
+    }
+  }
 
   async function onFiles(files: FileList | null) {
     if (!files?.length) return;
+    setPending(null);
+    setUpdated(null);
+    setIssueError(null);
     const out: Line[] = [];
     let pkg: ProofPackage | null = null;
     let doc: { bytes: Uint8Array; isPdf: boolean } | null = null;
@@ -94,6 +131,9 @@ export function VerifyTool({
           if (vc.x5cPresent) out.push({ tone: "neutral", text: tv.x5c });
         }
       }
+      if (!pkg.credential && pkg.recordHash === record.recordHash && pkg.network === network) {
+        setPending(pkg);
+      }
       if (pkg.presentation) {
         const vp = await verifyPresentation(pkg.presentation as string | Record<string, unknown>);
         if (vp.valid && vp.vcJwt === pkg.credential) {
@@ -119,6 +159,31 @@ export function VerifyTool({
           {l.text}
         </Notice>
       ))}
+      {pending && (
+        <div className="mt-4">
+          <button className={secondaryButton} disabled={issuing} onClick={issueForPackage}>
+            {issuing ? tv.issuingFromPackage : tv.issueFromPackage}
+          </button>
+          {issueError && <Notice tone="bad">{issueError}</Notice>}
+        </div>
+      )}
+      {updated && (
+        <div className="mt-4">
+          <Notice tone="ok">{tv.issuedFromPackage}</Notice>
+          <button
+            className={`${primaryButton} mt-3`}
+            onClick={() =>
+              downloadBytes(
+                JSON.stringify(updated, null, 2),
+                `niara-proof-${updated.recordHash.slice(0, 12)}.json`,
+                "application/json",
+              )
+            }
+          >
+            {tv.downloadUpdated}
+          </button>
+        </div>
+      )}
       {reports && (
         <div className="mt-2">
           <Label>PAdES</Label>
