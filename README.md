@@ -84,7 +84,7 @@ The signing flow (`/signatures`) now works like this, all in the browser:
 
 `/verify/[network]/[hash]` reads the record straight from the chain and checks the document, the package, the credential, the presentation and the PAdES signatures in the browser. `/transferable` issues and operates **transferable records** designed to line up with MLETR (singularity, exclusive control, amendment, surrender, termination) — "aligned with MLETR", never "compliant": Brazil has not enacted it.
 
-v2 addresses live in [`lib/register-v2-evm.ts`](lib/register-v2-evm.ts) (null until deployed; `NEXT_PUBLIC_V2_<NETWORK>_REGISTRY` / `_ETR` override them for local tests). The indexer's v2 sources are off per EVM network until `<PREFIX>_V2_REGISTRY` / `<PREFIX>_V2_ETR` / `<PREFIX>_V2_START_BLOCK` are set (prefixes `SEPOLIA`, `BASE`, `ROBINHOOD`, `HYPEREVM`, `TEMPO`); run `supabase/migrations_011_v2.sql` first.
+v2 addresses (deployed 2026-10-22 on the five EVM testnets) live in [`lib/register-v2-evm.ts`](lib/register-v2-evm.ts) and [`indexer/config.ts`](indexer/config.ts); `NEXT_PUBLIC_V2_<NETWORK>_REGISTRY` / `_ETR` and `<PREFIX>_V2_REGISTRY` / `_ETR` / `_START_BLOCK` only override them after a redeploy. Run `supabase/migrations_011_v2.sql` before starting the indexer with the v2 sources.
 
 Known limitation: a record can be front-run. Anyone watching the mempool can copy a pending `register` call and land it first, becoming the on-chain "signer" of that hash. For signed PDFs the embedded ICP-Brasil signature still identifies the real signer; for salted records the holder can re-register with a new salt. Fixing it on-chain needs a commit-reveal step.
 

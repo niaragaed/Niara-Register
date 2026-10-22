@@ -2,10 +2,11 @@
 // script/DeployV2.s.sol), deployed per EVM network. Addresses are public
 // information, so they live here like the v1 ones in register-contract.ts.
 //
-// They are null until the contracts are deployed on that network: fill them
-// from broadcast/DeployV2.s.sol/<chainId>/run-latest.json after each deploy.
-// For local testing, NEXT_PUBLIC_V2_<NETWORK>_REGISTRY / _ETR override them
-// (e.g. NEXT_PUBLIC_V2_SEPOLIA_REGISTRY).
+// Source: niara-contracts-Register, broadcast/DeployV2.s.sol/<chainId>/run-latest.json
+// (deployed 2026-10-22). Base, Robinhood, HyperEVM and Tempo share addresses
+// (same wallet, same nonce); Sepolia differs. A network not yet deployed stays
+// null. For local testing, NEXT_PUBLIC_V2_<NETWORK>_REGISTRY / _ETR override
+// them (e.g. NEXT_PUBLIC_V2_SEPOLIA_REGISTRY).
 import type { EvmNetwork } from "./register-contract";
 
 export type V2Deployment = {
@@ -13,12 +14,20 @@ export type V2Deployment = {
   etr: `0x${string}` | null;
 };
 
+const SHARED: V2Deployment = {
+  registry: "0x6cf0a197B106DaE24138230c281b4B91b1d4ff50",
+  etr: "0x09081D02b06f10D87DE7c99E48F8f07505D25f26",
+};
+
 const DEPLOYED: Record<EvmNetwork, V2Deployment> = {
-  sepolia: { registry: null, etr: null },
-  "base-sepolia": { registry: null, etr: null },
-  "robinhood-testnet": { registry: null, etr: null },
-  "hyperevm-testnet": { registry: null, etr: null },
-  "tempo-testnet": { registry: null, etr: null },
+  sepolia: {
+    registry: "0x03Ad59E1d10Cf1C5449AD4A923f0892b7aA9A547",
+    etr: "0x764A5de7baF5B33444c271E230007b81755aD424",
+  },
+  "base-sepolia": SHARED,
+  "robinhood-testnet": SHARED,
+  "hyperevm-testnet": SHARED,
+  "tempo-testnet": SHARED,
 };
 
 // Next.js inlines NEXT_PUBLIC_* only when written out literally.

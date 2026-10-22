@@ -171,7 +171,7 @@ async function solanaV2Loop(): Promise<void> {
 /** Starts the v2 sources. A missing migration 011 only turns them off. */
 async function startV2(): Promise<void> {
   for (const n of config.v2.evm.filter((n) => !n.enabled)) {
-    console.log(`[indexer] ${n.network}-v2: not configured (no ${n.network} v2 addresses/start block)`);
+    console.log(`[indexer] ${n.network}-v2: disabled`);
   }
   for (const v2 of v2EvmIndexers) {
     try {
