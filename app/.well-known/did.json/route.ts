@@ -11,7 +11,8 @@ export async function GET() {
     });
   } catch (e) {
     if (e instanceof IssuerNotConfigured) {
-      return NextResponse.json({ error: "issuer_not_configured" }, { status: 503 });
+      // The reason says which part of the configuration is wrong, never the key.
+      return NextResponse.json({ error: "issuer_not_configured", reason: e.reason }, { status: 503 });
     }
     throw e;
   }

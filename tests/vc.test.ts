@@ -12,7 +12,7 @@ import { ethers } from "ethers";
 import { Keypair } from "@solana/web3.js";
 import { ed25519 } from "@noble/curves/ed25519";
 import { buildCredential } from "../lib/vc/credential";
-import { didDocument, signCredential } from "../lib/vc/issuer";
+import { didDocument, issuerConfig, IssuerNotConfigured, signCredential } from "../lib/vc/issuer";
 import { verifyCredentialJwt, didWebUrl } from "../lib/vc/verify-credential";
 import { createEvmPresentation, createSolanaPresentation, verifyPresentation } from "../lib/vc/presentation";
 import { didPkh } from "../lib/networks";
@@ -69,6 +69,30 @@ async function main() {
   const [vh, vp, vs] = vpSol.split(".");
   const swapped = Buffer.from(vp, "base64url").toString().replace(holderSol, didPkh("solana-devnet", Keypair.generate().publicKey.toBase58()));
   assert.equal((await verifyPresentation(`${vh}.${Buffer.from(swapped).toString("base64url")}.${vs}`)).valid, false);
+
+  // Issuer configuration: copy-paste damage is forgiven; anything else gives a reason, never the key.
+  const good = process.env.NIARA_VC_PRIVATE_JWK!;
+  const reasonFor = (value: string | undefined) => {
+    if (value === undefined) delete process.env.NIARA_VC_PRIVATE_JWK;
+    else process.env.NIARA_VC_PRIVATE_JWK = value;
+    try {
+      issuerConfig();
+      return "ok";
+    } catch (e) {
+      assert.ok(e instanceof IssuerNotConfigured);
+      return e.reason;
+    }
+  };
+  assert.equal(reasonFor(`\uFEFF  ${good}\n`), "ok", "BOM and whitespace");
+  assert.equal(reasonFor(JSON.stringify(good)), "ok", "JSON pasted as a quoted string");
+  assert.equal(reasonFor(undefined), "missing");
+  assert.equal(reasonFor("   "), "missing");
+  assert.equal(reasonFor("{kty: EC"), "invalid_json");
+  const publicOnly = JSON.parse(good);
+  delete publicOnly.d;
+  assert.equal(reasonFor(JSON.stringify(publicOnly)), "not_a_private_key");
+  assert.equal(reasonFor(JSON.stringify({ ...JSON.parse(good), crv: "secp256k1" })), "unsupported_key");
+  process.env.NIARA_VC_PRIVATE_JWK = good;
 
   console.log("ok - vc");
 }

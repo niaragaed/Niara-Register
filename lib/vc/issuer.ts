@@ -12,7 +12,39 @@ import "server-only";
 import { CompactSign, importJWK, type JWK } from "jose";
 import { issuerDid, type DocumentRegistrationCredential } from "./credential";
 
-export class IssuerNotConfigured extends Error {}
+/** Why the issuer is unavailable. The reason is safe to show: it never contains the key. */
+export type IssuerProblem = "missing" | "invalid_json" | "not_a_private_key" | "unsupported_key";
+
+export class IssuerNotConfigured extends Error {
+  constructor(
+    message: string,
+    readonly reason: IssuerProblem,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Parses the env value, forgiving the usual copy-paste damage: a BOM, outer
+ * whitespace, or the whole JSON pasted as a quoted string.
+ */
+function parseJwk(raw: string): JWK | null {
+  let text = raw.replace(/^\uFEFF/, "").trim();
+  for (let i = 0; i < 2; i++) {
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (typeof value === "string") {
+      text = value.trim();
+      continue;
+    }
+    return value && typeof value === "object" ? (value as JWK) : null;
+  }
+  return null;
+}
 
 const PRIVATE_MEMBERS = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"] as const;
 
@@ -22,17 +54,16 @@ function algFor(jwk: JWK): string {
   if (jwk.kty === "EC" && jwk.crv === "P-384") return "ES384";
   if (jwk.kty === "OKP" && jwk.crv === "Ed25519") return "EdDSA";
   if (jwk.kty === "RSA") return "RS256";
-  throw new IssuerNotConfigured(`Unsupported issuer key type ${jwk.kty}/${jwk.crv ?? ""}.`);
+  throw new IssuerNotConfigured(`Unsupported issuer key type ${jwk.kty}/${jwk.crv ?? ""}.`, "unsupported_key");
 }
 
 export function issuerConfig() {
   const raw = process.env.NIARA_VC_PRIVATE_JWK;
-  if (!raw) throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not set.");
-  let jwk: JWK;
-  try {
-    jwk = JSON.parse(raw) as JWK;
-  } catch {
-    throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not valid JSON.");
+  if (!raw || !raw.trim()) throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not set.", "missing");
+  const jwk = parseJwk(raw);
+  if (!jwk) throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not valid JSON.", "invalid_json");
+  if (typeof jwk.d !== "string") {
+    throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK has no private part (d).", "not_a_private_key");
   }
   const domain = process.env.NIARA_DID_DOMAIN || "niara-register.vercel.app";
   const did = issuerDid(domain);
