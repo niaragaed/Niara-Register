@@ -109,6 +109,11 @@ export const en = {
     file: "File:",
     privacyNote:
       "Nothing is uploaded: the file stays in your browser. On-chain only the fingerprint goes, plus a commitment to the name and type that cannot be read without your salt.",
+    alreadyHint: "Registered this file before? Its proof package is the only way to find that record.",
+    alreadyHintLink: "check it on Verify",
+    seenHere: "This file was already registered from this browser:",
+    seenHereSalted:
+      "Registering it again creates a new, independent record with a new salt. The first record is still the proof that counts.",
     metaTitle: "Name and type (private, optional)",
     metaHint:
       "They do not go on-chain. Only a salted commitment is recorded, and they go into your proof package so you can prove them later.",
@@ -599,6 +604,11 @@ export const pt: Dictionary = {
     file: "Arquivo:",
     privacyNote:
       "Nada é enviado: o arquivo fica no seu navegador. On-chain vai só a impressão digital, mais um compromisso com o nome e o tipo que não pode ser lido sem o seu salt.",
+    alreadyHint: "Já registrou este arquivo antes? O pacote de prova é a única forma de encontrar aquele registro.",
+    alreadyHintLink: "confira em Verificar",
+    seenHere: "Este arquivo já foi registrado a partir deste navegador:",
+    seenHereSalted:
+      "Registrar de novo cria um registro novo e independente, com outro salt. O primeiro registro continua sendo a prova que vale.",
     metaTitle: "Nome e tipo (privados, opcionais)",
     metaHint:
       "Não vão para a blockchain. Só um compromisso com salt é registrado, e eles entram no seu pacote de prova para você provar depois.",

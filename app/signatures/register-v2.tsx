@@ -3,6 +3,7 @@
 // file privately, register it on one of the six networks with a soulbound
 // receipt, then build the holder's proof package (W3C VC 2.0 + presentation).
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Contract } from "ethers";
 import type { Signer } from "ethers";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
@@ -42,6 +43,7 @@ import {
 import type { SolanaProvider } from "@/lib/solana";
 import { createEvmPresentation, createSolanaPresentation } from "@/lib/vc/presentation";
 import { PROOF_PACKAGE_FORMAT, type ProofPackage } from "@/lib/proof-package";
+import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { PadesSigner } from "@/components/v2/pades-signer";
 import { PadesReport } from "@/components/v2/pades-report";
 import {
@@ -86,6 +88,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const [presentation, setPresentation] = useState<string | Record<string, unknown> | null>(null);
   const [proofBusy, setProofBusy] = useState<"issuing" | "presenting" | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
+  const [seenHere, setSeenHere] = useState<LocalRegistration[]>([]);
 
   const scheme: HashScheme = mode === "other" ? SCHEME_SALTED : SCHEME_SIGNED_PDF;
   const registered = status === "done";
@@ -105,7 +108,9 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
   async function adoptDocument(bytes: Uint8Array) {
     setDocBytes(bytes);
-    setFileSha(toHex(await sha256(bytes)));
+    const sha = toHex(await sha256(bytes));
+    setFileSha(sha);
+    setSeenHere(previousRegistrations(sha));
     setSalt(newSalt());
     if (mode !== "other") setReports(await inspectPdfSignatures(bytes));
   }
@@ -228,6 +233,9 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         );
         setTxHash(sig);
         setReceiptId((await fetchRecordV2(conn, recordHash))?.receiptAssetId ?? null);
+      }
+      if (fileSha) {
+        rememberRegistration(fileSha, { network, recordHash, at: new Date().toISOString() });
       }
       setStatus("done");
     } catch (e) {
@@ -369,6 +377,29 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         </span>
       </label>
       <p className="mt-3 max-w-xl font-body text-xs text-slate">{tr.privacyNote}</p>
+      {mode === "other" && (
+        <p className="mt-1 max-w-xl font-body text-xs text-slate">
+          {tr.alreadyHint}{" "}
+          <Link href="/verify" className={linkClass}>
+            {tr.alreadyHintLink} →
+          </Link>
+        </p>
+      )}
+      {seenHere.length > 0 && !registered && (
+        <Notice tone="neutral">
+          {tr.seenHere}
+          <ul className="mt-2 space-y-1">
+            {seenHere.map((e) => (
+              <li key={`${e.network}-${e.recordHash}`} className="font-mono text-xs">
+                <a href={`/verify/${e.network}/0x${e.recordHash}`} className={linkClass}>
+                  {tr.networks[e.network]} · 0x{e.recordHash.slice(0, 10)}… · {new Date(e.at).toLocaleString(locale === "pt" ? "pt-BR" : "en-US")}
+                </a>
+              </li>
+            ))}
+          </ul>
+          {mode === "other" && <p className="mt-2">{tr.seenHereSalted}</p>}
+        </Notice>
+      )}
 
       {mode === "sign" && original && !docBytes && (
         <PadesSigner
