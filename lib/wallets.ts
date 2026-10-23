@@ -6,6 +6,7 @@ import { Connection, Transaction, type TransactionInstruction } from "@solana/we
 import { EVM_NETWORKS, type EvmNetwork, type EvmNetworkConfig } from "./register-contract";
 import { SOLANA_RPC } from "./register-solana";
 import type { SolanaProvider } from "./solana";
+import type { Eip1193Provider } from "./evm-wallets";
 
 export class WalletMissing extends Error {}
 export class WalletRejected extends Error {}
@@ -25,6 +26,7 @@ export function evmChainLabel(chainId: number): string {
 export function isRejection(error: unknown): boolean {
   const e = error as { code?: number | string; message?: string; info?: { error?: { code?: number } } };
   return (
+    error instanceof WalletRejected ||
     e?.code === 4001 ||
     e?.code === "ACTION_REJECTED" ||
     e?.info?.error?.code === 4001 ||
@@ -39,9 +41,7 @@ function explorerUrls(cfg: EvmNetworkConfig): string[] | null {
   return origin.startsWith("https://") ? [`${origin}${cfg.explorer}`] : null;
 }
 
-export async function ensureEvmNetwork(network: EvmNetwork): Promise<void> {
-  const ethereum = window.ethereum;
-  if (!ethereum) throw new WalletMissing("no EVM wallet");
+export async function ensureEvmNetwork(network: EvmNetwork, ethereum: Eip1193Provider): Promise<void> {
   const cfg = EVM_NETWORKS[network];
   const current = await ethereum.request({ method: "eth_chainId" });
   if (String(current).toLowerCase() === cfg.chainIdHex) return;
@@ -65,10 +65,16 @@ export async function ensureEvmNetwork(network: EvmNetwork): Promise<void> {
   }
 }
 
-export async function connectEvm(network: EvmNetwork): Promise<{ signer: Signer; address: string }> {
-  if (!window.ethereum) throw new WalletMissing("no EVM wallet");
-  await window.ethereum.request({ method: "eth_requestAccounts" });
-  await ensureEvmNetwork(network);
+/**
+ * Connects the given wallet (picked by the user among the EIP-6963 announced
+ * ones, see components/v2/evm-wallet-picker.tsx) and puts it on `network`.
+ */
+export async function connectEvm(
+  network: EvmNetwork,
+  ethereum: Eip1193Provider,
+): Promise<{ signer: Signer; address: string }> {
+  await ethereum.request({ method: "eth_requestAccounts" });
+  await ensureEvmNetwork(network, ethereum);
   // Some wallets (or a second wallet that took over window.ethereum) accept the
   // switch request without switching. Never go on with the wrong chain: a
   // register call sent to an address with no contract would just burn gas.
@@ -76,12 +82,12 @@ export async function connectEvm(network: EvmNetwork): Promise<{ signer: Signer;
   const expected = Number(EVM_NETWORKS[network].chainIdHex);
   let chainId = 0;
   for (let i = 0; i < 12; i++) {
-    chainId = Number(await window.ethereum.request({ method: "eth_chainId" }));
+    chainId = Number(await ethereum.request({ method: "eth_chainId" }));
     if (chainId === expected) break;
     await new Promise((r) => setTimeout(r, 250));
   }
   if (chainId !== expected) throw new WrongEvmNetwork(chainId);
-  const signer = await new BrowserProvider(window.ethereum).getSigner();
+  const signer = await new BrowserProvider(ethereum).getSigner();
   return { signer, address: await signer.getAddress() };
 }
 
