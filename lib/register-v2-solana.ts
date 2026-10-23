@@ -51,6 +51,7 @@ export const PROGRAM_ERRORS_V2: Record<number, string> = {
   6015: "AmendmentMismatch",
   6016: "HashAlreadyUsed",
   6017: "UnknownTerminationReason",
+  6018: "InvalidDocumentType",
 };
 
 const pda = (seeds: Uint8Array[], program = SOLANA_PROGRAM_ID) =>
@@ -140,6 +141,7 @@ export type SolanaRecordV2 = {
   signer: string;
   recordHash: string;
   scheme: number;
+  documentType: number;
   metadataCommitment: string;
   timestamp: number;
   slot: number;
@@ -154,11 +156,13 @@ export async function fetchRecordV2(connection: Connection, hashHex: string): Pr
   const signer = rd.pubkey().toBase58();
   const recordHash = toHex(rd.bytes(32));
   const scheme = rd.u8();
+  const typeBytes = rd.bytes(2);
+  const documentType = typeBytes[0] | (typeBytes[1] << 8);
   const metadataCommitment = toHex(rd.bytes(32));
   const timestamp = rd.i64();
   const slot = Number(rd.u64());
   const receiptAssetId = rd.pubkey().toBase58();
-  return { signer, recordHash, scheme, metadataCommitment, timestamp, slot, receiptAssetId };
+  return { signer, recordHash, scheme, documentType, metadataCommitment, timestamp, slot, receiptAssetId };
 }
 
 export type SolanaTransferableRecord = {
@@ -216,6 +220,7 @@ export function registerV2Instruction(
   cfg: ReceiptConfig,
   recordHashHex: string,
   scheme: number,
+  documentType: number,
   metadataCommitmentHex: string,
 ): TransactionInstruction {
   const treeConfig = pda([cfg.merkleTree.toBytes()], MPL_BUBBLEGUM_ID);
@@ -237,7 +242,13 @@ export function registerV2Instruction(
       r(MPL_BUBBLEGUM_ID),
       r(SystemProgram.programId),
     ],
-    concat(DISC.registerV2, fromHex(recordHashHex), [scheme], fromHex(metadataCommitmentHex)),
+    concat(
+      DISC.registerV2,
+      fromHex(recordHashHex),
+      [scheme],
+      [documentType & 0xff, (documentType >> 8) & 0xff],
+      fromHex(metadataCommitmentHex),
+    ),
   );
 }
 

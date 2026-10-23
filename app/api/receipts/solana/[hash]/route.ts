@@ -20,6 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ hash
       verifyUrl: `${origin}/verify/solana-devnet/0x${hex}`,
       imageUrl: `${origin}/api/receipts/solana/${hex}/image`,
       scheme: record?.scheme,
+      documentType: record?.documentType,
       timestamp: record?.timestamp,
     }),
     { headers: { "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } },

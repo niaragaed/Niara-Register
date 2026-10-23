@@ -9,6 +9,7 @@ import { NotDeployed, readLegacyRecord, readRecordV2, type LegacyRecord, type On
 import { evmAddressLink } from "@/lib/register-contract";
 import { solanaExplorerLink } from "@/lib/register-solana";
 import { VerifyTool } from "./verify-tool";
+import { documentTypeName } from "@/lib/document-types";
 
 // Always read live from the chain: no database in the verification path.
 export const dynamic = "force-dynamic";
@@ -71,6 +72,7 @@ export default async function VerifyRecordPage({ params }: Props) {
           </Row>
           <Row label={t.registeredAt}>{formatTimestamp(record.timestamp, locale)}</Row>
           <Row label={t.scheme}>{record.scheme === 0 ? t.schemeSigned : t.schemeSalted}</Row>
+          <Row label={t.documentType}>{documentTypeName(record.documentType, locale)}</Row>
           <Row label={t.metadata}>
             {record.metadataCommitment === ZERO_HASH ? t.metadataNone : t.metadataPrivate}
           </Row>

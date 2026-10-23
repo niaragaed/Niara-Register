@@ -14,6 +14,7 @@ export type OnChainRecord = {
   signer: string;
   timestamp: number;
   scheme: number;
+  documentType: number;
   metadataCommitment: string;
   registry: string;
   receiptId: string;
@@ -45,7 +46,7 @@ export async function readRecordV2(network: RegisterNetwork, hashHex: string): P
     const { registry } = v2Deployment(network);
     if (!registry) throw new NotDeployed(`SignatureRegistryV2 is not deployed on ${network} yet.`);
     const contract = new ethers.Contract(registry, SIGNATURE_REGISTRY_V2_ABI, evmProvider(network));
-    const [exists, signer, timestamp, scheme, meta] = await contract.verify(`0x${hash}`);
+    const [exists, signer, timestamp, scheme, documentType, meta] = await contract.verify(`0x${hash}`);
     if (!exists) return null;
     return {
       version: 2,
@@ -53,6 +54,7 @@ export async function readRecordV2(network: RegisterNetwork, hashHex: string): P
       signer: String(signer),
       timestamp: Number(timestamp),
       scheme: Number(scheme),
+      documentType: Number(documentType),
       metadataCommitment: strip0x(String(meta)),
       registry,
       receiptId: BigInt(`0x${hash}`).toString(),
@@ -66,6 +68,7 @@ export async function readRecordV2(network: RegisterNetwork, hashHex: string): P
     signer: rec.signer,
     timestamp: rec.timestamp,
     scheme: rec.scheme,
+    documentType: rec.documentType,
     metadataCommitment: rec.metadataCommitment,
     registry: SOLANA_PROGRAM_ID.toBase58(),
     receiptId: rec.receiptAssetId,

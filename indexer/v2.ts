@@ -8,9 +8,9 @@ import { withBackoff, type BackoffOptions } from "./rate-limit";
  * v2 sources: SignatureRegistryV2 + TransferableRecordRegistry on the EVM
  * networks, and register_v2 + transferable records on the Solana program.
  *
- * v2 signatures go to registro_assinaturas_v2 (migration 011): there is no
- * document name or type anymore, only the record hash, the hash scheme, the
- * salted metadata commitment and the receipt id. Transferable-record events
+ * v2 signatures go to registro_assinaturas_v2 (migrations 011 and 012): no
+ * document name, only the record hash, the hash scheme, the public document
+ * type code (fixed list), the salted metadata commitment and the receipt id. Transferable-record events
  * go to registro_transferiveis_eventos.
  *
  * Each EVM network runs its own loop and checkpoint ("<network>-v2"); the
@@ -25,6 +25,8 @@ export type NewSignatureV2 = {
   /** "0x" + 64 lowercase hex. */
   hash_registro: string;
   esquema_hash: 0 | 1;
+  /** Public type code from the fixed list (1..11 today; never 0). */
+  tipo_documento: number;
   /** "0x" + 64 lowercase hex (all zeros = no metadata). */
   compromisso_metadados: string;
   assinante_endereco: string;
@@ -104,11 +106,14 @@ export function decodeEvmV2Log(
     const hash = hex32(parsed.args.recordHash as string);
     const scheme = Number(parsed.args.scheme);
     if (scheme !== 0 && scheme !== 1) return null;
+    const documentType = Number(parsed.args.documentType);
+    if (!(documentType > 0)) return null;
     return {
       signature: {
         ...base,
         hash_registro: hash,
         esquema_hash: scheme,
+        tipo_documento: documentType,
         compromisso_metadados: hex32(parsed.args.metadataCommitment as string),
         assinante_endereco: parsed.args.signer as string,
         recibo_id: BigInt(hash).toString(),
@@ -260,7 +265,7 @@ const EVENT_DISC: Record<string, number[]> = {
 const RECORD_V2_DISC = Buffer.from([255, 235, 84, 155, 197, 94, 92, 26]);
 
 export type SolanaV2Event =
-  | { kind: "DocumentRegisteredV2"; recordHash: string; signer: string; scheme: number; metadataCommitment: string; timestamp: number; slot: number; receiptAssetId: string }
+  | { kind: "DocumentRegisteredV2"; recordHash: string; signer: string; scheme: number; documentType: number; metadataCommitment: string; timestamp: number; slot: number; receiptAssetId: string }
   | { kind: "RecordIssued"; record: string; issuer: string; holder: string; documentHash: string; metadataCommitment: string }
   | { kind: "ControlTransferred"; record: string; from: string; to: string }
   | { kind: "AmendmentProposed"; record: string; newDocumentHash: string; newMetadataCommitment: string }
@@ -284,10 +289,11 @@ export function decodeSolanaV2Event(base64: string): SolanaV2Event | null {
         const recordHash = h();
         const signer = pk();
         const scheme = r.bytes(1)[0];
+        const documentType = r.bytes(2).readUInt16LE(0);
         const metadataCommitment = h();
         const timestamp = Number(r.i64());
         const slot = Number(r.u64());
-        return { kind, recordHash, signer, scheme, metadataCommitment, timestamp, slot, receiptAssetId: pk() };
+        return { kind, recordHash, signer, scheme, documentType, metadataCommitment, timestamp, slot, receiptAssetId: pk() };
       }
       case "RecordIssued":
         return { kind, record: pk(), issuer: pk(), holder: pk(), documentHash: h(), metadataCommitment: h() };
@@ -311,15 +317,19 @@ export function decodeSolanaV2Event(base64: string): SolanaV2Event | null {
 }
 
 /** The RecordV2 account fields the indexer cross-checks against the event. */
-export function decodeRecordV2Account(data: Buffer): { signer: string; recordHash: string; timestamp: number } | null {
+export function decodeRecordV2Account(
+  data: Buffer,
+): { signer: string; recordHash: string; documentType: number; timestamp: number } | null {
   if (data.length < 8 || !data.subarray(0, 8).equals(RECORD_V2_DISC)) return null;
   try {
     const r = new BorshReader(data.subarray(8));
     const signer = new PublicKey(r.bytes(32)).toBase58();
     const recordHash = r.bytes(32).toString("hex");
-    r.bytes(1 + 32);
+    r.bytes(1); // scheme
+    const documentType = r.bytes(2).readUInt16LE(0);
+    r.bytes(32); // metadata commitment
     const timestamp = Number(r.i64());
-    return { signer, recordHash, timestamp };
+    return { signer, recordHash, documentType, timestamp };
   } catch {
     return null;
   }
@@ -391,17 +401,18 @@ export function createSolanaV2Indexer(deps: {
         const pda = recordV2Address(e.recordHash, program);
         const account = await net(() => rpc.getAccountInfo(pda, "finalized"), `getAccountInfo ${pda.toBase58().slice(0, 8)}`);
         const acc = account && account.owner.equals(program) ? decodeRecordV2Account(Buffer.from(account.data)) : null;
-        if (!acc || acc.recordHash !== e.recordHash || acc.signer !== e.signer || acc.timestamp !== e.timestamp) {
+        if (!acc || acc.recordHash !== e.recordHash || acc.signer !== e.signer || acc.timestamp !== e.timestamp || acc.documentType !== e.documentType) {
           console.warn(`[indexer] solana-v2: event in ${signature} does not match account ${pda.toBase58()}; ignored`);
           continue;
         }
-        if (e.scheme !== 0 && e.scheme !== 1) continue;
+        if ((e.scheme !== 0 && e.scheme !== 1) || !(e.documentType > 0)) continue;
         await db.saveSignatureV2({
           ...base,
           log_index: index,
           slot: e.slot || txSlot,
           hash_registro: `0x${e.recordHash}`,
           esquema_hash: e.scheme,
+          tipo_documento: e.documentType,
           compromisso_metadados: `0x${e.metadataCommitment}`,
           assinante_endereco: e.signer,
           recibo_id: e.receiptAssetId,

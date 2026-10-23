@@ -9,10 +9,13 @@ export type ProofPackage = {
   network: RegisterNetwork;
   recordHash: string;
   scheme: 0 | 1;
+  /** Public type code (lib/document-types.ts). */
+  documentType: number;
   fileName?: string;
   fileSha256: string;
-  /** Hex; present for every v2 record (it also commits the name and type). */
+  /** Hex; present for every v2 record (it also commits the name). */
   salt: string;
+  /** type = the type slug, committed together with the name. */
   metadata?: { name: string; type: string };
   metadataCommitment: string;
   txHash?: string;

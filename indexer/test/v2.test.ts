@@ -66,8 +66,8 @@ async function evm() {
     const { topics, data } = iface.encodeEventLog(name, args);
     logs.push({ address, blockNumber: block, index: logs.length, transactionHash: ethers.zeroPadValue(ethers.toBeHex(logs.length + 1), 32), topics, data } as unknown as ethers.Log);
   };
-  add(REG, 100, reg, "DocumentRegistered", [h, ALICE, 1, meta, 1_800_000_000]);
-  add(OTHER, 100, reg, "DocumentRegistered", [h, BOB, 0, meta, 1_800_000_001]);
+  add(REG, 100, reg, "DocumentRegistered", [h, ALICE, 1, 4, meta, 1_800_000_000]);
+  add(OTHER, 100, reg, "DocumentRegistered", [h, BOB, 0, 1, meta, 1_800_000_001]);
   add(ETR, 101, etr, "RecordIssued", [BigInt(h), ALICE, BOB, h, ethers.ZeroHash]);
   add(ETR, 101, etr, "Transfer", [ethers.ZeroAddress, BOB, BigInt(h)]); // mint: ignored
   add(ETR, 102, etr, "Transfer", [BOB, ALICE, BigInt(h)]);
@@ -101,7 +101,7 @@ async function evm() {
   await idx.start();
   await idx.cycle();
   check(sigs.length === 1, "evm: one v2 signature (other contract ignored)");
-  check(sigs[0]?.hash_registro === h && sigs[0]?.esquema_hash === 1 && sigs[0]?.compromisso_metadados === meta, "evm: hash, scheme and commitment");
+  check(sigs[0]?.hash_registro === h && sigs[0]?.esquema_hash === 1 && sigs[0]?.tipo_documento === 4 && sigs[0]?.compromisso_metadados === meta, "evm: hash, scheme, type and commitment");
   check(sigs[0]?.recibo_id === BigInt(h).toString(), "evm: receipt id = token id");
   check(sigs[0]?.assinado_em === new Date(1_800_000_000_000).toISOString(), "evm: date from the event");
   check(events.map((e) => e.tipo_evento).join(",") === "emitido,controle_transferido,extinto", "evm: transferable events, mint Transfer skipped");
@@ -136,13 +136,14 @@ async function solanaOffline() {
     hash,
     enc.pk(signer),
     Buffer.from([1]),
+    Buffer.from([4, 0]),
     meta,
     enc.i64(1_800_000_000),
     enc.u64(42),
     enc.pk(asset),
   ]);
   const decoded = decodeSolanaV2Event(event.toString("base64"));
-  check(decoded?.kind === "DocumentRegisteredV2" && decoded.receiptAssetId === asset.toBase58(), "solana: DocumentRegisteredV2 decodes");
+  check(decoded?.kind === "DocumentRegisteredV2" && decoded.receiptAssetId === asset.toBase58() && decoded.documentType === 4, "solana: DocumentRegisteredV2 decodes");
 
   // Account matching the event (RecordV2 layout).
   const account = Buffer.concat([
@@ -150,6 +151,7 @@ async function solanaOffline() {
     enc.pk(signer),
     hash,
     Buffer.from([1]),
+    Buffer.from([4, 0]),
     meta,
     enc.i64(1_800_000_000),
     enc.u64(42),
@@ -200,7 +202,7 @@ async function solanaOffline() {
   });
   await idx.start();
   await idx.cycle();
-  check(sigs.length === 1 && sigs[0].hash_registro === `0x${hash.toString("hex")}` && sigs[0].recibo_id === asset.toBase58(), "solana: v2 signature saved from the account-checked event");
+  check(sigs.length === 1 && sigs[0].hash_registro === `0x${hash.toString("hex")}` && sigs[0].recibo_id === asset.toBase58() && sigs[0].tipo_documento === 4, "solana: v2 signature saved from the account-checked event");
   check(etr.length === 1 && etr[0].tipo_evento === "emitido" && etr[0].dados.portador === asset.toBase58(), "solana: RecordIssued saved");
   check(idx.checkpoint === 11, "solana: checkpoint = highest slot");
 

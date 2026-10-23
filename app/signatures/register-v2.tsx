@@ -43,6 +43,7 @@ import {
 import type { SolanaProvider } from "@/lib/solana";
 import { createEvmPresentation, createSolanaPresentation } from "@/lib/vc/presentation";
 import { PROOF_PACKAGE_FORMAT, type ProofPackage } from "@/lib/proof-package";
+import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { PadesSigner } from "@/components/v2/pades-signer";
 import { PadesReport } from "@/components/v2/pades-report";
@@ -75,7 +76,10 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const [fileSha, setFileSha] = useState<string | null>(null);
   const [salt, setSalt] = useState<Uint8Array>(() => newSalt());
   const [name, setName] = useState("");
+  // Type slug from the fixed list (lib/document-types.ts); its code goes on-chain.
   const [type, setType] = useState("");
+  const typeCode = documentTypeBySlug(type)?.code ?? 0;
+  const nameAndTypeOk = name.trim() !== "" && typeCode > 0;
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [existing, setExisting] = useState<Existing>(null);
   const [status, setStatus] = useState<"idle" | "reading" | "connecting" | "checking" | "registering" | "done">("idle");
@@ -212,13 +216,13 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   }
 
   async function register() {
-    if (!wallet || !recordHash || !metaCommit) return;
+    if (!wallet || !recordHash || !metaCommit || !nameAndTypeOk) return;
     setError(null);
     setStatus("registering");
     try {
       if (wallet.kind === "evm" && isEvm(network)) {
         const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, wallet.signer);
-        const tx = await registry.register(`0x${recordHash}`, scheme, `0x${metaCommit}`);
+        const tx = await registry.register(`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`);
         const receipt = await tx.wait();
         setTxHash(receipt?.hash ?? tx.hash);
         setReceiptId(BigInt(`0x${recordHash}`).toString());
@@ -229,7 +233,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         const sig = await sendSolana(
           wallet.provider,
           computeBudgetIx(),
-          registerV2Instruction(wallet.provider.publicKey!, cfg, recordHash, scheme, metaCommit),
+          registerV2Instruction(wallet.provider.publicKey!, cfg, recordHash, scheme, typeCode, metaCommit),
         );
         setTxHash(sig);
         setReceiptId((await fetchRecordV2(conn, recordHash))?.receiptAssetId ?? null);
@@ -247,16 +251,17 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
   function proofPackage(): ProofPackage | null {
     if (!recordHash || !fileSha || !metaCommit) return null;
-    const hasMeta = name.trim() !== "" || type.trim() !== "";
+    const hasMeta = name.trim() !== "" || type !== "";
     return {
       format: PROOF_PACKAGE_FORMAT,
       network,
       recordHash,
       scheme,
+      documentType: typeCode,
       fileName: fileName ?? undefined,
       fileSha256: fileSha,
       salt: toHex(salt),
-      ...(hasMeta ? { metadata: { name: name.trim(), type: type.trim() } } : {}),
+      ...(hasMeta ? { metadata: { name: name.trim(), type } } : {}),
       metadataCommitment: metaCommit,
       txHash: txHash ?? undefined,
       receiptId: receiptId ?? undefined,
@@ -443,14 +448,19 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
             </label>
             <label className="block">
               <span className="block font-mono text-xs uppercase tracking-wide text-slate">{tr.typeField}</span>
-              <input
+              <select
                 value={type}
                 disabled={locked}
                 onChange={(e) => setType(e.target.value)}
-                placeholder={tr.typePlaceholder}
-                maxLength={64}
                 className={inputClass}
-              />
+              >
+                <option value="">{tr.typePlaceholder}</option>
+                {DOCUMENT_TYPES.map((d) => (
+                  <option key={d.slug} value={d.slug}>
+                    {locale === "pt" ? d.pt : d.en}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 
@@ -478,11 +488,14 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               ) : (
                 <button
                   className={primaryButton}
-                  disabled={evmUnavailable || status === "registering" || existing?.version === 2}
+                  disabled={evmUnavailable || status === "registering" || existing?.version === 2 || !nameAndTypeOk}
                   onClick={register}
                 >
                   {tr.register}
                 </button>
+              )}
+              {wallet && !nameAndTypeOk && (
+                <span className="font-body text-xs text-slate">{tr.nameTypeRequired}</span>
               )}
               {wallet && (
                 <span className="font-mono text-xs text-slate">

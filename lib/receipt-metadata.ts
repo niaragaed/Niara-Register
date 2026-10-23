@@ -1,7 +1,8 @@
 // Metadata of the soulbound receipts. On EVM it is generated on-chain by
 // SignatureRegistryV2.tokenURI; on Solana the cNFT points to
 // /api/receipts/solana/<hash>, which serves the same JSON shape. Nothing
-// private goes in: hash, date, scheme and the verification link.
+// private goes in: hash, date, scheme, public type and the verification link.
+import { documentTypeName } from "./document-types";
 
 export function receiptSvg(hashHex: string): string {
   const h = `0x${hashHex}`;
@@ -23,6 +24,7 @@ export function receiptJson(opts: {
   verifyUrl: string;
   imageUrl: string;
   scheme?: number;
+  documentType?: number;
   timestamp?: number;
 }) {
   const attributes: { trait_type: string; value: string | number; display_type?: string }[] = [
@@ -33,6 +35,9 @@ export function receiptJson(opts: {
       trait_type: "Hash scheme",
       value: opts.scheme === 0 ? "Signed PDF (PAdES) SHA-256" : "Salted SHA-256",
     });
+  }
+  if (opts.documentType) {
+    attributes.push({ trait_type: "Document type", value: documentTypeName(opts.documentType, "en") });
   }
   if (opts.timestamp) attributes.push({ display_type: "date", trait_type: "Registered at", value: opts.timestamp });
   return {

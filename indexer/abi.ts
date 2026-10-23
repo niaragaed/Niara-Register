@@ -28,7 +28,7 @@ export const OFERTA_ORQUESTRADOR_ABI = [
 
 // From niaragaed/niara-contracts-Register, src/v2/SignatureRegistryV2.sol (events only).
 export const SIGNATURE_REGISTRY_V2_ABI = [
-  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, bytes32 metadataCommitment, uint256 timestamp)",
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, uint256 timestamp)",
 ];
 
 // From niaragaed/niara-contracts-Register, src/mletr/TransferableRecordRegistry.sol (events only).

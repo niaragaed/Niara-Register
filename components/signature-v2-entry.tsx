@@ -4,10 +4,11 @@ import { solanaExplorerLink } from "@/lib/register-solana";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { formatDate } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/locale";
+import { documentTypeName } from "@/lib/document-types";
 
 const truncate = (v: string, head = 8, tail = 4) => (v.length <= head + tail + 3 ? v : `${v.slice(0, head)}...${v.slice(-tail)}`);
 
-/** A v2 record in the public history: no name or type exists to show. */
+/** A v2 record in the public history: the public type, never the (private) name. */
 export function SignatureV2Entry({ record, locale }: { record: SignatureV2Row; locale: Locale }) {
   const t = dictionaries[locale];
   const txLink =
@@ -17,7 +18,8 @@ export function SignatureV2Entry({ record, locale }: { record: SignatureV2Row; l
       <div className="flex-1">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <p className="font-body text-[15px] text-ink">
-            {t.signing.privateDocument}
+            {record.tipo_documento ? documentTypeName(record.tipo_documento, locale) : t.signing.privateDocument}
+            <span className="text-slate"> · {t.signing.privateName}</span>
             <span className="text-slate"> · {record.esquema_hash === 0 ? t.verify.schemeSigned : t.verify.schemeSalted}</span>
           </p>
           <time className="font-mono text-xs text-slate">{formatDate(record.assinado_em, locale)}</time>

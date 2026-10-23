@@ -16,6 +16,7 @@ import {
 } from "@/lib/commitments";
 import { buildCredential, type DocumentRegistrationSubject } from "@/lib/vc/credential";
 import { IssuerNotConfigured, issuerConfig, signCredential } from "@/lib/vc/issuer";
+import { documentTypeBySlug, documentTypeName } from "@/lib/document-types";
 import { caip2, didPkh, isEvm, isRegisterNetwork } from "@/lib/networks";
 import { NotDeployed, readRecordV2 } from "@/lib/v2-reader";
 
@@ -74,6 +75,8 @@ export async function POST(request: Request) {
     if ((await saltedRecordHash(fileSha256, fromHex(salt))) !== recordHash) return bad(422, "file_hash_mismatch");
   }
   const hasMetadata = name !== "" || type !== "";
+  // The committed type slug must be the one whose code is on-chain.
+  if (type !== "" && documentTypeBySlug(type)?.code !== record.documentType) return bad(422, "document_type_mismatch");
   if (hasMetadata) {
     if (!salt) return bad(422, "salt_required_for_metadata");
     if ((await metadataCommitment({ name, type }, fromHex(salt))) !== record.metadataCommitment) {
@@ -90,6 +93,7 @@ export async function POST(request: Request) {
       hashScheme: record.scheme === SCHEME_SIGNED_PDF ? "signed-pdf-sha256" : "salted-sha256",
       ...(fileSha256 || record.scheme === SCHEME_SIGNED_PDF ? { fileSha256: fileSha256 ?? recordHash } : {}),
       ...(salt ? { salt } : {}),
+      documentType: { code: record.documentType, label: documentTypeName(record.documentType, "en") },
       metadataCommitment: record.metadataCommitment,
       ...(hasMetadata ? { name, type } : {}),
     },

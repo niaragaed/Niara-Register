@@ -24,6 +24,8 @@ export type DocumentRegistrationSubject = {
     fileSha256?: string;
     /** 32-byte salt, hex. Needed to re-verify a salted record or the metadata. */
     salt?: string;
+    /** Public type from the fixed list (on-chain code + English label). */
+    documentType: { code: number; label: string };
     metadataCommitment: string;
     name?: string;
     type?: string;

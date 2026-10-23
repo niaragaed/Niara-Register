@@ -14,14 +14,17 @@ export type V2Deployment = {
   etr: `0x${string}` | null;
 };
 
+// The registry was redeployed to add the public document type; the first v2
+// registry (0x6cf0a197… / Sepolia 0x03Ad59E1…, no type) is retired. Until the
+// new one is deployed, `registry` is null and the site says so.
 const SHARED: V2Deployment = {
-  registry: "0x6cf0a197B106DaE24138230c281b4B91b1d4ff50",
+  registry: null,
   etr: "0x09081D02b06f10D87DE7c99E48F8f07505D25f26",
 };
 
 const DEPLOYED: Record<EvmNetwork, V2Deployment> = {
   sepolia: {
-    registry: "0x03Ad59E1d10Cf1C5449AD4A923f0892b7aA9A547",
+    registry: null,
     etr: "0x764A5de7baF5B33444c271E230007b81755aD424",
   },
   "base-sepolia": SHARED,
@@ -65,16 +68,17 @@ export function v2Deployment(network: EvmNetwork): V2Deployment {
 }
 
 export const SIGNATURE_REGISTRY_V2_ABI = [
-  "function register(bytes32 recordHash, uint8 scheme, bytes32 metadataCommitment) returns (uint256 tokenId)",
-  "function verify(bytes32 recordHash) view returns (bool exists, address signer, uint256 timestamp, uint8 scheme, bytes32 metadataCommitment)",
+  "function register(bytes32 recordHash, uint8 scheme, uint16 documentType, bytes32 metadataCommitment) returns (uint256 tokenId)",
+  "function verify(bytes32 recordHash) view returns (bool exists, address signer, uint256 timestamp, uint8 scheme, uint16 documentType, bytes32 metadataCommitment)",
   "function tokenURI(uint256 tokenId) view returns (string)",
   "function locked(uint256 tokenId) view returns (bool)",
   "function ownerOf(uint256 tokenId) view returns (address)",
-  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, bytes32 metadataCommitment, uint256 timestamp)",
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, uint256 timestamp)",
   "event Locked(uint256 tokenId)",
   "error AlreadyRegistered(bytes32 recordHash)",
   "error InvalidHash()",
   "error UnknownScheme(uint8 scheme)",
+  "error InvalidDocumentType()",
   "error Soulbound()",
 ] as const;
 

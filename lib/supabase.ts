@@ -96,6 +96,8 @@ export type SignatureV2Row = {
   rede: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet" | "solana-devnet";
   hash_registro: string;
   esquema_hash: 0 | 1;
+  /** Public type code (lib/document-types.ts); the name stays private. */
+  tipo_documento: number;
   compromisso_metadados: string;
   assinante_endereco: string;
   recibo_id: string;

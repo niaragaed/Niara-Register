@@ -30,7 +30,7 @@ async function main() {
   const holderEvm = didPkh("sepolia", evmWallet.address);
   const credential = buildCredential(doc.id, {
     id: holderEvm,
-    document: { recordHash: "ab".repeat(32), hashScheme: "signed-pdf-sha256", metadataCommitment: "0".repeat(64) },
+    document: { recordHash: "ab".repeat(32), hashScheme: "signed-pdf-sha256", documentType: { code: 1, label: "Contract" }, metadataCommitment: "0".repeat(64) },
     registration: {
       network: "sepolia",
       chainId: "eip155:11155111",
