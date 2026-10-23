@@ -38,6 +38,17 @@ export const TRUSTED_WALLETS: TrustedWallet[] = [
   { id: "backpack", name: "Backpack", installUrl: "https://backpack.app/downloads", evm: ["app.backpack"], solana: ["Backpack"] },
 ];
 
+/**
+ * The icon a wallet announced about itself, if it is an inline image. Shown
+ * only through <img>, which never runs scripts, so any data:image type is
+ * fine; case and surrounding whitespace vary between wallets.
+ */
+export function walletIcon(icon: unknown): string | null {
+  if (typeof icon !== "string") return null;
+  const value = icon.trim();
+  return /^data:image\/[a-z0-9.+-]+[;,]/i.test(value) ? value : null;
+}
+
 export function trustedFor(family: WalletFamily): TrustedWallet[] {
   return TRUSTED_WALLETS.filter((w) => (family === "evm" ? w.evm : w.solana));
 }

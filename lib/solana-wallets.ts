@@ -8,6 +8,7 @@
 // standard's app side) instead of pulling in @wallet-standard/app.
 import { PublicKey, Transaction } from "@solana/web3.js";
 import type { SolanaProvider } from "./solana";
+import { walletIcon } from "./wallet-catalog";
 import { WalletRejected } from "./wallets";
 
 type StandardAccount = { address: string; publicKey: Uint8Array; chains?: readonly string[] };
@@ -59,8 +60,7 @@ function start() {
 }
 start();
 
-const safeIcon = (icon: unknown) =>
-  typeof icon === "string" && /^data:image\/(svg\+xml|png|jpeg|webp|gif)[;,]/.test(icon) ? icon : null;
+const safeIcon = walletIcon;
 
 function adapt(wallet: StandardWallet): SolanaProvider {
   const connectFeature = wallet.features["standard:connect"] as ConnectFeature;

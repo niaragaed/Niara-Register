@@ -48,7 +48,18 @@ export function useWalletPicker(texts: WalletPickerTexts) {
     keyOf: (o: T) => string,
   ): Promise<T> {
     const last = rememberedWallet(family);
-    const items: Item[] = options.map((o) => ({ key: keyOf(o), name: o.name, icon: o.icon, trusted: matchTrusted(family, keyOf(o)) }));
+    // A wallet that announced no icon for this family may have announced one for
+    // the other (Phantom does both): use the wallet's own icon from there.
+    const otherIcons = new Map<string, string>();
+    const others =
+      family === "evm"
+        ? (await discoverSolanaWallets(0)).map((o) => ({ t: matchTrusted("solana", o.key), icon: o.icon }))
+        : (await discoverEvmWallets(0)).map((o) => ({ t: matchTrusted("evm", o.rdns), icon: o.icon }));
+    for (const o of others) if (o.t && o.icon) otherIcons.set(o.t.id, o.icon);
+    const items: Item[] = options.map((o) => {
+      const trusted = matchTrusted(family, keyOf(o));
+      return { key: keyOf(o), name: o.name, icon: o.icon ?? (trusted ? otherIcons.get(trusted.id) ?? null : null), trusted };
+    });
     const present = new Set(items.map((i) => i.trusted?.id).filter(Boolean));
     const missing = trustedFor(family).filter((w) => !present.has(w.id));
     const key = await new Promise<string | null>((resolve) => {
