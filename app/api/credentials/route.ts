@@ -54,7 +54,9 @@ export async function POST(request: Request) {
   try {
     issuerConfig();
   } catch (e) {
-    if (e instanceof IssuerNotConfigured) return bad(503, "issuer_not_configured");
+    if (e instanceof IssuerNotConfigured) {
+      return NextResponse.json({ error: "issuer_not_configured", reason: e.reason }, { status: 503 });
+    }
     throw e;
   }
 
