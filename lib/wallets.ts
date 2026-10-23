@@ -16,6 +16,12 @@ export class WrongEvmNetwork extends Error {
   }
 }
 
+/** "Sepolia (11155111)" for chains the site knows, the bare id otherwise. */
+export function evmChainLabel(chainId: number): string {
+  const known = Object.values(EVM_NETWORKS).find((n) => Number(n.chainIdHex) === chainId);
+  return known ? `${known.chainName} (${chainId})` : `chain id ${chainId}`;
+}
+
 export function isRejection(error: unknown): boolean {
   const e = error as { code?: number | string; message?: string; info?: { error?: { code?: number } } };
   return (
@@ -66,8 +72,15 @@ export async function connectEvm(network: EvmNetwork): Promise<{ signer: Signer;
   // Some wallets (or a second wallet that took over window.ethereum) accept the
   // switch request without switching. Never go on with the wrong chain: a
   // register call sent to an address with no contract would just burn gas.
-  const chainId = Number(await window.ethereum.request({ method: "eth_chainId" }));
-  if (chainId !== Number(EVM_NETWORKS[network].chainIdHex)) throw new WrongEvmNetwork(chainId);
+  // Some wallets answer the switch before eth_chainId reflects it: wait up to 3 s.
+  const expected = Number(EVM_NETWORKS[network].chainIdHex);
+  let chainId = 0;
+  for (let i = 0; i < 12; i++) {
+    chainId = Number(await window.ethereum.request({ method: "eth_chainId" }));
+    if (chainId === expected) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (chainId !== expected) throw new WrongEvmNetwork(chainId);
   const signer = await new BrowserProvider(window.ethereum).getSigner();
   return { signer, address: await signer.getAddress() };
 }

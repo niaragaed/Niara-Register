@@ -35,6 +35,7 @@ import {
   WalletMissing,
   WrongEvmNetwork,
   connectEvm,
+  evmChainLabel,
   connectSolana,
   downloadBytes,
   isRejection,
@@ -166,7 +167,11 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
   function explain(e: unknown): string {
     if (e instanceof WalletMissing) return isEvm(network) ? tr.noWallet : tr.noSolanaWallet;
-    if (e instanceof WrongEvmNetwork) return tr.wrongNetwork.replace("{chain}", String(e.actualChainId));
+    if (e instanceof WrongEvmNetwork && isEvm(network)) {
+      return tr.wrongNetwork
+        .replaceAll("{chain}", evmChainLabel(e.actualChainId))
+        .replaceAll("{expected}", evmChainLabel(Number(EVM_NETWORKS[network].chainIdHex)));
+    }
     if (e instanceof ContractNotOnWallet) return tr.contractNotOnWallet;
     if (isRejection(e)) return tr.rejected;
     const reason = !isEvm(network) ? solanaV2ErrorReason(e) : null;
