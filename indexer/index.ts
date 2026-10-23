@@ -7,6 +7,7 @@ import { createIndexer } from "./indexer";
 import { createSolanaIndexer, SOURCE_SOLANA } from "./solana";
 import { createPmesSolanaIndexer, SOURCE_PMES_SOLANA } from "./pmes-solana";
 import { createEvmSignatureIndexer } from "./evm-signatures";
+import { createEvmV2Indexer, createSolanaV2Indexer, SOURCE_SOLANA_V2 } from "./v2";
 import { Tokens } from "./tokens";
 import { Connection } from "@solana/web3.js";
 
@@ -88,6 +89,121 @@ const extraEvmIndexers = config.extraEvmNetworks
       }),
     };
   });
+
+// v2 sources: one loop per EVM network with v2 contracts configured, plus the
+// Solana v2 source. Each has its own checkpoint and never blocks the others.
+const v2EvmIndexers = config.v2.evm
+  .filter((n) => n.enabled)
+  .map((n) => {
+    const req = new ethers.FetchRequest(n.rpcUrl);
+    req.retryFunc = async () => false;
+    const networkProvider = new ethers.JsonRpcProvider(req, n.chainId, { staticNetwork: true });
+    return {
+      cfg: n,
+      idx: createEvmV2Indexer({
+        network: n.network,
+        source: n.source,
+        rpc: {
+          getBlockNumber: () => networkProvider.getBlockNumber(),
+          getLogs: (f) => networkProvider.getLogs(f),
+          getBlock: async (b) => {
+            const block = await networkProvider.getBlock(b);
+            return block ? { timestamp: block.timestamp } : null;
+          },
+        },
+        db,
+        registry: n.registry,
+        etr: n.etr,
+        deployBlock: n.deployBlock,
+        chunk: n.chunk,
+        maxChunksPerCycle: n.maxChunksPerCycle,
+        confirmations: n.confirmations,
+        chunkIntervalMs: n.chunkIntervalMs,
+        backoff: config.backoff,
+        sleep,
+      }),
+    };
+  });
+
+const solanaV2Indexer = config.v2.solana.enabled
+  ? createSolanaV2Indexer({
+      rpc: new Connection(config.solana.rpcUrl, {
+        commitment: "finalized",
+        disableRetryOnRateLimit: true,
+      }) as unknown as Parameters<typeof createSolanaV2Indexer>[0]["rpc"],
+      db,
+      programId: config.solana.programId,
+      startSlot: config.v2.solana.startSlot,
+      backoff: config.backoff,
+      sleep,
+    })
+  : null;
+
+async function v2EvmLoop({ cfg, idx }: (typeof v2EvmIndexers)[number]): Promise<void> {
+  for (;;) {
+    let upToDate = true;
+    try {
+      const r = await idx.cycle();
+      upToDate = r.upToDate;
+      if (r.saved > 0) console.log(`[indexer] ${cfg.network}-v2: ${r.saved} row(s) saved — checkpoint block ${idx.checkpoint}`);
+    } catch (error) {
+      console.error(`[indexer] ${cfg.network}-v2: cycle error, retrying in the next one:`, error);
+    }
+    if (upToDate) await sleep(cfg.pollIntervalMs);
+  }
+}
+
+async function solanaV2Loop(): Promise<void> {
+  if (!solanaV2Indexer) return;
+  for (;;) {
+    try {
+      const { transactions, saved } = await solanaV2Indexer.cycle();
+      if (transactions > 0) {
+        console.log(`[indexer] solana-v2: ${transactions} new transaction(s), ${saved} row(s) saved — checkpoint slot ${solanaV2Indexer.checkpoint}`);
+      }
+    } catch (error) {
+      console.error("[indexer] solana-v2: cycle error, retrying in the next one:", error);
+    }
+    await sleep(config.v2.solana.pollIntervalMs);
+  }
+}
+
+/** Starts the v2 sources. A missing migration 011 only turns them off. */
+async function startV2(): Promise<void> {
+  for (const n of config.v2.evm.filter((n) => !n.enabled)) {
+    console.log(`[indexer] ${n.network}-v2: disabled`);
+  }
+  for (const v2 of v2EvmIndexers) {
+    try {
+      await v2.idx.start();
+      console.log(`[indexer] ${v2.cfg.network}-v2: registry ${v2.cfg.registry ?? "-"} etr ${v2.cfg.etr ?? "-"} — checkpoint block ${v2.idx.checkpoint}`);
+      if (config.dryRun) {
+        const r = await v2.idx.cycle();
+        console.log(`[dry-run] ${v2.cfg.network}-v2: ${r.saved} row(s) would be saved (up to date: ${r.upToDate})`);
+      } else {
+        void v2EvmLoop(v2);
+      }
+    } catch (error) {
+      console.error(`[indexer] ${v2.cfg.network}-v2: did not start:`, error);
+    }
+  }
+  if (solanaV2Indexer) {
+    try {
+      await solanaV2Indexer.start();
+      console.log(`[indexer] Solana v2: checkpoint (${SOURCE_SOLANA_V2}) slot ${solanaV2Indexer.checkpoint}`);
+      if (config.dryRun) {
+        const r = await solanaV2Indexer.cycle();
+        console.log(`[dry-run] solana-v2: ${r.transactions} transaction(s), ${r.saved} row(s) would be saved`);
+      } else {
+        void solanaV2Loop();
+      }
+    } catch (error) {
+      console.error("[indexer] Solana v2: did not start:", error);
+    }
+  } else {
+    console.log("[indexer] Solana v2: disabled (SOLANA_V2_DESATIVADO=1)");
+  }
+}
 
 /** Same contract as solanaLoop: never brings the process down or blocks the other networks. */
 async function extraEvmLoop({ cfg, idx }: (typeof extraEvmIndexers)[number]): Promise<void> {
@@ -201,6 +317,8 @@ async function loop(): Promise<void> {
   } else {
     console.log("[indexer] PMEs Solana: disabled (PMES_SOLANA_DESATIVADO=1)");
   }
+
+  await startV2();
 
   if (config.dryRun) console.log("[indexer] DRY-RUN — nothing will be written to the database");
   console.log(`[indexer] Niara-Register — checkpoints: ${JSON.stringify(indexer.checkpoints)}`);

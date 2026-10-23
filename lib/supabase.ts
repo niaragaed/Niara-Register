@@ -89,3 +89,22 @@ export type SignatureRow = {
   assinado_em: string | null;
   status: "pendente" | "assinado_onchain";
 };
+
+/** A registro_assinaturas_v2 row (migration 011): no name or type, by design. */
+export type SignatureV2Row = {
+  id: string;
+  rede: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet" | "solana-devnet";
+  hash_registro: string;
+  esquema_hash: 0 | 1;
+  /** Public type code (lib/document-types.ts); the name stays private. */
+  tipo_documento: number;
+  compromisso_metadados: string;
+  assinante_endereco: string;
+  recibo_id: string;
+  tx_hash: string;
+  log_index: number;
+  endereco_contrato: string;
+  bloco: number | null;
+  slot: number | null;
+  assinado_em: string;
+};

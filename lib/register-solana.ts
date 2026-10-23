@@ -1,6 +1,9 @@
-// Minimal client for the Niara-Register program on Solana (niara-register-solana).
+// Minimal client for the Niara-Register program on Solana (niara-register-solana),
+// v1 records only: reading them. The program no longer accepts new v1 records
+// (they stored name/type in plain text); new registrations go through
+// lib/register-v2-solana.ts.
 //
-// Same semantics as RegistroAssinaturas.sol (Sepolia): SHA-256 hash + signer +
+// v1 semantics, same as RegistroAssinaturas.sol: SHA-256 hash + signer +
 // timestamp + name/type, one record per hash, immutable.
 //
 // No Anchor client in the browser, on purpose: the instruction and the account
@@ -11,8 +14,6 @@
 import {
   Connection,
   PublicKey,
-  SystemProgram,
-  TransactionInstruction,
 } from "@solana/web3.js";
 
 /** The program's public address (public information, like the EVM contract's). */
@@ -25,23 +26,11 @@ export const SOLANA_CLUSTER = "devnet" as const;
 export const SOLANA_RPC =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 
-/** Limits in UTF-8 bytes, equal to the program's (constants.rs). */
-export const MAX_NAME_BYTES = 128;
-export const MAX_TYPE_BYTES = 32;
-
 // On-chain PDA seed of the program.
 const SIGNATURE_SEED = new TextEncoder().encode("assinatura");
-const REGISTER_DISC = Uint8Array.from([52, 163, 233, 194, 164, 203, 200, 64]);
 const SIGNATURE_ACCOUNT_DISC = Uint8Array.from([
   68, 120, 123, 196, 84, 89, 85, 188,
 ]);
-
-/** The program's custom error codes (error.rs, Anchor's 6000 base); names are on-chain. */
-export const PROGRAM_ERRORS = {
-  6000: "HashInvalido",
-  6001: "NomeInvalido",
-  6002: "TipoInvalido",
-} as const;
 
 export type SolanaRecord = {
   signer: string;
@@ -50,10 +39,6 @@ export type SolanaRecord = {
   documentName: string;
   documentType: string;
 };
-
-export function utf8Bytes(text: string): number {
-  return new TextEncoder().encode(text).length;
-}
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
@@ -77,53 +62,6 @@ export function recordAddress(hashHex: string): PublicKey {
 
 export function solanaConnection(): Connection {
   return new Connection(SOLANA_RPC, "confirmed");
-}
-
-// --- Borsh encoding (only what this program uses) ---------------------------
-
-function borshString(text: string): Uint8Array {
-  const body = new TextEncoder().encode(text);
-  const out = new Uint8Array(4 + body.length);
-  new DataView(out.buffer).setUint32(0, body.length, true);
-  out.set(body, 4);
-  return out;
-}
-
-function concat(...parts: Uint8Array[]): Uint8Array {
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const out = new Uint8Array(total);
-  let pos = 0;
-  for (const p of parts) {
-    out.set(p, pos);
-    pos += p.length;
-  }
-  return out;
-}
-
-export function registerInstruction(
-  signer: PublicKey,
-  hashHex: string,
-  documentName: string,
-  documentType: string,
-): TransactionInstruction {
-  const hash = hexToBytes(hashHex);
-  const data = concat(
-    REGISTER_DISC,
-    hash,
-    borshString(documentName),
-    borshString(documentType),
-  );
-
-  return new TransactionInstruction({
-    programId: SOLANA_PROGRAM_ID,
-    keys: [
-      { pubkey: signer, isSigner: true, isWritable: true },
-      { pubkey: recordAddress(hashHex), isSigner: false, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    // web3.js v1 types `data` as Buffer, but only reads the bytes: Uint8Array is enough.
-    data: data as unknown as TransactionInstruction["data"],
-  });
 }
 
 /**
@@ -173,22 +111,4 @@ export function solanaExplorerLink(
   value: string,
 ): string {
   return `https://explorer.solana.com/${kind}/${value}?cluster=${SOLANA_CLUSTER}`;
-}
-
-/** Translates program failures into something the UI can handle (on-chain error names). */
-export function solanaErrorReason(error: unknown): string | null {
-  const text =
-    error instanceof Error
-      ? `${error.message} ${JSON.stringify((error as { logs?: unknown }).logs ?? "")}`
-      : String(error);
-  if (text.includes("already in use")) return "DocumentoJaRegistrado";
-  const custom = text.match(/custom program error: 0x([0-9a-f]+)/i);
-  if (custom) {
-    const code = parseInt(custom[1], 16) as keyof typeof PROGRAM_ERRORS;
-    return PROGRAM_ERRORS[code] ?? null;
-  }
-  for (const name of Object.values(PROGRAM_ERRORS)) {
-    if (text.includes(name)) return name;
-  }
-  return null;
 }

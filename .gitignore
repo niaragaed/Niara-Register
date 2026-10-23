@@ -46,3 +46,6 @@ public/brand/*-ref.*
 # local Claude Code state; only the shared settings are versioned
 /.claude/*
 !/.claude/settings.json
+
+# Test serial numbers written by tests/fixtures/make-test-certs.sh
+tests/fixtures/*.srl

@@ -71,13 +71,31 @@ The site and the Sepolia indexer were started in September 2026. During the hack
 - The **RPC-based explorer** for HyperEVM Testnet.
 - The **Solana version of the Niara SMEs ledger**, indexing the [niara-pmes-solana](https://github.com/niaragaed/niara-pmes-solana) program (offering created, investment, closing, redemption, release, refund).
 
+## v2: private records, receipts, PAdES and credentials
+
+The signing flow (`/signatures`) now works like this, all in the browser:
+
+1. **PAdES signature with ICP-Brasil (optional).** A PDF is signed with the user's A1 file (`.pfx`, opened only in the tab, key imported into WebCrypto as non-extractable) or with an A3 token / installed certificate through the Lacuna Web PKI component (free on localhost; production needs a paid license in `NEXT_PUBLIC_WEBPKI_LICENSE`). The signature follows the ICP-Brasil policy `PA_PAdES_AD_RB_v1_3` (OID `2.16.76.1.7.1.11.1.3`, `/Filter /PBAD_PAdES`, `/SubFilter /PBAD.PAdES`, signed attributes contentType, messageDigest, signingCertificateV2, sigPolicyId) and is written as an **incremental update**, so a contract can be signed by several people in turn. Code: [`lib/pades`](lib/pades). Checked in `tests/pades.test.ts` with OpenSSL and qpdf, and by hand with pyHanko. No timestamp (AD-RB); revocation is not checked by the site — the ITI verifier is the reference.
+2. **Private on-chain record.** Only the record hash, the hash scheme and a salted commitment to the name/type go on-chain ([`lib/commitments.ts`](lib/commitments.ts), byte-identical to the contracts):
+   - scheme 0: SHA-256 of the signed PDF (its signature makes it unguessable);
+   - scheme 1: `SHA-256("niara-record-v1" ‖ salt ‖ SHA-256(file))` for any other file.
+3. **Soulbound receipt** minted to the signer in the same transaction: ERC-721 + ERC-5192 on EVM (`SignatureRegistryV2`), Bubblegum v2 cNFT in a frozen MPL-Core collection on Solana (`register_v2`; metadata served by `/api/receipts/solana/[hash]`).
+4. **Proof package** (`niara-register-proof/1` JSON) with the salt, the file hash, the name/type, a **W3C VC 2.0** issued by Niara (VC-JOSE, `did:web`, key in `NIARA_VC_PRIVATE_JWK`, optional ICP-Brasil e-CNPJ chain in `NIARA_VC_X5C`) and a **presentation signed by the holder's wallet** (Ed25519 VP-JWT on Solana; EIP-712 `EthereumEip712Signature2021` on EVM — a W3C CCG draft, not a Recommendation). Niara keeps none of it.
+
+`/verify/[network]/[hash]` reads the record straight from the chain and checks the document, the package, the credential, the presentation and the PAdES signatures in the browser. `/transferable` issues and operates **transferable records** designed to line up with MLETR (singularity, exclusive control, amendment, surrender, termination) — "aligned with MLETR", never "compliant": Brazil has not enacted it.
+
+v2 addresses (deployed 2026-10-22 on the five EVM testnets) live in [`lib/register-v2-evm.ts`](lib/register-v2-evm.ts) and [`indexer/config.ts`](indexer/config.ts); `NEXT_PUBLIC_V2_<NETWORK>_REGISTRY` / `_ETR` and `<PREFIX>_V2_REGISTRY` / `_ETR` / `_START_BLOCK` only override them after a redeploy. Run `supabase/migrations_011_v2.sql` before starting the indexer with the v2 sources.
+
+Known limitation: a record can be front-run. Anyone watching the mempool can copy a pending `register` call and land it first, becoming the on-chain "signer" of that hash. For signed PDFs the embedded ICP-Brasil signature still identifies the real signer; for salted records the holder can re-register with a new salt. Fixing it on-chain needs a commit-reveal step.
+
 ## Running locally
 
-Web app: create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and, optionally, `NEXT_PUBLIC_SOLANA_RPC_URL`. Then:
+Web app: create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and, optionally, `NEXT_PUBLIC_SOLANA_RPC_URL`, `NIARA_VC_PRIVATE_JWK` (from `node scripts/generate-vc-key.mjs`; keep it in the host's secret store), `NIARA_DID_DOMAIN`, `NIARA_VC_X5C` and `NEXT_PUBLIC_WEBPKI_LICENSE`. Then:
 
 ```bash
 npm install
 npm run dev                        # http://localhost:3000
+npm test                           # hash recipes, PAdES (OpenSSL/qpdf if installed), credentials
 ```
 
 Indexer: create `indexer/.env` with `ALCHEMY_API_KEY`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Every RPC URL and network setting has a default (see [`indexer/config.ts`](indexer/config.ts)). Then:

@@ -3,6 +3,7 @@ import { config } from "./config";
 import { toTracked, type OfferingRow, type TrackedOffering } from "./offerings";
 import type { EventData } from "./events";
 import type { NewSolanaOffering, RegisteredSolanaOffering } from "./pmes-solana";
+import type { NewEtrEvent, NewSignatureV2 } from "./v2";
 
 // Client with the service role key: the indexer needs to write straight to
 // Postgres, bypassing any RLS that exists for the site's public client. Never
@@ -109,6 +110,32 @@ export async function saveSignature(record: NewSignature): Promise<void> {
   if (error) {
     throw new Error(`Failed to save signature (${record.hash_sha256}): ${error.message}`);
   }
+}
+
+// ── v2 (migration 011) ──────────────────────────────────────────────────────────
+
+// Same idempotency idea as saveSignature: one v2 record per hash per network.
+export async function saveSignatureV2(row: NewSignatureV2): Promise<void> {
+  if (config.dryRun) {
+    console.log(`[dry-run] v2 signature that would be saved (${row.rede}): ${row.hash_registro} — ${row.assinante_endereco}`);
+    return;
+  }
+  const { error } = await supabase
+    .from("registro_assinaturas_v2")
+    .upsert(row, { onConflict: "rede,hash_registro", ignoreDuplicates: true });
+  if (error) throw new Error(`Failed to save v2 signature (${row.hash_registro}): ${error.message}`);
+}
+
+// Idempotent by (rede, tx_hash, log_index).
+export async function saveEtrEvent(row: NewEtrEvent): Promise<void> {
+  if (config.dryRun) {
+    console.log(`[dry-run] transferable-record event that would be saved (${row.rede}): ${row.tipo_evento} ${row.registro}`);
+    return;
+  }
+  const { error } = await supabase
+    .from("registro_transferiveis_eventos")
+    .upsert(row, { onConflict: "rede,tx_hash,log_index", ignoreDuplicates: true });
+  if (error) throw new Error(`Failed to save transferable-record event (${row.tx_hash}#${row.log_index}): ${error.message}`);
 }
 
 // ── Offerings (registro_ofertas, migration 004) ──────────────────────────────────

@@ -25,3 +25,19 @@ export const REGISTRO_ASSINATURAS_ABI = [
 export const OFERTA_ORQUESTRADOR_ABI = [
   "event OfertaCompletaCriada(address indexed emissor, address indexed token, address indexed oferta, uint256 metaMinima, uint256 metaMaxima, uint256 precoPorCota, uint256 prazo)",
 ];
+
+// From niaragaed/niara-contracts-Register, src/v2/SignatureRegistryV2.sol (events only).
+export const SIGNATURE_REGISTRY_V2_ABI = [
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, uint256 timestamp)",
+];
+
+// From niaragaed/niara-contracts-Register, src/mletr/TransferableRecordRegistry.sol (events only).
+export const TRANSFERABLE_RECORD_ABI = [
+  "event RecordIssued(uint256 indexed tokenId, address indexed issuer, address indexed holder, bytes32 documentHash, bytes32 metadataCommitment)",
+  "event AmendmentProposed(uint256 indexed tokenId, bytes32 newDocumentHash, bytes32 newMetadataCommitment)",
+  "event AmendmentCancelled(uint256 indexed tokenId)",
+  "event RecordAmended(uint256 indexed tokenId, uint32 version, bytes32 documentHash, bytes32 metadataCommitment)",
+  "event RecordSurrendered(uint256 indexed tokenId, address indexed by)",
+  "event RecordTerminated(uint256 indexed tokenId, uint8 reason)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+];

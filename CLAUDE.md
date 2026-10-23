@@ -10,6 +10,13 @@ Kept in Portuguese on purpose (external interfaces):
 - The indexer's environment variable names (some are Portuguese, e.g. `SOLANA_DESATIVADO`), so existing deployments keep working.
 - The Portuguese UI copy in `lib/i18n/dictionaries.ts` (the `pt` dictionary) and the old Portuguese route redirects in `next.config.ts`.
 
+## v2 invariants
+
+- `lib/commitments.ts` must stay byte-identical to `SignatureRegistryV2.sol`'s test and to the Solana program's recipes; `tests/commitments.test.ts` pins the reference values.
+- The document never leaves the browser. The salt, the file hash and the name/type leave it only in `POST /api/credentials`, which uses them once to check the on-chain commitments and stores nothing. Do not add logging there.
+- Hand-encoded Solana instructions/accounts (`lib/register-v2-solana.ts`, `indexer/v2.ts`) follow `idl/niara_register_solana.json` in niara-register-solana; update both when the program interface changes.
+- Describe transferable records as "aligned with MLETR", never "MLETR compliant".
+
 ## No AI attribution (hard rule)
 
 Nothing in this repository credits an AI tool, anywhere:

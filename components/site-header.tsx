@@ -11,6 +11,8 @@ export function SiteHeader({ locale }: { locale: Locale }) {
     { href: "/sme-registry", label: t.nav.pmes },
     { href: "/global-registry", label: t.nav.global },
     { href: "/signatures", label: t.nav.signing },
+    { href: "/verify", label: t.nav.verify },
+    { href: "/transferable", label: t.nav.transferable },
   ];
 
   return (
@@ -19,7 +21,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
         A single DOM, in two shapes.
 
         Below lg: a first row with the brand on the left and the selector on
-        the right; the three links drop together to a second row aligned on
+        the right; the links drop together to a second row aligned on
         the brand's margin. Before, they broke into three misaligned rows in
         English ("Document Signing" was left on its own) and, worse, the long
         labels pushed the page width and created horizontal scrolling.

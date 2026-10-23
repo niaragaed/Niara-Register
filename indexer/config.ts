@@ -49,8 +49,54 @@ function extraEvmNetwork(base: {
   };
 }
 
+/**
+ * v2 contracts (SignatureRegistryV2 + TransferableRecordRegistry) on one EVM
+ * network. Addresses and deploy blocks default to the real deployment
+ * (niara-contracts-Register, broadcast/DeployV2.s.sol, 2026-10-22); the
+ * variables <PREFIX>_V2_REGISTRY, <PREFIX>_V2_ETR and <PREFIX>_V2_START_BLOCK
+ * only exist for a redeploy. <PREFIX>_V2_DESATIVADO=1 turns the source off.
+ */
+function v2EvmNetwork(base: {
+  network: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet";
+  prefix: string;
+  chainId: number;
+  rpcUrl: string;
+  registry: string;
+  etr: string;
+  deployBlock: number;
+  chunk: number;
+  confirmations: number;
+  maxChunksPerCycle?: number;
+  chunkIntervalMs?: number;
+}) {
+  const env = (name: string) => process.env[`${base.prefix}_V2_${name}`];
+  return {
+    network: base.network,
+    source: `${base.network}-v2`,
+    chainId: base.chainId,
+    enabled: env("DESATIVADO") !== "1",
+    rpcUrl: base.rpcUrl,
+    registry: (env("REGISTRY") ?? base.registry).toLowerCase(),
+    etr: (env("ETR") ?? base.etr).toLowerCase(),
+    deployBlock: Number(env("START_BLOCK") ?? base.deployBlock),
+    chunk: base.chunk,
+    maxChunksPerCycle: base.maxChunksPerCycle ?? 20,
+    chunkIntervalMs: base.chunkIntervalMs ?? 0,
+    confirmations: base.confirmations,
+    pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 30_000),
+  };
+}
+
+// Same addresses on Base, Robinhood, HyperEVM and Tempo (same wallet, same nonce).
+const V2_SHARED = {
+  registry: "0x6cf0a197B106DaE24138230c281b4B91b1d4ff50",
+  etr: "0x09081D02b06f10D87DE7c99E48F8f07505D25f26",
+};
+
+const alchemySepoliaUrl = () => `https://eth-sepolia.g.alchemy.com/v2/${required("ALCHEMY_API_KEY")}`;
+
 export const config = {
-  rpcUrl: `https://eth-sepolia.g.alchemy.com/v2/${required("ALCHEMY_API_KEY")}`,
+  rpcUrl: alchemySepoliaUrl(),
   supabaseUrl: required("SUPABASE_URL"),
   supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
   // Block to start the pmes source from when there is no saved checkpoint.
@@ -184,6 +230,73 @@ export const config = {
       confirmations: 2,
     }),
   ],
+
+  // v2 sources (see v2.ts), one loop per EVM network; Solana v2 runs over the
+  // same program as v1, with its own checkpoint ("solana-v2").
+  v2: {
+    evm: [
+      v2EvmNetwork({
+        network: "sepolia",
+        prefix: "SEPOLIA",
+        chainId: 11155111,
+        rpcUrl: alchemySepoliaUrl(),
+        registry: "0x03Ad59E1d10Cf1C5449AD4A923f0892b7aA9A547",
+        etr: "0x764A5de7baF5B33444c271E230007b81755aD424",
+        deployBlock: 11966993,
+        // Same chunk as the v1 Sepolia batch (BLOCK_RANGE_CHUNK), which already fits the Alchemy plan in use.
+        chunk: Number(process.env.BLOCK_RANGE_CHUNK ?? 500),
+        confirmations: 5,
+      }),
+      v2EvmNetwork({
+        network: "base-sepolia",
+        ...V2_SHARED,
+        deployBlock: 48593926,
+        prefix: "BASE",
+        chainId: 84532,
+        rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+        chunk: 200,
+        confirmations: 5,
+      }),
+      v2EvmNetwork({
+        network: "robinhood-testnet",
+        ...V2_SHARED,
+        deployBlock: 140484857,
+        prefix: "ROBINHOOD",
+        chainId: 46630,
+        rpcUrl: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.testnet.chain.robinhood.com",
+        chunk: 2000,
+        confirmations: 20,
+      }),
+      v2EvmNetwork({
+        network: "hyperevm-testnet",
+        ...V2_SHARED,
+        deployBlock: 67552236,
+        prefix: "HYPEREVM",
+        chainId: 998,
+        rpcUrl: process.env.HYPEREVM_RPC_URL ?? "https://rpc.hyperliquid-testnet.xyz/evm",
+        chunk: 50,
+        confirmations: 2,
+        maxChunksPerCycle: 30,
+        chunkIntervalMs: 1000,
+      }),
+      v2EvmNetwork({
+        network: "tempo-testnet",
+        ...V2_SHARED,
+        deployBlock: 40637977,
+        prefix: "TEMPO",
+        chainId: 42431,
+        rpcUrl: process.env.TEMPO_RPC_URL ?? "https://rpc.moderato.tempo.xyz",
+        chunk: 5000,
+        confirmations: 2,
+      }),
+    ],
+    solana: {
+      enabled: process.env.SOLANA_V2_DESATIVADO !== "1",
+      // Slot of the program upgrade that added register_v2; earlier slots only have v1.
+      startSlot: Number(process.env.SOLANA_V2_START_SLOT ?? process.env.SOLANA_START_SLOT ?? 509235000),
+      pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
+    },
+  },
 
   // Validation mode: reads the chain and the database, but writes nothing (not
   // even the checkpoint). Prints what would be inserted and exits once it
