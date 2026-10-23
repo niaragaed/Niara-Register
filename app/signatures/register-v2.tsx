@@ -33,6 +33,7 @@ import { fetchSolanaRecord, solanaExplorerLink } from "@/lib/register-solana";
 import { didPkh, isEvm, type RegisterNetwork } from "@/lib/networks";
 import {
   WalletMissing,
+  WrongEvmNetwork,
   connectEvm,
   connectSolana,
   downloadBytes,
@@ -43,6 +44,7 @@ import {
 import type { SolanaProvider } from "@/lib/solana";
 import { createEvmPresentation, createSolanaPresentation } from "@/lib/vc/presentation";
 import { PROOF_PACKAGE_FORMAT, type ProofPackage } from "@/lib/proof-package";
+import { readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
 import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { PadesSigner } from "@/components/v2/pades-signer";
@@ -64,6 +66,8 @@ type Mode = "sign" | "signed" | "other";
 type Wallet = { kind: "evm"; signer: Signer; address: string } | { kind: "solana"; provider: SolanaProvider; address: string };
 type Existing = { version: 1 | 2; signer: string; timestamp: number } | null;
 type Texts = Pick<Dictionary, "register" | "pades" | "proof">;
+
+class ContractNotOnWallet extends Error {}
 
 export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const tr = t.register;
@@ -162,6 +166,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
   function explain(e: unknown): string {
     if (e instanceof WalletMissing) return isEvm(network) ? tr.noWallet : tr.noSolanaWallet;
+    if (e instanceof WrongEvmNetwork) return tr.wrongNetwork.replace("{chain}", String(e.actualChainId));
+    if (e instanceof ContractNotOnWallet) return tr.contractNotOnWallet;
     if (isRejection(e)) return tr.rejected;
     const reason = !isEvm(network) ? solanaV2ErrorReason(e) : null;
     if (reason === "AlreadyRegistered") return tr.alreadyRecorded;
@@ -181,18 +187,13 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         const { signer, address } = await connectEvm(network);
         setWallet({ kind: "evm", signer, address });
         setStatus("checking");
-        const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, signer);
-        const [exists, who, ts] = await registry.verify(`0x${recordHash}`);
-        if (exists) {
-          setExisting({ version: 2, signer: who, timestamp: Number(ts) });
+        // Reads go through the site's RPC for the chosen network, not the wallet's.
+        const rec = await readRecordV2(network, recordHash);
+        if (rec) {
+          setExisting({ version: 2, signer: rec.signer, timestamp: rec.timestamp });
         } else {
-          const legacy = new Contract(
-            EVM_NETWORKS[network].address,
-            ["function verificar(bytes32) view returns (bool, address, uint256, string, string)"],
-            signer,
-          );
-          const [v1, v1who, v1ts] = await legacy.verificar(`0x${fileSha}`);
-          if (v1) setExisting({ version: 1, signer: v1who, timestamp: Number(v1ts) });
+          const v1 = await readLegacyRecord(network, fileSha);
+          if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
         }
       } else {
         const { provider, address } = await connectSolana();
@@ -221,6 +222,10 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     setStatus("registering");
     try {
       if (wallet.kind === "evm" && isEvm(network)) {
+        // The wallet may have changed network since it connected.
+        const chainId = Number((await wallet.signer.provider!.getNetwork()).chainId);
+        if (chainId !== Number(EVM_NETWORKS[network].chainIdHex)) throw new WrongEvmNetwork(chainId);
+        if ((await wallet.signer.provider!.getCode(deployment!.registry!)) === "0x") throw new ContractNotOnWallet();
         const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, wallet.signer);
         const tx = await registry.register(`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`);
         const receipt = await tx.wait();
