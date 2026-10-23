@@ -52,7 +52,10 @@ function extraEvmNetwork(base: {
 /**
  * v2 contracts (SignatureRegistryV2 + TransferableRecordRegistry) on one EVM
  * network. Addresses and deploy blocks default to the real deployment
- * (niara-contracts-Register, broadcast/DeployV2.s.sol, 2026-10-22); the
+ * (niara-contracts-Register: broadcast/DeployV2.s.sol, 2026-10-22, for the
+ * transferable records; broadcast/DeploySignatureRegistryV2.s.sol, 2026-10-23,
+ * for the registry with the public document type). deployBlock is the earlier
+ * of the two (the transferable-record deploy), so one scan covers both. The
  * variables <PREFIX>_V2_REGISTRY, <PREFIX>_V2_ETR and <PREFIX>_V2_START_BLOCK
  * only exist for a redeploy. <PREFIX>_V2_DESATIVADO=1 turns the source off.
  */
@@ -89,7 +92,7 @@ function v2EvmNetwork(base: {
 
 // Same addresses on Base, Robinhood, HyperEVM and Tempo (same wallet, same nonce).
 const V2_SHARED = {
-  registry: "0x6cf0a197B106DaE24138230c281b4B91b1d4ff50",
+  registry: "0x0E20b7c965a772fECc1d3a1DF2B4a9CC39Fc7156",
   etr: "0x09081D02b06f10D87DE7c99E48F8f07505D25f26",
 };
 
@@ -240,7 +243,7 @@ export const config = {
         prefix: "SEPOLIA",
         chainId: 11155111,
         rpcUrl: alchemySepoliaUrl(),
-        registry: "0x03Ad59E1d10Cf1C5449AD4A923f0892b7aA9A547",
+        registry: "0xAcC6BddCD560e4fd87F179d2bc6C1C518c50F514",
         etr: "0x764A5de7baF5B33444c271E230007b81755aD424",
         deployBlock: 11966993,
         // Same chunk as the v1 Sepolia batch (BLOCK_RANGE_CHUNK), which already fits the Alchemy plan in use.

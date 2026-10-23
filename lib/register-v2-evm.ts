@@ -14,17 +14,18 @@ export type V2Deployment = {
   etr: `0x${string}` | null;
 };
 
-// The registry was redeployed to add the public document type; the first v2
-// registry (0x6cf0a197… / Sepolia 0x03Ad59E1…, no type) is retired. Until the
-// new one is deployed, `registry` is null and the site says so.
+// SignatureRegistryV2 with the public document type (DeploySignatureRegistryV2,
+// 2026-10-23). The first v2 registry (0x6cf0a197… / Sepolia 0x03Ad59E1…, no
+// type) is retired; the transferable-record registries did not change.
+// Same addresses on Base, Robinhood, HyperEVM and Tempo (same wallet, same nonce).
 const SHARED: V2Deployment = {
-  registry: null,
+  registry: "0x0E20b7c965a772fECc1d3a1DF2B4a9CC39Fc7156",
   etr: "0x09081D02b06f10D87DE7c99E48F8f07505D25f26",
 };
 
 const DEPLOYED: Record<EvmNetwork, V2Deployment> = {
   sepolia: {
-    registry: null,
+    registry: "0xAcC6BddCD560e4fd87F179d2bc6C1C518c50F514",
     etr: "0x764A5de7baF5B33444c271E230007b81755aD424",
   },
   "base-sepolia": SHARED,
