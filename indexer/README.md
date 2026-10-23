@@ -94,6 +94,17 @@ Before running, apply `../supabase/schema.sql` and the `../supabase/migrations_0
 
 ### Backfilling `dados`
 
+### Integrity check
+
+`scripts/verify-integrity.ts` checks the public mirror against the chains, read-only, with the **public** read key (never the service-role key):
+
+```bash
+SUPABASE_URL=https://<project>.supabase.co SUPABASE_READ_KEY=<anon / publishable key> \
+  npx tsx scripts/verify-integrity.ts --report=integrity.json
+```
+
+It re-derives the rows with the indexer's own sources (in-memory database) and reports every row that the chain does not produce (**FORGED**), whose fields differ (**ALTERED**) or that the chain produces but the database lacks (**MISSING**). Solana programs are re-read in full; EVM networks at the blocks the rows point to, so a forged or altered row is always caught, while a deleted EVM row in another block is not (re-index from the deploy blocks if in doubt). Sepolia offerings must be in the versioned seed or created on-chain by the orchestrator. Checkpoints are compared with the chain tips when readable. Exit code 0 = everything matches. `--self-test` checks, without any database, that a forged, an altered and a deleted row are all caught.
+
 `npx tsx scripts/backfill-data.ts` fills the `dados` column of rows written before migration 003, always reading from the chain. It is a dry run by default; `--write` applies it. `--sample=N` and `--numbers=12,8,7` choose which rows are printed.
 
 ### Optional variables
