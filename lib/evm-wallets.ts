@@ -23,7 +23,6 @@ type AnnounceDetail = {
   provider?: Eip1193Provider;
 };
 
-const STORAGE_KEY = "niara.evm-wallet";
 const announced = new Map<string, EvmWalletOption>();
 let listening = false;
 
@@ -66,21 +65,4 @@ export async function discoverEvmWallets(waitMs = 350): Promise<EvmWalletOption[
     list.push({ rdns: "injected", name: legacyName(window.ethereum), icon: null, provider: window.ethereum });
   }
   return list;
-}
-
-// The choice is a per-browser convenience; it may be unavailable (private mode).
-export function rememberedEvmWallet(): string | null {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function rememberEvmWallet(rdns: string) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, rdns);
-  } catch {
-    // Nothing to do: the site asks again next time.
-  }
 }

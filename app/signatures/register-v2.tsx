@@ -49,7 +49,7 @@ import { readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
 import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { PadesSigner } from "@/components/v2/pades-signer";
-import { useEvmWalletPicker } from "@/components/v2/evm-wallet-picker";
+import { useWalletPicker } from "@/components/v2/wallet-picker";
 import { PadesReport } from "@/components/v2/pades-report";
 import {
   Choice,
@@ -67,7 +67,7 @@ import {
 type Mode = "sign" | "signed" | "other";
 type Wallet =
   | { kind: "evm"; signer: Signer; address: string; name: string }
-  | { kind: "solana"; provider: SolanaProvider; address: string };
+  | { kind: "solana"; provider: SolanaProvider; address: string; name: string };
 type Existing = { version: 1 | 2; signer: string; timestamp: number } | null;
 type Texts = Pick<Dictionary, "register" | "pades" | "proof">;
 
@@ -75,7 +75,7 @@ class ContractNotOnWallet extends Error {}
 
 export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const tr = t.register;
-  const walletPicker = useEvmWalletPicker(tr);
+  const walletPicker = useWalletPicker(tr);
   const [network, setNetwork] = useState<RegisterNetwork>("sepolia");
   const [mode, setMode] = useState<Mode>("sign");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -186,14 +186,14 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     return `${tr.error} ${message}`;
   }
 
-  async function connectAndCheck(changeWallet = false) {
+  async function connectAndCheck() {
     if (!recordHash || !fileSha) return;
     setError(null);
     setExisting(null);
     try {
       setStatus("connecting");
       if (isEvm(network)) {
-        const chosen = await walletPicker.choose(changeWallet);
+        const chosen = await walletPicker.chooseEvm();
         const { signer, address } = await connectEvm(network, chosen.provider);
         setWallet({ kind: "evm", signer, address, name: chosen.name });
         setStatus("checking");
@@ -206,8 +206,9 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
           if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
         }
       } else {
-        const { provider, address } = await connectSolana();
-        setWallet({ kind: "solana", provider, address });
+        const chosen = await walletPicker.chooseSolana();
+        const { provider, address } = await connectSolana(chosen.provider);
+        setWallet({ kind: "solana", provider, address, name: chosen.name });
         setStatus("checking");
         const conn = solanaConnection();
         const rec = await fetchRecordV2(conn, recordHash);
@@ -516,11 +517,11 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               {wallet && (
                 <span className="font-mono text-xs text-slate">
                   {tr.connectedWallet} {short(wallet.address)}
-                  {wallet.kind === "evm" && (
+                  {wallet && (
                     <>
                       {" "}
                       ({wallet.name}) ·{" "}
-                      <button className={linkClass} disabled={status === "registering"} onClick={() => connectAndCheck(true)}>
+                      <button className={linkClass} disabled={status === "registering"} onClick={() => connectAndCheck()}>
                         {tr.changeWallet}
                       </button>
                     </>

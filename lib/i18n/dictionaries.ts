@@ -133,8 +133,14 @@ export const en = {
     waiting: "Confirm in your wallet and wait for the transaction...",
     connectedWallet: "Connected wallet:",
     chooseWallet: "Choose a wallet",
-    chooseWalletHint:
-      "More than one EVM wallet is installed. Choose the one with the account and the test funds you want to use; this browser will remember it.",
+    chooseWalletHintEvm:
+      "Choose the EVM wallet with the account and the test funds you want to use. Nothing connects until you pick one.",
+    chooseWalletHintSolana:
+      "Choose the Solana wallet with the account you want to use. Nothing connects until you pick one.",
+    lastUsed: "last used",
+    otherWallets: "Other wallets in this browser (not on Niara's list)",
+    notInstalled: "Not installed",
+    noWalletFound: "No compatible wallet was found in this browser. Install one of these, then reload the page:",
     changeWallet: "change wallet",
     cancel: "Cancel",
     alreadyRecorded: "This record already exists on this network.",
@@ -640,8 +646,14 @@ export const pt: Dictionary = {
     waiting: "Confirme na carteira e aguarde a transação...",
     connectedWallet: "Carteira conectada:",
     chooseWallet: "Escolha a carteira",
-    chooseWalletHint:
-      "Há mais de uma carteira EVM instalada. Escolha a que tem a conta e o saldo de teste que você quer usar; este navegador vai lembrar.",
+    chooseWalletHintEvm:
+      "Escolha a carteira EVM com a conta e o saldo de teste que você quer usar. Nada se conecta até você escolher.",
+    chooseWalletHintSolana:
+      "Escolha a carteira Solana com a conta que você quer usar. Nada se conecta até você escolher.",
+    lastUsed: "última usada",
+    otherWallets: "Outras carteiras neste navegador (fora da lista da Niara)",
+    notInstalled: "Não instaladas",
+    noWalletFound: "Nenhuma carteira compatível foi encontrada neste navegador. Instale uma destas e recarregue a página:",
     changeWallet: "trocar carteira",
     cancel: "Cancelar",
     alreadyRecorded: "Este registro já existe nesta rede.",
