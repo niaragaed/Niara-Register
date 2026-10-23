@@ -9,5 +9,5 @@
     "resolveJsonModule": true,
     "outDir": "dist"
   },
-  "include": ["*.ts", "test/*.ts"]
+  "include": ["*.ts", "test/*.ts", "scripts/verify-integrity.ts"]
 }
