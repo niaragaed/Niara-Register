@@ -138,6 +138,10 @@ export const en = {
       "The new registry is not deployed on this network yet. Choose another network or wait for the deploy.",
     noReceiptConfig: "Receipts are not configured on Solana yet.",
     noWallet: "No EVM wallet detected. Install MetaMask (or a compatible wallet).",
+    wrongNetwork:
+      "Your wallet is on another network (chain id {chain}) and did not switch. Switch it to the network chosen above (if more than one wallet is installed, check which one answered) and try again.",
+    contractNotOnWallet:
+      "Your wallet's connection does not see the registry on this network. Check the network's RPC in the wallet and try again.",
     noSolanaWallet: "No Solana wallet detected. Install Phantom (or Solflare).",
     walletEvm: "MetaMask or compatible",
     walletSolana: "Phantom or Solflare",
@@ -636,6 +640,10 @@ export const pt: Dictionary = {
       "O novo registro ainda não foi publicado nesta rede. Escolha outra rede ou aguarde o deploy.",
     noReceiptConfig: "Os recibos ainda não foram configurados na Solana.",
     noWallet: "Nenhuma carteira EVM detectada. Instale a MetaMask (ou uma carteira compatível).",
+    wrongNetwork:
+      "Sua carteira está em outra rede (chain id {chain}) e não trocou. Troque para a rede escolhida acima (se houver mais de uma carteira instalada, veja qual respondeu) e tente de novo.",
+    contractNotOnWallet:
+      "A conexão da sua carteira não enxerga o registro nesta rede. Confira o RPC da rede na carteira e tente de novo.",
     noSolanaWallet: "Nenhuma carteira Solana detectada. Instale a Phantom (ou a Solflare).",
     walletEvm: "MetaMask ou compatível",
     walletSolana: "Phantom ou Solflare",

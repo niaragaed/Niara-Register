@@ -38,7 +38,8 @@ export const EVM_NETWORKS: Record<EvmNetwork, EvmNetworkConfig> = {
     chainIdHex: "0xaa36a7", // 11155111
     chainName: "Sepolia",
     currency: { name: "Ether", symbol: "ETH" },
-    rpcUrl: "https://rpc.sepolia.org",
+    // rpc.sepolia.org stopped answering (Oct/2026).
+    rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
     explorer: "https://sepolia.etherscan.io",
     address: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
   },

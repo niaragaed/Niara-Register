@@ -9,6 +9,12 @@ import type { SolanaProvider } from "./solana";
 
 export class WalletMissing extends Error {}
 export class WalletRejected extends Error {}
+/** The injected wallet is on another chain than the one the site asked for. */
+export class WrongEvmNetwork extends Error {
+  constructor(readonly actualChainId: number) {
+    super(`wallet is on chain ${actualChainId}`);
+  }
+}
 
 export function isRejection(error: unknown): boolean {
   const e = error as { code?: number | string; message?: string; info?: { error?: { code?: number } } };
@@ -57,6 +63,11 @@ export async function connectEvm(network: EvmNetwork): Promise<{ signer: Signer;
   if (!window.ethereum) throw new WalletMissing("no EVM wallet");
   await window.ethereum.request({ method: "eth_requestAccounts" });
   await ensureEvmNetwork(network);
+  // Some wallets (or a second wallet that took over window.ethereum) accept the
+  // switch request without switching. Never go on with the wrong chain: a
+  // register call sent to an address with no contract would just burn gas.
+  const chainId = Number(await window.ethereum.request({ method: "eth_chainId" }));
+  if (chainId !== Number(EVM_NETWORKS[network].chainIdHex)) throw new WrongEvmNetwork(chainId);
   const signer = await new BrowserProvider(window.ethereum).getSigner();
   return { signer, address: await signer.getAddress() };
 }
