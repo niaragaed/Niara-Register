@@ -5,6 +5,8 @@
 // installed, either can answer). window.ethereum stays as the fallback for
 // wallets that do not implement EIP-6963.
 
+import { walletIcon } from "./wallet-catalog";
+
 export type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 };
@@ -23,7 +25,6 @@ type AnnounceDetail = {
   provider?: Eip1193Provider;
 };
 
-const STORAGE_KEY = "niara.evm-wallet";
 const announced = new Map<string, EvmWalletOption>();
 let listening = false;
 
@@ -37,7 +38,7 @@ function listen() {
       rdns: info.rdns,
       name: info.name.slice(0, 40),
       // Only images: an announced icon is shown in an <img>, never as markup.
-      icon: typeof info.icon === "string" && /^data:image\/(svg\+xml|png|jpeg|webp|gif)[;,]/.test(info.icon) ? info.icon : null,
+      icon: walletIcon(info.icon),
       provider,
     });
   });
@@ -66,21 +67,4 @@ export async function discoverEvmWallets(waitMs = 350): Promise<EvmWalletOption[
     list.push({ rdns: "injected", name: legacyName(window.ethereum), icon: null, provider: window.ethereum });
   }
   return list;
-}
-
-// The choice is a per-browser convenience; it may be unavailable (private mode).
-export function rememberedEvmWallet(): string | null {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function rememberEvmWallet(rdns: string) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, rdns);
-  } catch {
-    // Nothing to do: the site asks again next time.
-  }
 }

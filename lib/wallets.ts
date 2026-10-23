@@ -66,8 +66,8 @@ export async function ensureEvmNetwork(network: EvmNetwork, ethereum: Eip1193Pro
 }
 
 /**
- * Connects the given wallet (picked by the user among the EIP-6963 announced
- * ones, see components/v2/evm-wallet-picker.tsx) and puts it on `network`.
+ * Connects the EVM wallet the user picked (see components/v2/wallet-picker.tsx)
+ * and puts it on `network`.
  */
 export async function connectEvm(
   network: EvmNetwork,
@@ -91,14 +91,8 @@ export async function connectEvm(
   return { signer, address: await signer.getAddress() };
 }
 
-export function solanaProvider(): SolanaProvider | null {
-  if (typeof window === "undefined") return null;
-  return window.phantom?.solana ?? window.solana ?? null;
-}
-
-export async function connectSolana(): Promise<{ provider: SolanaProvider; address: string }> {
-  const provider = solanaProvider();
-  if (!provider) throw new WalletMissing("no Solana wallet");
+/** Connects the Solana wallet the user picked (see components/v2/wallet-picker.tsx). */
+export async function connectSolana(provider: SolanaProvider): Promise<{ provider: SolanaProvider; address: string }> {
   const { publicKey } = await provider.connect();
   return { provider, address: publicKey.toBase58() };
 }
