@@ -48,6 +48,8 @@ import { PROOF_PACKAGE_FORMAT, type ProofPackage } from "@/lib/proof-package";
 import { readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
 import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
+import { lookupOnAllNetworks, type LookupResult } from "@/lib/multichain-lookup";
+import { UnlistedWalletConnectPeer } from "@/lib/walletconnect";
 import { PadesSigner } from "@/components/v2/pades-signer";
 import { useWalletPicker } from "@/components/v2/wallet-picker";
 import { PadesReport } from "@/components/v2/pades-report";
@@ -103,6 +105,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
   const [seenHere, setSeenHere] = useState<LocalRegistration[]>([]);
+  // On-chain lookup of the file on all six networks (signed PDFs and v1 records).
+  const [lookup, setLookup] = useState<{ sha: string; result: LookupResult | null } | null>(null);
 
   const scheme: HashScheme = mode === "other" ? SCHEME_SALTED : SCHEME_SIGNED_PDF;
   const registered = status === "done";
@@ -126,6 +130,10 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     const sha = toHex(await sha256(bytes));
     setFileSha(sha);
     setSeenHere(previousRegistrations(sha));
+    setLookup({ sha, result: null });
+    lookupOnAllNetworks(sha)
+      .then((result) => setLookup((cur) => (cur?.sha === sha ? { sha, result } : cur)))
+      .catch(() => setLookup((cur) => (cur?.sha === sha ? null : cur)));
     setSalt(newSalt());
     if (mode !== "other") setReports(await inspectPdfSignatures(bytes));
   }
@@ -173,6 +181,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
   function explain(e: unknown): string {
     if (e instanceof WalletMissing) return isEvm(network) ? tr.noWallet : tr.noSolanaWallet;
+    if (e instanceof UnlistedWalletConnectPeer) return tr.unlistedWallet.replace("{name}", e.peerName);
     if (e instanceof WrongEvmNetwork && isEvm(network)) {
       return tr.wrongNetwork
         .replaceAll("{chain}", evmChainLabel(e.actualChainId))
@@ -439,6 +448,36 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
             {tr.alreadyHintLink} →
           </Link>
         </p>
+      )}
+      {lookup && lookup.sha === fileSha && !registered && (
+        <Notice tone={lookup.result?.hits.length ? "bad" : "neutral"}>
+          {!lookup.result ? (
+            tr.lookupRunning
+          ) : lookup.result.hits.length > 0 ? (
+            <>
+              {tr.lookupFound}
+              <ul className="mt-2 space-y-1">
+                {lookup.result.hits.map((h) => (
+                  <li key={`${h.network}-${h.version}`} className="font-mono text-xs">
+                    <a href={`/verify/${h.network}/0x${fileSha}`} className={linkClass}>
+                      {tr.networks[h.network]} · {h.version === 1 ? tr.lookupV1 : tr.lookupV2} · {short(h.signer)} ·{" "}
+                      {formatTimestamp(h.timestamp, locale)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <>
+              {mode === "other" ? tr.lookupNoneSalted : tr.lookupNone}
+            </>
+          )}
+          {lookup.result && lookup.result.failed.length > 0 && (
+            <p className="mt-2 text-xs">
+              {tr.lookupFailed} {lookup.result.failed.map((n) => tr.networks[n]).join(", ")}
+            </p>
+          )}
+        </Notice>
       )}
       {seenHere.length > 0 && !registered && (
         <Notice tone="neutral">
