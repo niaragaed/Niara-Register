@@ -49,6 +49,7 @@ import { readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
 import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { PadesSigner } from "@/components/v2/pades-signer";
+import { useEvmWalletPicker } from "@/components/v2/evm-wallet-picker";
 import { PadesReport } from "@/components/v2/pades-report";
 import {
   Choice,
@@ -64,7 +65,9 @@ import {
 } from "@/components/v2/ui";
 
 type Mode = "sign" | "signed" | "other";
-type Wallet = { kind: "evm"; signer: Signer; address: string } | { kind: "solana"; provider: SolanaProvider; address: string };
+type Wallet =
+  | { kind: "evm"; signer: Signer; address: string; name: string }
+  | { kind: "solana"; provider: SolanaProvider; address: string };
 type Existing = { version: 1 | 2; signer: string; timestamp: number } | null;
 type Texts = Pick<Dictionary, "register" | "pades" | "proof">;
 
@@ -72,6 +75,7 @@ class ContractNotOnWallet extends Error {}
 
 export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const tr = t.register;
+  const walletPicker = useEvmWalletPicker(tr);
   const [network, setNetwork] = useState<RegisterNetwork>("sepolia");
   const [mode, setMode] = useState<Mode>("sign");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -182,15 +186,16 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     return `${tr.error} ${message}`;
   }
 
-  async function connectAndCheck() {
+  async function connectAndCheck(changeWallet = false) {
     if (!recordHash || !fileSha) return;
     setError(null);
     setExisting(null);
     try {
       setStatus("connecting");
       if (isEvm(network)) {
-        const { signer, address } = await connectEvm(network);
-        setWallet({ kind: "evm", signer, address });
+        const chosen = await walletPicker.choose(changeWallet);
+        const { signer, address } = await connectEvm(network, chosen.provider);
+        setWallet({ kind: "evm", signer, address, name: chosen.name });
         setStatus("checking");
         // Reads go through the site's RPC for the chosen network, not the wallet's.
         const rec = await readRecordV2(network, recordHash);
@@ -338,6 +343,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
   return (
     <div className="border border-slate/25 px-6 py-8">
+      {walletPicker.element}
       <Label>{tr.networkTitle}</Label>
       <NetworkPicker
         value={network}
@@ -492,7 +498,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
           {!registered && (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               {!wallet ? (
-                <button className={primaryButton} disabled={evmUnavailable || locked} onClick={connectAndCheck}>
+                <button className={primaryButton} disabled={evmUnavailable || locked} onClick={() => connectAndCheck()}>
                   {status === "connecting" ? tr.connecting : status === "checking" ? tr.checking : tr.connect}
                 </button>
               ) : (
@@ -510,6 +516,15 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               {wallet && (
                 <span className="font-mono text-xs text-slate">
                   {tr.connectedWallet} {short(wallet.address)}
+                  {wallet.kind === "evm" && (
+                    <>
+                      {" "}
+                      ({wallet.name}) ·{" "}
+                      <button className={linkClass} disabled={status === "registering"} onClick={() => connectAndCheck(true)}>
+                        {tr.changeWallet}
+                      </button>
+                    </>
+                  )}
                 </span>
               )}
             </div>

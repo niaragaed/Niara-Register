@@ -132,6 +132,11 @@ export const en = {
     register: "Register and receive the receipt",
     waiting: "Confirm in your wallet and wait for the transaction...",
     connectedWallet: "Connected wallet:",
+    chooseWallet: "Choose a wallet",
+    chooseWalletHint:
+      "More than one EVM wallet is installed. Choose the one with the account and the test funds you want to use; this browser will remember it.",
+    changeWallet: "change wallet",
+    cancel: "Cancel",
     alreadyRecorded: "This record already exists on this network.",
     alreadyRecordedV1: "This file was recorded with the previous version of the Register (name and type public).",
     notDeployed:
@@ -634,6 +639,11 @@ export const pt: Dictionary = {
     register: "Registrar e receber o recibo",
     waiting: "Confirme na carteira e aguarde a transação...",
     connectedWallet: "Carteira conectada:",
+    chooseWallet: "Escolha a carteira",
+    chooseWalletHint:
+      "Há mais de uma carteira EVM instalada. Escolha a que tem a conta e o saldo de teste que você quer usar; este navegador vai lembrar.",
+    changeWallet: "trocar carteira",
+    cancel: "Cancelar",
     alreadyRecorded: "Este registro já existe nesta rede.",
     alreadyRecordedV1: "Este arquivo foi registrado na versão anterior do Register (nome e tipo públicos).",
     notDeployed:

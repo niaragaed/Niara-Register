@@ -12,9 +12,12 @@ import * as sol from "@/lib/register-v2-solana";
 import { isEvm, type RegisterNetwork } from "@/lib/networks";
 import type { SolanaProvider } from "@/lib/solana";
 import { WalletMissing, connectEvm, connectSolana, isRejection, sendSolana, solanaConnection } from "@/lib/wallets";
-import { Label, NetworkPicker, Notice, inputClass, primaryButton, readFile, secondaryButton, short } from "@/components/v2/ui";
+import { Label, NetworkPicker, Notice, inputClass, linkClass, primaryButton, readFile, secondaryButton, short } from "@/components/v2/ui";
+import { useEvmWalletPicker } from "@/components/v2/evm-wallet-picker";
 
-type Wallet = { kind: "evm"; signer: Signer; address: string } | { kind: "solana"; provider: SolanaProvider; address: string };
+type Wallet =
+  | { kind: "evm"; signer: Signer; address: string; name: string }
+  | { kind: "solana"; provider: SolanaProvider; address: string };
 type View = {
   originalHash: string;
   issuer: string;
@@ -31,6 +34,7 @@ const sameAccount = (a: string, b: string) => a.toLowerCase() === b.toLowerCase(
 
 export function EtrPanel({ t, locale }: { t: Texts; locale: Locale }) {
   const te = t.etr;
+  const walletPicker = useEvmWalletPicker(t.register);
   const [network, setNetwork] = useState<RegisterNetwork>("sepolia");
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [issueHash, setIssueHash] = useState<string | null>(null);
@@ -59,12 +63,13 @@ export function EtrPanel({ t, locale }: { t: Texts; locale: Locale }) {
     setMessage({ tone: "bad", text });
   }
 
-  async function connect() {
+  async function connect(changeWallet = false) {
     setMessage(null);
     try {
       if (isEvm(network)) {
-        const { signer, address } = await connectEvm(network);
-        setWallet({ kind: "evm", signer, address });
+        const chosen = await walletPicker.choose(changeWallet);
+        const { signer, address } = await connectEvm(network, chosen.provider);
+        setWallet({ kind: "evm", signer, address, name: chosen.name });
         if (!holder) setHolder(address);
       } else {
         const { provider, address } = await connectSolana();
@@ -164,6 +169,7 @@ export function EtrPanel({ t, locale }: { t: Texts; locale: Locale }) {
 
   return (
     <div className="mt-10 space-y-10">
+      {walletPicker.element}
       <div className="border border-slate/25 px-6 py-8">
         <Label>{t.register.networkTitle}</Label>
         <NetworkPicker
@@ -183,9 +189,18 @@ export function EtrPanel({ t, locale }: { t: Texts; locale: Locale }) {
           {wallet ? (
             <span className="font-mono text-xs text-slate">
               {t.register.connectedWallet} {short(wallet.address)}
+              {wallet.kind === "evm" && (
+                <>
+                  {" "}
+                  ({wallet.name}) ·{" "}
+                  <button className={linkClass} disabled={busy} onClick={() => connect(true)}>
+                    {t.register.changeWallet}
+                  </button>
+                </>
+              )}
             </span>
           ) : (
-            <button className={primaryButton} disabled={unavailable} onClick={connect}>
+            <button className={primaryButton} disabled={unavailable} onClick={() => connect()}>
               {te.connectFirst}
             </button>
           )}
