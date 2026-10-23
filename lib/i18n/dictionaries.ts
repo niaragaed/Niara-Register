@@ -112,6 +112,14 @@ export const en = {
       "Nothing is uploaded: the file stays in your browser. On-chain only the fingerprint goes, plus a commitment to the name and type that cannot be read without your salt.",
     alreadyHint: "Registered this file before? Its proof package is the only way to find that record.",
     alreadyHintLink: "check it on Verify",
+    lookupRunning: "Checking the six networks for this file...",
+    lookupFound: "This file is already recorded on-chain:",
+    lookupV1: "previous version (name and type public)",
+    lookupV2: "signed PDF",
+    lookupNone: "This file is not recorded on any of the six networks.",
+    lookupNoneSalted:
+      "Not found on the six networks as a signed PDF or an old record. Salted records cannot be found from the file alone (that is what keeps them private): only their proof package finds them.",
+    lookupFailed: "Could not check:",
     seenHere: "This file was already registered from this browser:",
     seenHereSalted:
       "Registering it again creates a new, independent record with a new salt. The first record is still the proof that counts.",
@@ -141,6 +149,13 @@ export const en = {
     blockedWallets: "Not supported on Niara (not on the list of reviewed wallets):",
     notInstalled: "Not installed",
     noWalletFound: "No compatible wallet was found in this browser. Install one of these, then reload the page:",
+    unlistedWallet: "{name} is not on the list of wallets Niara accepts. The connection was closed; choose a listed wallet.",
+    walletConnect: "WalletConnect (phone, tablet or QR code)",
+    walletConnectHint:
+      "Connect a wallet app on your phone or tablet, or scan the QR code with it from a computer. Only wallets on the Niara list are accepted.",
+    openInApp: "On a phone or tablet",
+    openInAppHint:
+      "Open this page inside your wallet app (its built-in browser connects like an extension). You will choose the file again there.",
     changeWallet: "change wallet",
     cancel: "Cancel",
     alreadyRecorded: "This record already exists on this network.",
@@ -628,6 +643,14 @@ export const pt: Dictionary = {
       "Nada é enviado: o arquivo fica no seu navegador. On-chain vai só a impressão digital, mais um compromisso com o nome e o tipo que não pode ser lido sem o seu salt.",
     alreadyHint: "Já registrou este arquivo antes? O pacote de prova é a única forma de encontrar aquele registro.",
     alreadyHintLink: "confira em Verificar",
+    lookupRunning: "Procurando este arquivo nas seis redes...",
+    lookupFound: "Este arquivo já está registrado on-chain:",
+    lookupV1: "versão anterior (nome e tipo públicos)",
+    lookupV2: "PDF assinado",
+    lookupNone: "Este arquivo não está registrado em nenhuma das seis redes.",
+    lookupNoneSalted:
+      "Não encontrado nas seis redes como PDF assinado nem como registro antigo. Registros com salt não podem ser encontrados só com o arquivo (é isso que os mantém privados): só o pacote de prova os encontra.",
+    lookupFailed: "Não foi possível consultar:",
     seenHere: "Este arquivo já foi registrado a partir deste navegador:",
     seenHereSalted:
       "Registrar de novo cria um registro novo e independente, com outro salt. O primeiro registro continua sendo a prova que vale.",
@@ -657,6 +680,13 @@ export const pt: Dictionary = {
     blockedWallets: "Não aceitas na Niara (fora da lista de carteiras revisadas):",
     notInstalled: "Não instaladas",
     noWalletFound: "Nenhuma carteira compatível foi encontrada neste navegador. Instale uma destas e recarregue a página:",
+    unlistedWallet: "{name} não está na lista de carteiras aceitas pela Niara. A conexão foi encerrada; escolha uma carteira da lista.",
+    walletConnect: "WalletConnect (celular, tablet ou QR code)",
+    walletConnectHint:
+      "Conecte a carteira do seu celular ou tablet, ou leia o QR code com ela a partir de um computador. Só carteiras da lista da Niara são aceitas.",
+    openInApp: "No celular ou tablet",
+    openInAppHint:
+      "Abra esta página dentro do app da sua carteira (o navegador dele conecta como uma extensão). Lá você escolhe o arquivo de novo.",
     changeWallet: "trocar carteira",
     cancel: "Cancelar",
     alreadyRecorded: "Este registro já existe nesta rede.",

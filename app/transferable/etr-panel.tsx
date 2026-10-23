@@ -14,6 +14,7 @@ import type { SolanaProvider } from "@/lib/solana";
 import { WalletMissing, connectEvm, connectSolana, isRejection, sendSolana, solanaConnection } from "@/lib/wallets";
 import { Label, NetworkPicker, Notice, inputClass, linkClass, primaryButton, readFile, secondaryButton, short } from "@/components/v2/ui";
 import { useWalletPicker } from "@/components/v2/wallet-picker";
+import { UnlistedWalletConnectPeer } from "@/lib/walletconnect";
 
 type Wallet =
   | { kind: "evm"; signer: Signer; address: string; name: string }
@@ -53,7 +54,9 @@ export function EtrPanel({ t, locale }: { t: Texts; locale: Locale }) {
   function fail(e: unknown) {
     console.error(e);
     const text =
-      e instanceof WalletMissing
+      e instanceof UnlistedWalletConnectPeer
+        ? t.register.unlistedWallet.replace("{name}", e.peerName)
+        : e instanceof WalletMissing
         ? isEvm(network)
           ? t.register.noWallet
           : t.register.noSolanaWallet

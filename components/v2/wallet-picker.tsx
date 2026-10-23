@@ -5,6 +5,10 @@
 // wallets the browser announces are named as not supported and cannot be
 // used; listed wallets that are not installed get a link to their official
 // site. Nothing connects until the user picks one.
+//
+// Phones and tablets have no extensions. There the dialog offers to open the
+// page inside a listed wallet's own app browser (where its wallet is injected
+// as on a computer), and, for EVM, WalletConnect when a project id is set.
 import { useEffect, useRef, useState } from "react";
 import { discoverEvmWallets, type EvmWalletOption } from "@/lib/evm-wallets";
 import { discoverSolanaWallets, type SolanaWalletOption } from "@/lib/solana-wallets";
@@ -17,6 +21,7 @@ import {
   type WalletFamily,
 } from "@/lib/wallet-catalog";
 import { WalletMissing, WalletRejected } from "@/lib/wallets";
+import { connectWalletConnect, walletConnectEnabled } from "@/lib/walletconnect";
 import { linkClass, secondaryButton } from "./ui";
 
 export type WalletPickerTexts = {
@@ -27,11 +32,25 @@ export type WalletPickerTexts = {
   blockedWallets: string;
   notInstalled: string;
   noWalletFound: string;
+  walletConnect: string;
+  walletConnectHint: string;
+  openInApp: string;
+  openInAppHint: string;
   cancel: string;
 };
 
+const WALLETCONNECT = "walletconnect";
+
 type Item = { key: string; name: string; icon: string | null; trusted: TrustedWallet | null };
-type Pending = { family: WalletFamily; items: Item[]; missing: TrustedWallet[]; last: string | null };
+type InApp = { id: string; name: string; href: string };
+type Pending = {
+  family: WalletFamily;
+  items: Item[];
+  missing: TrustedWallet[];
+  last: string | null;
+  walletConnect: boolean;
+  inApp: InApp[];
+};
 
 export function useWalletPicker(texts: WalletPickerTexts) {
   const [pending, setPending] = useState<Pending | null>(null);
@@ -47,7 +66,7 @@ export function useWalletPicker(texts: WalletPickerTexts) {
     family: WalletFamily,
     options: T[],
     keyOf: (o: T) => string,
-  ): Promise<T> {
+  ): Promise<T | typeof WALLETCONNECT> {
     const last = rememberedWallet(family);
     // A wallet that announced no icon for this family may have announced one for
     // the other (Phantom does both): use the wallet's own icon from there.
@@ -63,14 +82,29 @@ export function useWalletPicker(texts: WalletPickerTexts) {
     });
     const present = new Set(items.map((i) => i.trusted?.id).filter(Boolean));
     const missing = trustedFor(family).filter((w) => !present.has(w.id));
+    const walletConnect = family === "evm" && walletConnectEnabled();
+    // On a phone or tablet with no listed wallet here, offer the wallets' own
+    // app browsers instead of extension install links.
+    const touch = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+    const here = window.location.href;
+    const inApp: InApp[] = present.size || !touch
+      ? []
+      : trustedFor(family).flatMap((w) => {
+          const link = w.openInApp?.[family];
+          return link ? [{ id: w.id, name: w.name, href: link(here) }] : [];
+        });
     const key = await new Promise<string | null>((resolve) => {
       resolver.current = resolve;
-      setPending({ family, items, missing, last });
+      setPending({ family, items, missing: touch ? [] : missing, last, walletConnect, inApp });
     });
+    if (key === WALLETCONNECT && walletConnect) {
+      rememberWallet(family, WALLETCONNECT);
+      return WALLETCONNECT;
+    }
     // Only a wallet on the list can come out of here, whatever the dialog sent.
     const picked = key ? options.find((o) => keyOf(o) === key && matchTrusted(family, keyOf(o))) : undefined;
     if (!picked) {
-      if (!items.some((i) => i.trusted)) throw new WalletMissing(`no supported ${family} wallet`);
+      if (!items.some((i) => i.trusted) && !walletConnect) throw new WalletMissing(`no supported ${family} wallet`);
       throw new WalletRejected("wallet choice cancelled");
     }
     rememberWallet(family, keyOf(picked));
@@ -78,8 +112,17 @@ export function useWalletPicker(texts: WalletPickerTexts) {
   }
 
   return {
-    chooseEvm: async (): Promise<EvmWalletOption> => ask("evm", await discoverEvmWallets(), (o) => o.rdns),
-    chooseSolana: async (): Promise<SolanaWalletOption> => ask("solana", await discoverSolanaWallets(), (o) => o.key),
+    chooseEvm: async (): Promise<EvmWalletOption> => {
+      const picked = await ask("evm", await discoverEvmWallets(), (o) => o.rdns);
+      if (picked !== WALLETCONNECT) return picked;
+      const wc = await connectWalletConnect();
+      return { rdns: WALLETCONNECT, name: wc.name, icon: null, provider: wc.provider };
+    },
+    chooseSolana: async (): Promise<SolanaWalletOption> => {
+      const picked = await ask("solana", await discoverSolanaWallets(), (o) => o.key);
+      if (picked === WALLETCONNECT) throw new WalletRejected("WalletConnect is EVM only here");
+      return picked;
+    },
     element: pending ? <PickerDialog pending={pending} texts={texts} onClose={close} /> : null,
   };
 }
@@ -142,7 +185,7 @@ function PickerDialog({
           {texts.chooseWallet}
         </p>
         <p className="mt-2 font-body text-xs leading-relaxed text-slate">
-          {trusted.length === 0
+          {trusted.length === 0 && !pending.walletConnect && pending.inApp.length === 0
             ? texts.noWalletFound
             : pending.family === "evm"
               ? texts.chooseWalletHintEvm
@@ -157,6 +200,37 @@ function PickerDialog({
               </li>
             ))}
           </ul>
+        )}
+
+        {pending.walletConnect && (
+          <div className="mt-4">
+            <WalletButton
+              item={{ key: WALLETCONNECT, name: texts.walletConnect, icon: null, trusted: null }}
+              tag={pending.last === WALLETCONNECT ? texts.lastUsed : undefined}
+              onPick={() => onClose(WALLETCONNECT)}
+            />
+            <p className="mt-1 font-body text-[11px] leading-relaxed text-slate">{texts.walletConnectHint}</p>
+          </div>
+        )}
+
+        {pending.inApp.length > 0 && (
+          <>
+            <p className="mt-5 font-mono text-[11px] uppercase tracking-wide text-slate">{texts.openInApp}</p>
+            <p className="mt-1 font-body text-[11px] leading-relaxed text-slate">{texts.openInAppHint}</p>
+            <ul className="mt-2 space-y-2">
+              {pending.inApp.map((a) => (
+                <li key={a.id}>
+                  <a
+                    href={a.href}
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center border border-slate/30 px-4 py-3 font-body text-sm text-ink transition-colors hover:border-brass"
+                  >
+                    {a.name} ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
 
         {blocked.length > 0 && (
