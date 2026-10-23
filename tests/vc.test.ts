@@ -88,6 +88,18 @@ async function main() {
   assert.equal(reasonFor(undefined), "missing");
   assert.equal(reasonFor("   "), "missing");
   assert.equal(reasonFor("{kty: EC"), "invalid_json");
+  assert.equal(reasonFor(`NIARA_VC_PRIVATE_JWK=${good}`), "ok", "line copied from a .env file");
+  assert.equal(reasonFor(`'${good}'`), "ok", "single quotes");
+  assert.equal(reasonFor(good.replace(/"/g, (_q, i: number) => (i % 2 ? "\u201D" : "\u201C"))), "ok", "typographic quotes");
+  // The shape of a broken value never repeats key material.
+  try {
+    process.env.NIARA_VC_PRIVATE_JWK = "C:\\Users\\x\\key.json";
+    issuerConfig();
+  } catch (e) {
+    assert.ok(e instanceof IssuerNotConfigured && e.shape);
+    assert.equal(e.shape.startsWith, "letter-or-digit");
+    assert.ok(!JSON.stringify(e.shape).includes("Users"));
+  }
   const publicOnly = JSON.parse(good);
   delete publicOnly.d;
   assert.equal(reasonFor(JSON.stringify(publicOnly)), "not_a_private_key");

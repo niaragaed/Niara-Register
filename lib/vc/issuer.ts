@@ -15,21 +15,61 @@ import { issuerDid, type DocumentRegistrationCredential } from "./credential";
 /** Why the issuer is unavailable. The reason is safe to show: it never contains the key. */
 export type IssuerProblem = "missing" | "invalid_json" | "not_a_private_key" | "unsupported_key";
 
+/**
+ * Shape of a value that is not JSON, to tell what went wrong when pasting it.
+ * Only structural facts: never a character of the key material itself.
+ */
+export type ValueShape = {
+  length: number;
+  lines: number;
+  startsWith: string;
+  endsWith: string;
+  hasNameAssignment: boolean;
+  hasNulBytes: boolean;
+  hasSmartQuotes: boolean;
+};
+
 export class IssuerNotConfigured extends Error {
   constructor(
     message: string,
     readonly reason: IssuerProblem,
+    readonly shape?: ValueShape,
   ) {
     super(message);
   }
 }
 
+const charClass = (c: string | undefined) =>
+  c === undefined ? "nothing" : /[{}[\]"'`=]/.test(c) ? c : /\s/.test(c) ? "space" : /[A-Za-z0-9_-]/.test(c) ? "letter-or-digit" : "other";
+
+export function valueShape(raw: string): ValueShape {
+  const t = raw.trim();
+  return {
+    length: raw.length,
+    lines: raw.split(/\r?\n/).length,
+    startsWith: charClass(t[0]),
+    endsWith: charClass(t[t.length - 1]),
+    hasNameAssignment: /^\s*(export\s+)?[A-Z_][A-Z0-9_]*\s*=/.test(raw),
+    hasNulBytes: raw.includes("\u0000"),
+    hasSmartQuotes: /[\u201C\u201D\u2018\u2019]/.test(raw),
+  };
+}
+
 /**
- * Parses the env value, forgiving the usual copy-paste damage: a BOM, outer
- * whitespace, or the whole JSON pasted as a quoted string.
+ * Parses the env value, forgiving the usual copy-paste damage: a BOM, NUL bytes
+ * from a UTF-16 file, outer whitespace, a NAME= prefix (a line copied from a
+ * .env file), outer single quotes or backticks, typographic quotes, or the
+ * whole JSON pasted as a quoted string.
  */
 function parseJwk(raw: string): JWK | null {
-  let text = raw.replace(/^\uFEFF/, "").trim();
+  let text = raw
+    .replace(/\u0000/g, "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^(export\s+)?[A-Z_][A-Z0-9_]*\s*=\s*/, "")
+    .replace(/[\u201C\u201D]/g, '"')
+    .trim();
+  if (text.length > 1 && (text[0] === "'" || text[0] === "`") && text[text.length - 1] === text[0]) text = text.slice(1, -1).trim();
   for (let i = 0; i < 2; i++) {
     let value: unknown;
     try {
@@ -61,7 +101,7 @@ export function issuerConfig() {
   const raw = process.env.NIARA_VC_PRIVATE_JWK;
   if (!raw || !raw.trim()) throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not set.", "missing");
   const jwk = parseJwk(raw);
-  if (!jwk) throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not valid JSON.", "invalid_json");
+  if (!jwk) throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK is not valid JSON.", "invalid_json", valueShape(raw));
   if (typeof jwk.d !== "string") {
     throw new IssuerNotConfigured("NIARA_VC_PRIVATE_JWK has no private part (d).", "not_a_private_key");
   }
