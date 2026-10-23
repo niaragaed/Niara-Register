@@ -61,6 +61,8 @@ Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/mig
 | `SOLANA_START_SLOT` | `509235000` | Deploy slot; starting point when there is no checkpoint |
 | `SOLANA_POLL_INTERVAL_MS` | `30000` | |
 | `SOLANA_DESATIVADO` | (unset) | `1` turns off only the document source |
+| `SOLANA_V2_START_SLOT` | `514107228` | Slot of the devnet upgrade that added `register_v2`; starting point of the v2 source when there is no checkpoint |
+| `SOLANA_V2_DESATIVADO` | (unset) | `1` turns off only the v2 source (records + transferable records) |
 | `PMES_SOLANA_PROGRAM_ID` | `FKefGFhUmgXBM1xCtSFBWpoNnp3wuPJs6Yddpsp67J2y` | Niara SMEs program |
 | `PMES_SOLANA_START_SLOT` | `0` | With no checkpoint, reads the program's whole history (it has few transactions) |
 | `PMES_SOLANA_POLL_INTERVAL_MS` | `30000` | |

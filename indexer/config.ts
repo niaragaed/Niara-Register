@@ -295,8 +295,8 @@ export const config = {
     ],
     solana: {
       enabled: process.env.SOLANA_V2_DESATIVADO !== "1",
-      // Slot of the program upgrade that added register_v2; earlier slots only have v1.
-      startSlot: Number(process.env.SOLANA_V2_START_SLOT ?? process.env.SOLANA_START_SLOT ?? 509235000),
+      // Slot of the devnet upgrade that added register_v2 (2026-10-23); earlier slots only have v1.
+      startSlot: Number(process.env.SOLANA_V2_START_SLOT ?? 514107228),
       pollIntervalMs: Number(process.env.SOLANA_POLL_INTERVAL_MS ?? 30_000),
     },
   },
