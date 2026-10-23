@@ -100,6 +100,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const [credential, setCredential] = useState<string | null>(null);
   const [presentation, setPresentation] = useState<string | Record<string, unknown> | null>(null);
   const [proofBusy, setProofBusy] = useState<"issuing" | "presenting" | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
   const [seenHere, setSeenHere] = useState<LocalRegistration[]>([]);
 
@@ -113,6 +114,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     setTxHash(null);
     setReceiptId(null);
     setCredential(null);
+    setSavedAt(null);
     setPresentation(null);
     setError(null);
     setProofError(null);
@@ -187,7 +189,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   }
 
   async function connectAndCheck() {
-    if (!recordHash || !fileSha) return;
+    if (!recordHash || !fileSha || !nameAndTypeOk) return;
     setError(null);
     setExisting(null);
     try {
@@ -231,6 +233,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     if (!wallet || !recordHash || !metaCommit || !nameAndTypeOk) return;
     setError(null);
     setStatus("registering");
+    let doneTx: string | null = null;
+    let doneReceipt: string | null = null;
     try {
       if (wallet.kind === "evm" && isEvm(network)) {
         // The wallet may have changed network since it connected.
@@ -240,8 +244,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, wallet.signer);
         const tx = await registry.register(`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`);
         const receipt = await tx.wait();
-        setTxHash(receipt?.hash ?? tx.hash);
-        setReceiptId(BigInt(`0x${recordHash}`).toString());
+        doneTx = receipt?.hash ?? tx.hash;
+        doneReceipt = BigInt(`0x${recordHash}`).toString();
       } else if (wallet.kind === "solana") {
         const conn = solanaConnection();
         const cfg = await fetchReceiptConfig(conn);
@@ -251,9 +255,11 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
           computeBudgetIx(),
           registerV2Instruction(wallet.provider.publicKey!, cfg, recordHash, scheme, typeCode, metaCommit),
         );
-        setTxHash(sig);
-        setReceiptId((await fetchRecordV2(conn, recordHash))?.receiptAssetId ?? null);
+        doneTx = sig;
+        doneReceipt = (await fetchRecordV2(conn, recordHash))?.receiptAssetId ?? null;
       }
+      setTxHash(doneTx);
+      setReceiptId(doneReceipt);
       if (fileSha) {
         rememberRegistration(fileSha, { network, recordHash, at: new Date().toISOString() });
       }
@@ -262,7 +268,23 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
       console.error(e);
       setError(explain(e));
       setStatus("idle");
+      return;
     }
+    // The receipt is already in the wallet (minted in the same transaction).
+    // Now the proof package: credential from Niara, then saved automatically.
+    const jwt = await requestCredential();
+    saveProofPackage({ txHash: doneTx ?? undefined, receiptId: doneReceipt ?? undefined, credential: jwt ?? undefined });
+  }
+
+  type PackageExtras = Partial<Pick<ProofPackage, "txHash" | "receiptId" | "credential" | "presentation">>;
+
+  /** Downloads the package; `extras` carry values set in this same run (state is not updated yet). */
+  function saveProofPackage(extras: PackageExtras = {}) {
+    const pkg = proofPackage();
+    if (!pkg || !recordHash) return;
+    const full: ProofPackage = { ...pkg, ...Object.fromEntries(Object.entries(extras).filter(([, v]) => v !== undefined)) };
+    downloadBytes(JSON.stringify(full, null, 2), `niara-proof-${recordHash.slice(0, 12)}.json`, "application/json");
+    setSavedAt(new Date().toISOString());
   }
 
   function proofPackage(): ProofPackage | null {
@@ -287,9 +309,10 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     };
   }
 
-  async function issueCredential() {
+  /** Asks Niara for the W3C credential; returns it (or null and shows why). */
+  async function requestCredential(): Promise<string | null> {
     const pkg = proofPackage();
-    if (!pkg) return;
+    if (!pkg) return null;
     setProofBusy("issuing");
     setProofError(null);
     try {
@@ -309,11 +332,19 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         throw new Error(body.error === "issuer_not_configured" ? t.proof.issuerDown : `${t.proof.issueError} (${body.error ?? res.status})`);
       }
       setCredential(body.jwt);
+      return body.jwt;
     } catch (e) {
       setProofError(e instanceof Error ? e.message : String(e));
+      return null;
     } finally {
       setProofBusy(null);
     }
+  }
+
+  /** Manual retry when the automatic issuance failed; saves the package again. */
+  async function retryCredential() {
+    const jwt = await requestCredential();
+    if (jwt) saveProofPackage({ credential: jwt });
   }
 
   async function signPresentation() {
@@ -322,16 +353,18 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     setProofError(null);
     try {
       const holder = didPkh(network, wallet.address);
+      let vp: string | Record<string, unknown> | null = null;
       if (wallet.kind === "evm" && isEvm(network)) {
-        setPresentation(
-          await createEvmPresentation(wallet.signer, parseInt(EVM_NETWORKS[network].chainIdHex, 16), holder, credential),
-        );
+        vp = await createEvmPresentation(wallet.signer, parseInt(EVM_NETWORKS[network].chainIdHex, 16), holder, credential);
       } else if (wallet.kind === "solana") {
         const sm = wallet.provider.signMessage;
         if (!sm) throw new Error("This wallet cannot sign messages.");
-        setPresentation(
-          await createSolanaPresentation(async (m) => (await sm.call(wallet.provider, m, "utf8")).signature, holder, credential),
-        );
+        vp = await createSolanaPresentation(async (m) => (await sm.call(wallet.provider, m, "utf8")).signature, holder, credential);
+      }
+      if (vp) {
+        setPresentation(vp);
+        // The package now carries the presentation: save it again.
+        saveProofPackage({ presentation: vp });
       }
     } catch (e) {
       setProofError(isRejection(e) ? tr.rejected : e instanceof Error ? e.message : String(e));
@@ -499,7 +532,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
           {!registered && (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               {!wallet ? (
-                <button className={primaryButton} disabled={evmUnavailable || locked} onClick={() => connectAndCheck()}>
+                <button className={primaryButton} disabled={evmUnavailable || locked || !nameAndTypeOk} onClick={() => connectAndCheck()}>
                   {status === "connecting" ? tr.connecting : status === "checking" ? tr.checking : tr.connect}
                 </button>
               ) : (
@@ -511,7 +544,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
                   {tr.register}
                 </button>
               )}
-              {wallet && !nameAndTypeOk && (
+              {!nameAndTypeOk && (
                 <span className="font-body text-xs text-slate">{tr.nameTypeRequired}</span>
               )}
               {wallet && (
@@ -559,7 +592,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               <p className="mt-2 max-w-xl font-body text-sm text-slate">{t.proof.lede}</p>
               {scheme === SCHEME_SALTED && <Notice tone="bad">{t.proof.saltWarning}</Notice>}
               <div className="mt-4 flex flex-wrap gap-3">
-                <button className={secondaryButton} disabled={proofBusy !== null || Boolean(credential)} onClick={issueCredential}>
+                <button className={secondaryButton} disabled={proofBusy !== null || Boolean(credential)} onClick={retryCredential}>
                   {proofBusy === "issuing" ? t.proof.issuing : t.proof.issue}
                 </button>
                 <button
@@ -569,21 +602,11 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
                 >
                   {proofBusy === "presenting" ? t.proof.presenting : t.proof.present}
                 </button>
-                <button
-                  className={primaryButton}
-                  onClick={() => {
-                    const pkg = proofPackage();
-                    if (pkg)
-                      downloadBytes(
-                        JSON.stringify(pkg, null, 2),
-                        `niara-proof-${recordHash.slice(0, 12)}.json`,
-                        "application/json",
-                      );
-                  }}
-                >
-                  {t.proof.download}
+                <button className={primaryButton} onClick={() => saveProofPackage()}>
+                  {savedAt ? t.proof.downloadAgain : t.proof.download}
                 </button>
               </div>
+              {savedAt && <Notice tone="ok">{t.proof.autoSaved.replace("{file}", `niara-proof-${recordHash.slice(0, 12)}.json`)}</Notice>}
               {credential && <Notice tone="ok">{t.proof.issued}</Notice>}
               {presentation && <Notice tone="ok">{t.proof.presented}</Notice>}
               {isEvm(network) && credential && !presentation && (

@@ -1,8 +1,9 @@
 "use client";
 // "Connect wallet" always asks which wallet to use (EVM through EIP-6963,
-// Solana through the Wallet Standard). Wallets on the Niara list come first,
-// the last one used on top; other wallets the browser announces are shown
-// apart; listed wallets that are not installed get a link to their official
+// Solana through the Wallet Standard). Only wallets on the Niara list
+// (lib/wallet-catalog.ts) can be picked, the last one used on top; other
+// wallets the browser announces are named as not supported and cannot be
+// used; listed wallets that are not installed get a link to their official
 // site. Nothing connects until the user picks one.
 import { useEffect, useRef, useState } from "react";
 import { discoverEvmWallets, type EvmWalletOption } from "@/lib/evm-wallets";
@@ -23,7 +24,7 @@ export type WalletPickerTexts = {
   chooseWalletHintEvm: string;
   chooseWalletHintSolana: string;
   lastUsed: string;
-  otherWallets: string;
+  blockedWallets: string;
   notInstalled: string;
   noWalletFound: string;
   cancel: string;
@@ -66,12 +67,14 @@ export function useWalletPicker(texts: WalletPickerTexts) {
       resolver.current = resolve;
       setPending({ family, items, missing, last });
     });
-    if (!key) {
-      if (options.length === 0) throw new WalletMissing(`no ${family} wallet`);
+    // Only a wallet on the list can come out of here, whatever the dialog sent.
+    const picked = key ? options.find((o) => keyOf(o) === key && matchTrusted(family, keyOf(o))) : undefined;
+    if (!picked) {
+      if (!items.some((i) => i.trusted)) throw new WalletMissing(`no supported ${family} wallet`);
       throw new WalletRejected("wallet choice cancelled");
     }
-    rememberWallet(family, key);
-    return options.find((o) => keyOf(o) === key)!;
+    rememberWallet(family, keyOf(picked));
+    return picked;
   }
 
   return {
@@ -122,7 +125,7 @@ function PickerDialog({
   const trusted = pending.items
     .filter((i) => i.trusted)
     .sort((a, b) => Number(b.key === pending.last) - Number(a.key === pending.last) || a.name.localeCompare(b.name));
-  const others = pending.items.filter((i) => !i.trusted);
+  const blocked = pending.items.filter((i) => !i.trusted);
 
   return (
     <div
@@ -139,7 +142,7 @@ function PickerDialog({
           {texts.chooseWallet}
         </p>
         <p className="mt-2 font-body text-xs leading-relaxed text-slate">
-          {pending.items.length === 0
+          {trusted.length === 0
             ? texts.noWalletFound
             : pending.family === "evm"
               ? texts.chooseWalletHintEvm
@@ -156,17 +159,10 @@ function PickerDialog({
           </ul>
         )}
 
-        {others.length > 0 && (
-          <>
-            <p className="mt-5 font-mono text-[11px] uppercase tracking-wide text-slate">{texts.otherWallets}</p>
-            <ul className="mt-2 space-y-2">
-              {others.map((i) => (
-                <li key={i.key}>
-                  <WalletButton item={i} tag={i.key === pending.last ? texts.lastUsed : undefined} onPick={() => onClose(i.key)} />
-                </li>
-              ))}
-            </ul>
-          </>
+        {blocked.length > 0 && (
+          <p className="mt-4 font-body text-xs leading-relaxed text-slate">
+            {texts.blockedWallets} {blocked.map((i) => i.name).join(", ")}
+          </p>
         )}
 
         {pending.missing.length > 0 && (

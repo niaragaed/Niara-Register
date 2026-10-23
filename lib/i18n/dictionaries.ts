@@ -138,7 +138,7 @@ export const en = {
     chooseWalletHintSolana:
       "Choose the Solana wallet with the account you want to use. Nothing connects until you pick one.",
     lastUsed: "last used",
-    otherWallets: "Other wallets in this browser (not on Niara's list)",
+    blockedWallets: "Not supported on Niara (not on the list of reviewed wallets):",
     notInstalled: "Not installed",
     noWalletFound: "No compatible wallet was found in this browser. Install one of these, then reload the page:",
     changeWallet: "change wallet",
@@ -222,7 +222,7 @@ export const en = {
   proof: {
     title: "Proof package",
     lede:
-      "Niara keeps no copy of your document, salt or name. Everything needed to prove this record later goes into this package — save it with the file.",
+      "Niara keeps no copy of your document, salt or name. Everything needed to prove this record later goes into this package, saved automatically when the record is made. Optionally, add your wallet's signature to it (a holder presentation); the package is saved again.",
     saltWarning:
       "Without this package a salted record cannot be re-verified: the salt exists only here.",
     issue: "Get verifiable credential (W3C VC 2.0)",
@@ -230,12 +230,15 @@ export const en = {
     issued: "Credential issued by Niara (did:web), signed with JOSE.",
     issuerDown: "The credential issuer is not configured on this instance.",
     issueError: "Could not issue the credential.",
-    present: "Sign a presentation with your wallet",
+    present: "Add your wallet's signature (optional)",
     presenting: "Waiting for the wallet signature...",
     presented: "Presentation signed by your wallet.",
     presentEvmNote:
       "On EVM the presentation is signed with EIP-712 (EthereumEip712Signature2021, a W3C CCG draft, not a W3C Recommendation).",
     download: "Download proof package (.json)",
+    downloadAgain: "Download the proof package again",
+    autoSaved:
+      "Proof package saved to your downloads ({file}). Keep it with the file: it is the only way to prove this record later.",
     downloadPdf: "Download signed PDF again",
   },
 
@@ -651,7 +654,7 @@ export const pt: Dictionary = {
     chooseWalletHintSolana:
       "Escolha a carteira Solana com a conta que você quer usar. Nada se conecta até você escolher.",
     lastUsed: "última usada",
-    otherWallets: "Outras carteiras neste navegador (fora da lista da Niara)",
+    blockedWallets: "Não aceitas na Niara (fora da lista de carteiras revisadas):",
     notInstalled: "Não instaladas",
     noWalletFound: "Nenhuma carteira compatível foi encontrada neste navegador. Instale uma destas e recarregue a página:",
     changeWallet: "trocar carteira",
@@ -735,7 +738,7 @@ export const pt: Dictionary = {
   proof: {
     title: "Pacote de prova",
     lede:
-      "A Niara não guarda cópia do seu documento, do salt nem do nome. Tudo o que é preciso para provar este registro depois vai neste pacote — guarde-o junto com o arquivo.",
+      "A Niara não guarda cópia do seu documento, do salt nem do nome. Tudo o que é preciso para provar este registro depois vai neste pacote, salvo automaticamente quando o registro é feito. Se quiser, acrescente a assinatura da sua carteira (uma apresentação do titular); o pacote é salvo de novo.",
     saltWarning:
       "Sem este pacote, um registro com salt não pode ser verificado de novo: o salt só existe aqui.",
     issue: "Obter credencial verificável (W3C VC 2.0)",
@@ -743,12 +746,15 @@ export const pt: Dictionary = {
     issued: "Credencial emitida pela Niara (did:web), assinada com JOSE.",
     issuerDown: "O emissor de credenciais não está configurado nesta instância.",
     issueError: "Não foi possível emitir a credencial.",
-    present: "Assinar uma apresentação com sua carteira",
+    present: "Acrescentar a assinatura da carteira (opcional)",
     presenting: "Aguardando a assinatura na carteira...",
     presented: "Apresentação assinada pela sua carteira.",
     presentEvmNote:
       "Na EVM a apresentação é assinada com EIP-712 (EthereumEip712Signature2021, rascunho do W3C CCG, não uma Recomendação W3C).",
     download: "Baixar pacote de prova (.json)",
+    downloadAgain: "Baixar o pacote de prova de novo",
+    autoSaved:
+      "Pacote de prova salvo nos seus downloads ({file}). Guarde-o junto com o arquivo: é a única forma de provar este registro depois.",
     downloadPdf: "Baixar o PDF assinado de novo",
   },
 

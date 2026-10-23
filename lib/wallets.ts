@@ -108,10 +108,25 @@ export function solanaConnection(): Connection {
 export async function sendSolana(provider: SolanaProvider, ...ixs: TransactionInstruction[]): Promise<string> {
   if (!provider.publicKey) throw new WalletMissing("Solana wallet not connected");
   const connection = solanaConnection();
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+  // A finalized blockhash is known to every RPC node behind the load balancer;
+  // a just-confirmed one may not be yet, and the preflight then fails with
+  // "Blockhash not found". It is still valid for ~60 s, enough to sign.
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");
   const tx = new Transaction({ feePayer: provider.publicKey, blockhash, lastValidBlockHeight }).add(...ixs);
   const signed = await provider.signTransaction(tx);
-  const signature = await connection.sendRawTransaction(signed.serialize());
+  const raw = signed.serialize();
+  // If a lagging node still answers "Blockhash not found", resend the same
+  // signed transaction (no new signature) after a short wait.
+  let signature = "";
+  for (let attempt = 0; ; attempt++) {
+    try {
+      signature = await connection.sendRawTransaction(raw, { preflightCommitment: "confirmed", maxRetries: 5 });
+      break;
+    } catch (e) {
+      if (attempt >= 3 || !/blockhash not found/i.test(e instanceof Error ? e.message : String(e))) throw e;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
   const result = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
   if (result.value.err) throw new Error(JSON.stringify(result.value.err));
   return signature;
