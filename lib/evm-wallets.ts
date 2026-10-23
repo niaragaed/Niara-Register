@@ -2,8 +2,9 @@
 // EVM wallet discovery (EIP-6963). Every installed wallet announces its own
 // provider, so the site can ask which one to use instead of taking whichever
 // extension won the race for window.ethereum (with MetaMask and Phantom both
-// installed, either can answer). window.ethereum stays as the fallback for
-// wallets that do not implement EIP-6963.
+// installed, either can answer). Only wallets on the Niara list
+// (lib/wallet-catalog.ts) can be used; all of them implement EIP-6963, so
+// window.ethereum is not used as a fallback.
 
 import { walletIcon } from "./wallet-catalog";
 
@@ -12,7 +13,7 @@ export type Eip1193Provider = {
 };
 
 export type EvmWalletOption = {
-  /** Reverse-DNS id announced by the wallet (io.metamask, app.phantom, …); "injected" for the fallback. */
+  /** Reverse-DNS id announced by the wallet (io.metamask, app.phantom, …). */
   rdns: string;
   name: string;
   /** data:image/… URI announced by the wallet, or null. */
@@ -48,23 +49,10 @@ function listen() {
 // load are not missed.
 listen();
 
-function legacyName(ethereum: unknown): string {
-  const e = ethereum as { isMetaMask?: boolean; isPhantom?: boolean; isRabby?: boolean; isCoinbaseWallet?: boolean };
-  if (e.isPhantom) return "Phantom";
-  if (e.isRabby) return "Rabby";
-  if (e.isCoinbaseWallet) return "Coinbase Wallet";
-  if (e.isMetaMask) return "MetaMask";
-  return "Browser wallet";
-}
-
 /** Installed EVM wallets, by name. Waits briefly for the wallets to answer. */
 export async function discoverEvmWallets(waitMs = 350): Promise<EvmWalletOption[]> {
   listen();
   window.dispatchEvent(new Event("eip6963:requestProvider"));
   await new Promise((r) => setTimeout(r, waitMs));
-  const list = [...announced.values()].sort((a, b) => a.name.localeCompare(b.name));
-  if (list.length === 0 && window.ethereum) {
-    list.push({ rdns: "injected", name: legacyName(window.ethereum), icon: null, provider: window.ethereum });
-  }
-  return list;
+  return [...announced.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

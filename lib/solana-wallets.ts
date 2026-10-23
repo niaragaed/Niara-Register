@@ -1,8 +1,9 @@
 "use client";
 // Solana wallet discovery through the Wallet Standard (the protocol Phantom,
 // Solflare, Backpack, OKX, Coinbase and others register with), adapted to the
-// small SolanaProvider interface the pages already use. window.phantom.solana /
-// window.solana stay as the fallback for wallets that do not register.
+// small SolanaProvider interface the pages already use. Only wallets on the
+// Niara list (lib/wallet-catalog.ts) can be used; all of them register with
+// the Wallet Standard, so window.phantom / window.solana are not used.
 //
 // The registration handshake is implemented here (a few lines of the
 // standard's app side) instead of pulling in @wallet-standard/app.
@@ -30,7 +31,7 @@ type SignMsgFeature = {
 };
 
 export type SolanaWalletOption = {
-  /** Wallet Standard name, or "injected" for the window.solana fallback. */
+  /** Wallet Standard name. */
   key: string;
   name: string;
   icon: string | null;
@@ -108,9 +109,5 @@ export async function discoverSolanaWallets(waitMs = 150): Promise<SolanaWalletO
     .map((w) => ({ key: w.name, name: w.name.slice(0, 40), icon: safeIcon(w.icon), provider: adapt(w) }));
   const seen = new Set<string>();
   const unique = list.filter((o) => (seen.has(o.key) ? false : (seen.add(o.key), true)));
-  if (unique.length === 0) {
-    const legacy = window.phantom?.solana ?? window.solana;
-    if (legacy) unique.push({ key: "injected", name: legacy.isPhantom ? "Phantom" : "Solana wallet", icon: null, provider: legacy });
-  }
   return unique.sort((a, b) => a.name.localeCompare(b.name));
 }
