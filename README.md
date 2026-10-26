@@ -107,15 +107,22 @@ from the ORB attester key (EIP-712 on EVM, Ed25519 on Solana), so "ORB analysis:
 receipt and on `/verify` is not something the user can set alone. The site sends no ORB attestation
 yet: that waits for the ORB service and its key (AWS KMS before mainnet).
 
-Reads: `readRecordV2` returns the v3 record when there is one, else v2. On EVM, if the same hash
-also has a v2 record (v2 cannot be paused), `/verify` shows it too, with a note that a v2 record
-made around the same time may be a mempool copy. The indexer scans v3 with the same loops
-(`<PREFIX>_V3_REGISTRY`; Solana events from the same program) after
-`supabase/migrations_014_v3_commit_reveal_orb.sql`.
+**One record per (document, signer).** In v2 the first wallet to register a hash owned it, so whoever
+held the hash first (the other party of a contract, say) could lock the real signer out. In v3 every
+wallet that registers a hash gets its own record and receipt; only the same wallet registering the
+same hash twice is refused. `readRecords` returns all records of a hash (oldest first), `/verify`
+lists them (`?signer=` picks the one the proof check uses) and credentials name the signer.
 
-What commit-reveal does not change: someone who already holds the document hash (e.g. the other
-party of a contract) can still commit and register it first with their own wallet. The record says
-who registered it; for a PAdES PDF, who signed it is inside the PDF.
+**Retired v2.** v2 is ownerless and cannot be paused, so after the switch anyone could still write a
+copy of a v3 registration there. `V2_RETIRED_AT` in `lib/register-v2-evm.ts` (unix time of the v3
+deploy block, per network; the indexer's `<PREFIX>_V2_RETIRED_AT`) marks the moment v2 stopped being
+Niara's registry: v2 records made after it are shown as "not counted" and never used (credentials,
+proof checks, the "already registered" check). Set it in the same release that sets the v3 address.
+On Solana the upgrade removes `register_v2`, so no such records can exist there.
+
+The indexer scans v3 with the same loops (`<PREFIX>_V3_REGISTRY`; Solana events from the same
+program) after `supabase/migrations_014_v3_commit_reveal_orb.sql` and
+`supabase/migrations_015_v3_one_record_per_signer.sql`.
 
 ## Running locally
 

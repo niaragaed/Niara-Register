@@ -34,7 +34,16 @@ function memoryDb() {
   const checkpoints = new Map<string, number>();
   const db: V2Db = {
     async saveSignatureV2(r) {
-      if (!sigs.some((s) => s.rede === r.rede && s.hash_registro === r.hash_registro && s.versao_contrato === r.versao_contrato)) sigs.push(r);
+      if (
+        !sigs.some(
+          (s) =>
+            s.rede === r.rede &&
+            s.hash_registro === r.hash_registro &&
+            s.versao_contrato === r.versao_contrato &&
+            s.assinante_endereco === r.assinante_endereco,
+        )
+      )
+        sigs.push(r);
     },
     async saveEtrEvent(r) {
       if (!etr.some((s) => s.rede === r.rede && s.tx_hash === r.tx_hash && s.log_index === r.log_index)) etr.push(r);
@@ -250,9 +259,11 @@ async function v3() {
     const { topics, data } = iface.encodeEventLog("DocumentRegistered", args);
     logs.push({ address, blockNumber: 100, index: logs.length, transactionHash: ethers.zeroPadValue(ethers.toBeHex(logs.length + 1), 32), topics, data } as unknown as ethers.Log);
   };
-  add(REG3, reg3, [h, ALICE, 0, 1, ethers.ZeroHash, orb, 1_800_000_000]);
-  add(REG, reg2, [h, BOB, 0, 1, ethers.ZeroHash, 1_800_000_000]);
-  add(REG3, reg3, [h2, ALICE, 1, 2, ethers.ZeroHash, ethers.ZeroHash, 1_800_000_001]);
+  const tid = (hash: string, who: string) => BigInt(ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "address"], [hash, who])));
+  add(REG3, reg3, [h, ALICE, 0, 1, ethers.ZeroHash, orb, tid(h, ALICE), 1_800_000_000]);
+  add(REG, reg2, [h, BOB, 0, 1, ethers.ZeroHash, 1_800_000_100]); // after v2 retirement (1_800_000_050)
+  add(REG3, reg3, [h2, ALICE, 1, 2, ethers.ZeroHash, ethers.ZeroHash, tid(h2, ALICE), 1_800_000_001]);
+  add(REG3, reg3, [h, BOB, 0, 1, ethers.ZeroHash, ethers.ZeroHash, tid(h, BOB), 1_800_000_002]); // same hash, other signer
   // A v2-shaped event emitted by the v3 address must not decode (different topic).
   add(REG3, reg2, [ethers.sha256(ethers.toUtf8Bytes("x")), BOB, 0, 1, ethers.ZeroHash, 1]);
   const { db, sigs } = memoryDb();
@@ -273,6 +284,7 @@ async function v3() {
     db,
     registry: REG,
     registryV3: REG3,
+    v2RetiredAt: 1_800_000_050,
     deployBlock: 100,
     chunk: 500,
     maxChunksPerCycle: 1,
@@ -284,9 +296,13 @@ async function v3() {
   await idx.cycle();
   const v3a = sigs.find((x) => x.hash_registro === h && x.versao_contrato === 3);
   const v2a = sigs.find((x) => x.hash_registro === h && x.versao_contrato === 2);
-  check(sigs.length === 3, "v3 evm: v2 and v3 rows, v2-shaped log from the v3 address ignored");
+  const v3b = sigs.find((x) => x.hash_registro === h && x.versao_contrato === 3 && x.assinante_endereco === ethers.getAddress(BOB));
+  check(sigs.length === 4, "v3 evm: v2 and v3 rows, v2-shaped log from the v3 address ignored");
   check(v3a?.hash_relatorio_orb === orb && v3a.assinante_endereco === ethers.getAddress(ALICE), "v3 evm: ORB report hash stored");
+  check(v3a?.recibo_id === tid(h, ALICE).toString(), "v3 evm: receipt id = recordIdOf(hash, signer)");
+  check(Boolean(v3b) && v3b!.recibo_id !== v3a?.recibo_id, "v3 evm: a second signer of the same hash gets its own row");
   check(v2a?.hash_relatorio_orb === null && v2a.assinante_endereco === ethers.getAddress(BOB), "v3 evm: same hash on v2 kept as its own row");
+  check(v2a?.apos_aposentadoria_v2 === true && v3a?.apos_aposentadoria_v2 === false, "v3 evm: v2 row after retirement flagged");
   check(sigs.find((x) => x.hash_registro === h2)?.hash_relatorio_orb === null, "v3 evm: zero ORB hash stored as null");
 
   // Solana: DocumentRegisteredV3 checked against the RecordV3 account.
@@ -343,7 +359,7 @@ async function v3() {
           };
         },
         async getAccountInfo(address) {
-          return address.equals(recordV3Address(hash.toString("hex"), program)) ? { owner: program, data: account } : null;
+          return address.equals(recordV3Address(hash.toString("hex"), signer.toBase58(), program)) ? { owner: program, data: account } : null;
         },
       },
       db: mem.db,

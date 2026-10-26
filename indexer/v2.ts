@@ -47,6 +47,8 @@ export type NewSignatureV2 = {
   versao_contrato: 2 | 3;
   /** v3: "0x" + 64 hex of the attested ORB report, or null. */
   hash_relatorio_orb: string | null;
+  /** EVM v2 row written after v2 was retired on that network (migration 015). */
+  apos_aposentadoria_v2: boolean;
 };
 
 /** Event names stored in tipo_evento (Portuguese, like the rest of the database). */
@@ -100,7 +102,7 @@ export type DecodedEvm = { signature?: NewSignatureV2; etr?: NewEtrEvent };
 export function decodeEvmV2Log(
   log: ethers.Log,
   network: Exclude<V2Network, "solana-devnet">,
-  addresses: { registry?: string; registryV3?: string; etr?: string },
+  addresses: { registry?: string; registryV3?: string; etr?: string; v2RetiredAt?: number },
   blockTime: number | null,
 ): DecodedEvm | null {
   const address = log.address.toLowerCase();
@@ -129,9 +131,12 @@ export function decodeEvmV2Log(
         tipo_documento: documentType,
         compromisso_metadados: hex32(parsed.args.metadataCommitment as string),
         assinante_endereco: parsed.args.signer as string,
-        recibo_id: BigInt(hash).toString(),
+        // v2: token id = record hash; v3: token id = recordIdOf(hash, signer), carried by the event.
+        recibo_id: isV3 ? BigInt(parsed.args.tokenId as bigint).toString() : BigInt(hash).toString(),
         assinado_em: new Date(Number(parsed.args.timestamp as bigint) * 1000).toISOString(),
         versao_contrato: isV3 ? 3 : 2,
+        apos_aposentadoria_v2:
+          !isV3 && addresses.v2RetiredAt !== undefined && Number(parsed.args.timestamp as bigint) > addresses.v2RetiredAt,
         hash_relatorio_orb: isV3 && hex32(parsed.args.orbReportHash as string) !== ZERO32 ? hex32(parsed.args.orbReportHash as string) : null,
       },
     };
@@ -201,6 +206,8 @@ export function createEvmV2Indexer(deps: {
   registry?: string;
   /** SignatureRegistryV3 on this network, once deployed (scanned by the same loop). */
   registryV3?: string;
+  /** Unix seconds when v2 was retired there (v2 rows after it are flagged). */
+  v2RetiredAt?: number;
   etr?: string;
   deployBlock: number;
   chunk: number;
@@ -243,7 +250,7 @@ export function createEvmV2Indexer(deps: {
         const decoded = decodeEvmV2Log(
           log,
           deps.network,
-          { registry: deps.registry, registryV3: deps.registryV3, etr: deps.etr },
+          { registry: deps.registry, registryV3: deps.registryV3, etr: deps.etr, v2RetiredAt: deps.v2RetiredAt },
           blockTime,
         );
         if (decoded?.signature) {
@@ -381,8 +388,12 @@ export function recordV2Address(hashHex: string, program: PublicKey): PublicKey 
   return PublicKey.findProgramAddressSync([Buffer.from("record_v2"), Buffer.from(hashHex, "hex")], program)[0];
 }
 
-export function recordV3Address(hashHex: string, program: PublicKey): PublicKey {
-  return PublicKey.findProgramAddressSync([Buffer.from("record_v3"), Buffer.from(hashHex, "hex")], program)[0];
+/** v3 records are one per (hash, signer). */
+export function recordV3Address(hashHex: string, signer: string, program: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("record_v3"), Buffer.from(hashHex, "hex"), new PublicKey(signer).toBuffer()],
+    program,
+  )[0];
 }
 
 const PAGE_SIZE = 1000;
@@ -446,7 +457,7 @@ export function createSolanaV2Indexer(deps: {
         // The account is the source of truth, as in the v1 source.
         const version = e.kind === "DocumentRegisteredV3" ? 3 : 2;
         const orbHex = e.kind === "DocumentRegisteredV3" ? e.orbReportHash : null;
-        const pda = version === 3 ? recordV3Address(e.recordHash, program) : recordV2Address(e.recordHash, program);
+        const pda = version === 3 ? recordV3Address(e.recordHash, e.signer, program) : recordV2Address(e.recordHash, program);
         const account = await net(() => rpc.getAccountInfo(pda, "finalized"), `getAccountInfo ${pda.toBase58().slice(0, 8)}`);
         const acc = account && account.owner.equals(program) ? decodeRecordAccount(Buffer.from(account.data), version) : null;
         if (
@@ -474,6 +485,8 @@ export function createSolanaV2Indexer(deps: {
           assinado_em: new Date(e.timestamp * 1000).toISOString(),
           versao_contrato: version,
           hash_relatorio_orb: orbHex && !/^0+$/.test(orbHex) ? `0x${orbHex}` : null,
+          // register_v2 is removed by the v3 upgrade: no v2 rows can appear after it.
+          apos_aposentadoria_v2: false,
         });
         saved++;
         continue;

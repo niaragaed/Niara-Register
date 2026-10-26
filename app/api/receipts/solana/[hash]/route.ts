@@ -1,4 +1,5 @@
-// Metadata JSON of a Solana cNFT receipt (its on-chain URI points here).
+// Metadata JSON of a v2 Solana cNFT receipt (its on-chain URI points here).
+// v3 receipts point to ./[signer] instead (one record per hash and signer).
 import { NextResponse } from "next/server";
 import { isHash32 } from "@/lib/commitments";
 import { receiptJson } from "@/lib/receipt-metadata";
@@ -22,7 +23,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ hash
       scheme: record?.scheme,
       documentType: record?.documentType,
       timestamp: record?.timestamp,
-      orbAnalysed: record?.version === 3 ? record.orbReportHash !== null : undefined,
     }),
     { headers: { "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } },
   );

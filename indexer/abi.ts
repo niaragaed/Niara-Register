@@ -32,9 +32,10 @@ export const SIGNATURE_REGISTRY_V2_ABI = [
 ];
 
 // From niaragaed/niara-contracts-Register, src/v3/SignatureRegistryV3.sol (events only).
-// Same event name as v2 with one more field, so a different topic.
+// Same event name as v2 with more fields, so a different topic. v3 records are
+// one per (hash, signer); tokenId = keccak256(abi.encode(recordHash, signer)).
 export const SIGNATURE_REGISTRY_V3_ABI = [
-  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 timestamp)",
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 tokenId, uint256 timestamp)",
 ];
 
 // From niaragaed/niara-contracts-Register, src/mletr/TransferableRecordRegistry.sol (events only).

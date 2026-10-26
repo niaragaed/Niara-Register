@@ -29,7 +29,8 @@ import {
   computeBudgetIx,
   fetchCommitmentSlot,
   fetchReceiptConfig,
-  fetchRecordAny,
+  fetchRecordV2,
+  fetchRecordV3,
   registerV2Instruction,
   registerV3Instruction,
   solanaV2ErrorReason,
@@ -50,7 +51,8 @@ import {
 import type { SolanaProvider } from "@/lib/solana";
 import { createEvmPresentation, createSolanaPresentation } from "@/lib/vc/presentation";
 import { PROOF_PACKAGE_FORMAT, type ProofPackage } from "@/lib/proof-package";
-import { evmProvider, readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
+import { countedRecords, evmProvider, readLegacyRecord, readRecords } from "@/lib/v2-reader";
+import { AbiCoder, keccak256 } from "ethers";
 import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { lookupOnAllNetworks, type LookupResult } from "@/lib/multichain-lookup";
@@ -105,6 +107,9 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const nameAndTypeOk = name.trim() !== "" && typeCode > 0;
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [existing, setExisting] = useState<Existing>(null);
+  // v3 networks: records of the same hash by OTHER wallets. They do not block
+  // (each wallet gets its own record); shown so nobody is surprised.
+  const [others, setOthers] = useState<{ signer: string; timestamp: number }[]>([]);
   const [status, setStatus] = useState<"idle" | "reading" | "connecting" | "checking" | "registering" | "done">("idle");
   const [phase, setPhase] = useState<Phase>(null);
   // Commit-reveal nonce for the current record hash. Kept across a failed
@@ -217,10 +222,35 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     return `${tr.error} ${message}`;
   }
 
+  /**
+   * v3 networks: only this wallet's own record blocks (records are one per
+   * hash and signer); other wallets' records are listed. v2 networks: any
+   * record of the hash blocks, as before (one record per hash there).
+   */
+  async function checkExisting(address: string, readV1: () => Promise<{ signer: string; timestamp: number } | null>) {
+    if (!recordHash) return;
+    const recs = countedRecords(await readRecords(network, recordHash));
+    const mineOf = (s: string) => (s.startsWith("0x") ? s.toLowerCase() === address.toLowerCase() : s === address);
+    if (usesCommitReveal) {
+      const mine = recs.find((r) => r.version === 3 && mineOf(r.signer));
+      if (mine) setExisting({ version: 3, signer: mine.signer, timestamp: mine.timestamp });
+      setOthers(recs.filter((r) => !mineOf(r.signer)).map((r) => ({ signer: r.signer, timestamp: r.timestamp })));
+      return;
+    }
+    const first = recs[0];
+    if (first) {
+      setExisting({ version: first.version, signer: first.signer, timestamp: first.timestamp });
+      return;
+    }
+    const v1 = await readV1();
+    if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
+  }
+
   async function connectAndCheck() {
     if (!recordHash || !fileSha || !nameAndTypeOk) return;
     setError(null);
     setExisting(null);
+    setOthers([]);
     try {
       setStatus("connecting");
       if (isEvm(network)) {
@@ -229,25 +259,13 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         setWallet({ kind: "evm", signer, address, name: chosen.name });
         setStatus("checking");
         // Reads go through the site's RPC for the chosen network, not the wallet's.
-        const rec = await readRecordV2(network, recordHash);
-        if (rec) {
-          setExisting({ version: rec.version, signer: rec.signer, timestamp: rec.timestamp });
-        } else {
-          const v1 = await readLegacyRecord(network, fileSha);
-          if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
-        }
+        await checkExisting(address, () => readLegacyRecord(network, fileSha));
       } else {
         const chosen = await walletPicker.chooseSolana();
         const { provider, address } = await connectSolana(chosen.provider);
         setWallet({ kind: "solana", provider, address, name: chosen.name });
         setStatus("checking");
-        const conn = solanaConnection();
-        const rec = await fetchRecordAny(conn, recordHash);
-        if (rec) setExisting({ version: rec.version, signer: rec.signer, timestamp: rec.timestamp });
-        else {
-          const v1 = await fetchSolanaRecord(conn, fileSha);
-          if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
-        }
+        await checkExisting(address, () => fetchSolanaRecord(solanaConnection(), fileSha));
       }
       setStatus("idle");
     } catch (e) {
@@ -272,14 +290,18 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         const v3 = v3Registry(network);
         if (v3) {
           doneTx = await registerEvmV3(wallet.signer, wallet.address, chainId, v3);
+          // v3 token id = recordIdOf(recordHash, signer) = keccak256(abi.encode(recordHash, signer)).
+          doneReceipt = BigInt(
+            keccak256(AbiCoder.defaultAbiCoder().encode(["bytes32", "address"], [`0x${recordHash}`, wallet.address])),
+          ).toString();
         } else {
           if ((await wallet.signer.provider!.getCode(deployment!.registry!)) === "0x") throw new ContractNotOnWallet();
           const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, wallet.signer);
           const tx = await registry.register(`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`);
           const receipt = await tx.wait();
           doneTx = receipt?.hash ?? tx.hash;
+          doneReceipt = BigInt(`0x${recordHash}`).toString();
         }
-        doneReceipt = BigInt(`0x${recordHash}`).toString();
       } else if (wallet.kind === "solana") {
         const conn = solanaConnection();
         const cfg = await fetchReceiptConfig(conn);
@@ -314,7 +336,9 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
             registerV2Instruction(pk, cfg, recordHash, scheme, typeCode, metaCommit),
           );
         }
-        doneReceipt = (await fetchRecordAny(conn, recordHash))?.receiptAssetId ?? null;
+        doneReceipt =
+          (SOLANA_REGISTER_V3 ? await fetchRecordV3(conn, recordHash, pk) : await fetchRecordV2(conn, recordHash))
+            ?.receiptAssetId ?? null;
       }
       setTxHash(doneTx);
       setReceiptId(doneReceipt);
@@ -432,6 +456,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           network,
+          // v3 records are one per (hash, signer): say whose record this is.
+          signer: wallet?.address,
           recordHash: pkg.recordHash,
           fileSha256: pkg.fileSha256,
           salt: pkg.salt,
@@ -560,10 +586,11 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               {tr.lookupFound}
               <ul className="mt-2 space-y-1">
                 {lookup.result.hits.map((h) => (
-                  <li key={`${h.network}-${h.version}`} className="font-mono text-xs">
+                  <li key={`${h.network}-${h.version}-${h.signer}`} className="font-mono text-xs">
                     <a href={`/verify/${h.network}/0x${fileSha}`} className={linkClass}>
                       {tr.networks[h.network]} · {h.version === 1 ? tr.lookupV1 : tr.lookupV2} · {short(h.signer)} ·{" "}
                       {formatTimestamp(h.timestamp, locale)}
+                      {h.afterV2Retirement ? ` · ${tr.lookupNotCounted}` : ""}
                     </a>
                   </li>
                 ))}
@@ -665,8 +692,15 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
           {existing && (
             <Notice tone="neutral">
-              {existing.version >= 2 ? tr.alreadyRecorded : tr.alreadyRecordedV1} {short(existing.signer)} ·{" "}
-              {formatTimestamp(existing.timestamp, locale)}
+              {existing.version === 3 ? tr.alreadyRecordedByYou : existing.version === 2 ? tr.alreadyRecorded : tr.alreadyRecordedV1}{" "}
+              {short(existing.signer)} · {formatTimestamp(existing.timestamp, locale)}
+            </Notice>
+          )}
+
+          {others.length > 0 && !existing && (
+            <Notice tone="neutral">
+              {tr.alsoRegisteredBy}{" "}
+              {others.map((o) => `${short(o.signer)} (${formatTimestamp(o.timestamp, locale)})`).join(", ")}
             </Notice>
           )}
 

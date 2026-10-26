@@ -5,7 +5,7 @@ import { getLocale } from "@/lib/i18n/get-locale";
 import { formatTimestamp } from "@/lib/i18n/format";
 import { isHash32, ZERO_HASH } from "@/lib/commitments";
 import { isEvm, isRegisterNetwork } from "@/lib/networks";
-import { NotDeployed, readLegacyRecord, readRecordV2, type LegacyRecord, type OnChainRecord } from "@/lib/v2-reader";
+import { NotDeployed, readLegacyRecord, readRecords, type LegacyRecord, type OnChainRecord } from "@/lib/v2-reader";
 import { evmAddressLink } from "@/lib/register-contract";
 import { solanaExplorerLink } from "@/lib/register-solana";
 import { VerifyTool } from "./verify-tool";
@@ -14,7 +14,10 @@ import { documentTypeName } from "@/lib/document-types";
 // Always read live from the chain: no database in the verification path.
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ network: string; hash: string }> };
+type Props = {
+  params: Promise<{ network: string; hash: string }>;
+  searchParams: Promise<{ signer?: string }>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { hash } = await params;
@@ -30,8 +33,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export default async function VerifyRecordPage({ params }: Props) {
+export default async function VerifyRecordPage({ params, searchParams }: Props) {
   const { network, hash } = await params;
+  const { signer: wanted } = await searchParams;
   if (!isRegisterNetwork(network) || !isHash32(hash)) notFound();
   const hex = hash.replace(/^0x/, "").toLowerCase();
 
@@ -39,15 +43,19 @@ export default async function VerifyRecordPage({ params }: Props) {
   const dict = dictionaries[locale];
   const t = dict.verify;
 
-  let record: OnChainRecord | null = null;
+  let records: OnChainRecord[] = [];
   let legacy: LegacyRecord | null = null;
   let problem: "notDeployed" | "rpcDown" | null = null;
   try {
-    record = await readRecordV2(network, hex);
+    records = await readRecords(network, hex);
   } catch (e) {
     problem = e instanceof NotDeployed ? "notDeployed" : "rpcDown";
   }
-  if (!record) {
+  const same = (a: string, b: string) => (a.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b);
+  const counted = records.filter((r) => !r.afterV2Retirement);
+  // The record the proof-package check uses: ?signer=… or the oldest counted one.
+  const record: OnChainRecord | null = (wanted && counted.find((r) => same(r.signer, wanted))) || counted[0] || null;
+  if (records.length === 0) {
     legacy = await readLegacyRecord(network, hex).catch(() => null);
   }
 
@@ -63,41 +71,59 @@ export default async function VerifyRecordPage({ params }: Props) {
         <p className="mt-1 font-mono text-xs text-slate">{dict.register.networks[network]}</p>
       </header>
 
-      {record ? (
-        <dl className="mt-8">
-          <Row label={t.signer}>
-            <a href={signerLink(record.signer)} target="_blank" rel="noreferrer" className="text-brass underline">
-              {record.signer}
-            </a>
-          </Row>
-          <Row label={t.registeredAt}>{formatTimestamp(record.timestamp, locale)}</Row>
-          <Row label={t.scheme}>{record.scheme === 0 ? t.schemeSigned : t.schemeSalted}</Row>
-          <Row label={t.documentType}>{documentTypeName(record.documentType, locale)}</Row>
-          <Row label={t.metadata}>
-            {record.metadataCommitment === ZERO_HASH ? t.metadataNone : t.metadataPrivate}
-          </Row>
-          <Row label={t.receipt}>
-            {isEvm(network) ? "ERC-721 + ERC-5192 · token id " : "Bubblegum v2 cNFT · asset id "}
-            <span className="font-mono text-xs">{record.receiptId}</span>
-          </Row>
-          <Row label={t.registration}>{record.version === 3 ? t.registrationV3 : t.registrationV2}</Row>
-          <Row label={t.orb}>
-            {record.orbReportHash ? (
-              <>
-                {t.orbYes} <span className="break-all font-mono text-xs">0x{record.orbReportHash}</span>
-              </>
-            ) : (
-              t.orbNo
-            )}
-          </Row>
-          {record.alsoOnV2 && (
-            <Row label={t.alsoOnV2Title}>
-              {t.alsoOnV2
-                .replace("{signer}", record.alsoOnV2.signer)
-                .replace("{date}", formatTimestamp(record.alsoOnV2.timestamp, locale))}
-            </Row>
+      {records.length > 0 ? (
+        <div className="mt-8">
+          {records.length > 1 && (
+            <>
+              <h2 className="font-display text-xl text-ink">{t.recordsTitle.replace("{n}", String(records.length))}</h2>
+              <p className="mt-2 max-w-2xl font-body text-sm text-slate">{t.recordsNote}</p>
+            </>
           )}
-        </dl>
+          {records.map((r, i) => (
+            <dl key={`${r.version}-${r.signer}`} className={`mt-6 ${r === record && records.length > 1 ? "border-l-2 border-brass pl-4" : ""}`}>
+              {records.length > 1 && (
+                <p className="font-mono text-xs uppercase tracking-wide text-slate">
+                  {t.recordN.replace("{i}", String(i + 1))}
+                  {r === record ? (
+                    <> · {t.checkingAgainst}</>
+                  ) : !r.afterV2Retirement ? (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <a href={`?signer=${encodeURIComponent(r.signer)}`} className="text-brass underline">
+                        {t.useForCheck}
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              )}
+              <Row label={t.signer}>
+                <a href={signerLink(r.signer)} target="_blank" rel="noreferrer" className="text-brass underline">
+                  {r.signer}
+                </a>
+              </Row>
+              <Row label={t.registeredAt}>{formatTimestamp(r.timestamp, locale)}</Row>
+              {r.afterV2Retirement && <Row label={t.retiredV2Title}>{t.retiredV2}</Row>}
+              <Row label={t.scheme}>{r.scheme === 0 ? t.schemeSigned : t.schemeSalted}</Row>
+              <Row label={t.documentType}>{documentTypeName(r.documentType, locale)}</Row>
+              <Row label={t.metadata}>{r.metadataCommitment === ZERO_HASH ? t.metadataNone : t.metadataPrivate}</Row>
+              <Row label={t.receipt}>
+                {isEvm(network) ? "ERC-721 + ERC-5192 · token id " : "Bubblegum v2 cNFT · asset id "}
+                <span className="font-mono text-xs">{r.receiptId}</span>
+              </Row>
+              <Row label={t.registration}>{r.version === 3 ? t.registrationV3 : t.registrationV2}</Row>
+              <Row label={t.orb}>
+                {r.orbReportHash ? (
+                  <>
+                    {t.orbYes} <span className="break-all font-mono text-xs">0x{r.orbReportHash}</span>
+                  </>
+                ) : (
+                  t.orbNo
+                )}
+              </Row>
+            </dl>
+          ))}
+        </div>
       ) : legacy ? (
         <div className="mt-8">
           <h2 className="font-display text-xl text-ink">{t.legacyTitle}</h2>

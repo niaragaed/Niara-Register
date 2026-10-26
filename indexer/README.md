@@ -63,7 +63,8 @@ Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/mig
 | `SOLANA_DESATIVADO` | (unset) | `1` turns off only the document source |
 | `SOLANA_V2_START_SLOT` | `514107228` | Slot of the devnet upgrade that added `register_v2`; starting point of the v2 source when there is no checkpoint |
 | `SOLANA_V2_DESATIVADO` | (unset) | `1` turns off only the v2 source (records + transferable records) |
-| `<PREFIX>_V3_REGISTRY` | (unset) | `SignatureRegistryV3` address on that EVM network (`SEPOLIA`, `BASE`, `ROBINHOOD`, `HYPEREVM`, `TEMPO`). Scanned by the same `<network>-v2` loop. Set it before the first v3 registration; otherwise lower that source's checkpoint to the v3 deploy block once. Solana v3 events (`DocumentRegisteredV3`) need no variable. v3 rows have `versao_contrato = 3` and `hash_relatorio_orb`: run `supabase/migrations_014_v3_commit_reveal_orb.sql` first. |
+| `<PREFIX>_V3_REGISTRY` | (unset) | `SignatureRegistryV3` address on that EVM network (`SEPOLIA`, `BASE`, `ROBINHOOD`, `HYPEREVM`, `TEMPO`). Scanned by the same `<network>-v2` loop. Set it before the first v3 registration; otherwise lower that source's checkpoint to the v3 deploy block once. Solana v3 events (`DocumentRegisteredV3`) need no variable. v3 rows have `versao_contrato = 3` and `hash_relatorio_orb`: run `supabase/migrations_014_v3_commit_reveal_orb.sql` and `015` first (v3 rows are one per hash and signer). |
+| `<PREFIX>_V2_RETIRED_AT` | (unset) | Unix time of the v3 deploy block on that EVM network (same value as `V2_RETIRED_AT` in the site). v2 rows after it get `apos_aposentadoria_v2 = true` (possible mempool copies; not counted). |
 | `PMES_SOLANA_PROGRAM_ID` | `FKefGFhUmgXBM1xCtSFBWpoNnp3wuPJs6Yddpsp67J2y` | Niara SMEs program |
 | `PMES_SOLANA_START_SLOT` | `0` | With no checkpoint, reads the program's whole history (it has few transactions) |
 | `PMES_SOLANA_POLL_INTERVAL_MS` | `30000` | |

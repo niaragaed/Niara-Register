@@ -122,7 +122,7 @@ export async function saveSignatureV2(row: NewSignatureV2): Promise<void> {
   }
   const { error } = await supabase
     .from("registro_assinaturas_v2")
-    .upsert(row, { onConflict: "rede,hash_registro,versao_contrato", ignoreDuplicates: true });
+    .upsert(row, { onConflict: "rede,hash_registro,versao_contrato,assinante_endereco", ignoreDuplicates: true });
   if (error) throw new Error(`Failed to save v2 signature (${row.hash_registro}): ${error.message}`);
 }
 

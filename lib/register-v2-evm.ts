@@ -88,6 +88,22 @@ const OVERRIDES_V3: Record<EvmNetwork, string | undefined> = {
   "tempo-testnet": process.env.NEXT_PUBLIC_V3_TEMPO_TESTNET_REGISTRY,
 };
 
+/**
+ * When SignatureRegistryV2 stopped being Niara's registry on each network
+ * (unix seconds: the timestamp of the v3 deploy block). v2 is ownerless and
+ * cannot be paused, so anyone can still write to it; a v2 record made after
+ * this moment did not come from the site and could be a copy of a v3
+ * registration taken from the mempool. Readers flag those records and do not
+ * count them. null = v2 is still the active registry there.
+ */
+export const V2_RETIRED_AT: Record<EvmNetwork, number | null> = {
+  sepolia: null,
+  "base-sepolia": null,
+  "robinhood-testnet": null,
+  "hyperevm-testnet": null,
+  "tempo-testnet": null,
+};
+
 export function v3Registry(network: EvmNetwork): `0x${string}` | null {
   const o = OVERRIDES_V3[network];
   return isAddress(o) ? o : DEPLOYED_V3[network];
@@ -96,15 +112,17 @@ export function v3Registry(network: EvmNetwork): `0x${string}` | null {
 export const SIGNATURE_REGISTRY_V3_ABI = [
   "function commitmentOf(address signer, bytes32 recordHash, bytes32 nonce) view returns (bytes32)",
   "function commit(bytes32 commitment)",
-  "function commitmentInfo(address signer, bytes32 commitment) view returns (uint256 blockNumber, uint256 timestamp, uint256 revealableAtBlock, uint256 expiresAt)",
+  "function commitmentInfo(address signer, bytes32 commitment) view returns (uint256 blockNumber, uint256 timestamp)",
+  "function recordIdOf(bytes32 recordHash, address signer) pure returns (bytes32)",
+  "function signersOf(bytes32 recordHash) view returns (address[])",
   "function register(bytes32 recordHash, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 nonce, bytes32 orbReportHash, bytes orbSignature) returns (uint256 tokenId)",
-  "function verify(bytes32 recordHash) view returns (bool exists, address signer, uint256 timestamp, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash)",
+  "function verify(bytes32 recordHash, address signer) view returns (bool exists, uint256 timestamp, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 tokenId)",
   "function orbAttester() view returns (address)",
   "function tokenURI(uint256 tokenId) view returns (string)",
   "function locked(uint256 tokenId) view returns (bool)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "event Committed(address indexed signer, bytes32 indexed commitment, uint256 blockNumber)",
-  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 timestamp)",
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 tokenId, uint256 timestamp)",
   "event Locked(uint256 tokenId)",
   "error AlreadyRegistered(bytes32 recordHash)",
   "error InvalidHash()",

@@ -28,6 +28,8 @@ export function receiptJson(opts: {
   timestamp?: number;
   /** v3 only; undefined for v2 receipts (the trait is then left out). */
   orbAnalysed?: boolean;
+  /** v3 receipts name the wallet whose record it is. */
+  signer?: string;
 }) {
   const attributes: { trait_type: string; value: string | number; display_type?: string }[] = [
     { trait_type: "Record hash", value: `0x${opts.hashHex}` },
@@ -41,6 +43,7 @@ export function receiptJson(opts: {
   if (opts.documentType) {
     attributes.push({ trait_type: "Document type", value: documentTypeName(opts.documentType, "en") });
   }
+  if (opts.signer) attributes.push({ trait_type: "Signer", value: opts.signer });
   if (opts.orbAnalysed !== undefined) {
     attributes.push({ trait_type: "ORB analysis", value: opts.orbAnalysed ? "Yes" : "No" });
   }

@@ -114,6 +114,7 @@ const v2EvmIndexers = config.v2.evm
         db,
         registry: n.registry,
         registryV3: n.registryV3,
+        v2RetiredAt: n.v2RetiredAt,
         etr: n.etr,
         deployBlock: n.deployBlock,
         chunk: n.chunk,

@@ -116,6 +116,7 @@ export const en = {
     lookupFound: "This file is already recorded on-chain:",
     lookupV1: "previous version (name and type public)",
     lookupV2: "signed PDF",
+    lookupNotCounted: "not counted (old v2 registry after its retirement)",
     lookupNone: "This file is not recorded on any of the six networks.",
     lookupNoneSalted:
       "Not found on the six networks as a signed PDF or an old record. Salted records cannot be found from the file alone (that is what keeps them private): only their proof package finds them.",
@@ -145,6 +146,9 @@ export const en = {
     commitRevealNote:
       "Registration takes two wallet confirmations: a commitment first, then the registration in a later block. This stops anyone who sees your pending transaction from registering the document before you.",
     commitExpired: "The commitment expired (it is valid for 24 hours). Register again to make a new one.",
+    alreadyRecordedByYou: "This wallet already registered this document:",
+    alsoRegisteredBy:
+      "Other wallets also registered this document. That does not block you: your registration will be a separate record of your own. Registered by:",
     commitNotFound: "The commitment transaction went through but the network does not show it yet. Try again in a few seconds.",
     revealTimeout: "The network did not move past the commitment in time. Click register again: the commitment is reused.",
     connectedWallet: "Connected wallet:",
@@ -311,9 +315,15 @@ export const en = {
     orb: "ORB analysis",
     orbYes: "yes, attested by the ORB key · report hash",
     orbNo: "no",
-    alsoOnV2Title: "Also on v2",
-    alsoOnV2:
-      "The same hash also has a record on the older v2 registry, by {signer} on {date}. v2 had no commit-reveal, so a v2 record made around the same time as this one may be a copy taken from the mempool.",
+    recordsTitle: "{n} records of this document",
+    recordsNote:
+      "Each wallet that registers a document gets its own record. The list shows who registered it and when; who signed a PAdES PDF is inside the PDF.",
+    recordN: "Record {i}",
+    useForCheck: "Check the proof package against this record",
+    checkingAgainst: "The proof check below uses this record.",
+    retiredV2Title: "Not counted",
+    retiredV2:
+      "Made on the old v2 registry after Niara replaced it on this network. v2 cannot be paused and had no commit-reveal, so this record did not come from Niara Register and may be a copy taken from the mempool.",
     receipt: "Receipt",
     legacyTitle: "Record from the previous version",
     legacyNote: "Recorded before v2: name and type are public on-chain.",
@@ -682,6 +692,7 @@ export const pt: Dictionary = {
     lookupFound: "Este arquivo já está registrado on-chain:",
     lookupV1: "versão anterior (nome e tipo públicos)",
     lookupV2: "PDF assinado",
+    lookupNotCounted: "não contado (contrato v2 antigo depois da aposentadoria)",
     lookupNone: "Este arquivo não está registrado em nenhuma das seis redes.",
     lookupNoneSalted:
       "Não encontrado nas seis redes como PDF assinado nem como registro antigo. Registros com salt não podem ser encontrados só com o arquivo (é isso que os mantém privados): só o pacote de prova os encontra.",
@@ -711,6 +722,9 @@ export const pt: Dictionary = {
     commitRevealNote:
       "O registro pede duas confirmações na carteira: primeiro um compromisso, depois o registro em um bloco seguinte. Assim, quem vir sua transação pendente não consegue registrar o documento antes de você.",
     commitExpired: "O compromisso expirou (vale por 24 horas). Registre de novo para criar outro.",
+    alreadyRecordedByYou: "Esta carteira já registrou este documento:",
+    alsoRegisteredBy:
+      "Outras carteiras também registraram este documento. Isso não impede o seu registro: ele será um registro separado, seu. Registrado por:",
     commitNotFound: "A transação do compromisso foi enviada, mas a rede ainda não a mostra. Tente de novo em alguns segundos.",
     revealTimeout: "A rede não avançou além do compromisso a tempo. Clique em registrar de novo: o compromisso é reaproveitado.",
     connectedWallet: "Carteira conectada:",
@@ -877,9 +891,15 @@ export const pt: Dictionary = {
     orb: "Análise ORB",
     orbYes: "sim, atestada pela chave do ORB · hash do relatório",
     orbNo: "não",
-    alsoOnV2Title: "Também na v2",
-    alsoOnV2:
-      "O mesmo hash também tem registro no contrato v2 antigo, por {signer} em {date}. A v2 não tinha commit-reveal, então um registro v2 feito perto da mesma hora pode ser uma cópia tirada do mempool.",
+    recordsTitle: "{n} registros deste documento",
+    recordsNote:
+      "Cada carteira que registra um documento ganha o próprio registro. A lista mostra quem registrou e quando; quem assinou um PDF PAdES está dentro do PDF.",
+    recordN: "Registro {i}",
+    useForCheck: "Conferir o pacote de prova com este registro",
+    checkingAgainst: "A conferência abaixo usa este registro.",
+    retiredV2Title: "Não contado",
+    retiredV2:
+      "Feito no contrato v2 antigo depois que a Niara o substituiu nesta rede. A v2 não pode ser pausada e não tinha commit-reveal, então este registro não veio do Niara Register e pode ser uma cópia tirada do mempool.",
     receipt: "Recibo",
     legacyTitle: "Registro da versão anterior",
     legacyNote: "Registrado antes da v2: nome e tipo são públicos on-chain.",
