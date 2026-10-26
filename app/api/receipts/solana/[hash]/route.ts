@@ -22,6 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ hash
       scheme: record?.scheme,
       documentType: record?.documentType,
       timestamp: record?.timestamp,
+      orbAnalysed: record?.version === 3 ? record.orbReportHash !== null : undefined,
     }),
     { headers: { "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } },
   );

@@ -91,7 +91,31 @@ The signing flow (`/signatures`) now works like this, all in the browser:
 
 v2 addresses (transferable records deployed 2026-10-22; `SignatureRegistryV2` with the document type redeployed 2026-10-23, the first one is retired) live in [`lib/register-v2-evm.ts`](lib/register-v2-evm.ts) and [`indexer/config.ts`](indexer/config.ts); `NEXT_PUBLIC_V2_<NETWORK>_REGISTRY` / `_ETR` and `<PREFIX>_V2_REGISTRY` / `_ETR` / `_START_BLOCK` only override them after a redeploy. Run `supabase/migrations_011_v2.sql` and `supabase/migrations_012_v2_document_type.sql` before starting the indexer with the v2 sources.
 
-Known limitation: a record can be front-run. Anyone watching the mempool can copy a pending `register` call and land it first, becoming the on-chain "signer" of that hash. For signed PDFs the embedded ICP-Brasil signature still identifies the real signer; for salted records the holder can re-register with a new salt. Fixing it on-chain needs a commit-reveal step.
+### v3: commit-reveal and ORB attestation (contracts ready, not deployed yet)
+
+v2's single `register` call could be front-run: anyone watching the mempool could copy it and land
+first. v3 (`SignatureRegistryV3` on EVM, `commit` + `register_v3` on Solana) registers in two
+wallet confirmations: a commitment that reveals nothing (`lib/commit-reveal.ts`), then the
+registration in a later block with the nonce. The site switches per network when a v3 address
+exists in `lib/register-v2-evm.ts` (`NEXT_PUBLIC_V3_<NETWORK>_REGISTRY` for local tests) and, on
+Solana, when `NEXT_PUBLIC_SOLANA_REGISTER_V3=1` (set it in the deploy that follows the program
+upgrade, because the upgrade removes `register_v2`). Until then v2 keeps working, front-running
+included.
+
+v3 records can carry the hash of an **ORB analysis report**, accepted on-chain only with a signature
+from the ORB attester key (EIP-712 on EVM, Ed25519 on Solana), so "ORB analysis: yes" on the
+receipt and on `/verify` is not something the user can set alone. The site sends no ORB attestation
+yet: that waits for the ORB service and its key (AWS KMS before mainnet).
+
+Reads: `readRecordV2` returns the v3 record when there is one, else v2. On EVM, if the same hash
+also has a v2 record (v2 cannot be paused), `/verify` shows it too, with a note that a v2 record
+made around the same time may be a mempool copy. The indexer scans v3 with the same loops
+(`<PREFIX>_V3_REGISTRY`; Solana events from the same program) after
+`supabase/migrations_014_v3_commit_reveal_orb.sql`.
+
+What commit-reveal does not change: someone who already holds the document hash (e.g. the other
+party of a contract) can still commit and register it first with their own wallet. The record says
+who registered it; for a PAdES PDF, who signed it is inside the PDF.
 
 ## Running locally
 

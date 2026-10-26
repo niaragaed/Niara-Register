@@ -68,6 +68,58 @@ export function v2Deployment(network: EvmNetwork): V2Deployment {
   };
 }
 
+// SignatureRegistryV3 (commit-reveal + ORB attestation; niara-contracts-Register
+// script/DeploySignatureRegistryV3.s.sol). Not deployed yet: while a network's
+// entry is null the site keeps registering on v2 there. v2 stays readable
+// either way. Override for local testing with NEXT_PUBLIC_V3_<NETWORK>_REGISTRY.
+const DEPLOYED_V3: Record<EvmNetwork, `0x${string}` | null> = {
+  sepolia: null,
+  "base-sepolia": null,
+  "robinhood-testnet": null,
+  "hyperevm-testnet": null,
+  "tempo-testnet": null,
+};
+
+const OVERRIDES_V3: Record<EvmNetwork, string | undefined> = {
+  sepolia: process.env.NEXT_PUBLIC_V3_SEPOLIA_REGISTRY,
+  "base-sepolia": process.env.NEXT_PUBLIC_V3_BASE_SEPOLIA_REGISTRY,
+  "robinhood-testnet": process.env.NEXT_PUBLIC_V3_ROBINHOOD_TESTNET_REGISTRY,
+  "hyperevm-testnet": process.env.NEXT_PUBLIC_V3_HYPEREVM_TESTNET_REGISTRY,
+  "tempo-testnet": process.env.NEXT_PUBLIC_V3_TEMPO_TESTNET_REGISTRY,
+};
+
+export function v3Registry(network: EvmNetwork): `0x${string}` | null {
+  const o = OVERRIDES_V3[network];
+  return isAddress(o) ? o : DEPLOYED_V3[network];
+}
+
+export const SIGNATURE_REGISTRY_V3_ABI = [
+  "function commitmentOf(address signer, bytes32 recordHash, bytes32 nonce) view returns (bytes32)",
+  "function commit(bytes32 commitment)",
+  "function commitmentInfo(address signer, bytes32 commitment) view returns (uint256 blockNumber, uint256 timestamp, uint256 revealableAtBlock, uint256 expiresAt)",
+  "function register(bytes32 recordHash, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 nonce, bytes32 orbReportHash, bytes orbSignature) returns (uint256 tokenId)",
+  "function verify(bytes32 recordHash) view returns (bool exists, address signer, uint256 timestamp, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash)",
+  "function orbAttester() view returns (address)",
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "function locked(uint256 tokenId) view returns (bool)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "event Committed(address indexed signer, bytes32 indexed commitment, uint256 blockNumber)",
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 timestamp)",
+  "event Locked(uint256 tokenId)",
+  "error AlreadyRegistered(bytes32 recordHash)",
+  "error InvalidHash()",
+  "error UnknownScheme(uint8 scheme)",
+  "error InvalidDocumentType()",
+  "error Soulbound()",
+  "error InvalidCommitment()",
+  "error CommitmentPending(bytes32 commitment)",
+  "error NoCommitment()",
+  "error RevealTooEarly(uint256 revealableAtBlock)",
+  "error CommitmentExpired()",
+  "error OrbDisabled()",
+  "error InvalidOrbAttestation()",
+] as const;
+
 export const SIGNATURE_REGISTRY_V2_ABI = [
   "function register(bytes32 recordHash, uint8 scheme, uint16 documentType, bytes32 metadataCommitment) returns (uint256 tokenId)",
   "function verify(bytes32 recordHash) view returns (bool exists, address signer, uint256 timestamp, uint8 scheme, uint16 documentType, bytes32 metadataCommitment)",

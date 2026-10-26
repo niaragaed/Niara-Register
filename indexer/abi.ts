@@ -31,6 +31,12 @@ export const SIGNATURE_REGISTRY_V2_ABI = [
   "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, uint256 timestamp)",
 ];
 
+// From niaragaed/niara-contracts-Register, src/v3/SignatureRegistryV3.sol (events only).
+// Same event name as v2 with one more field, so a different topic.
+export const SIGNATURE_REGISTRY_V3_ABI = [
+  "event DocumentRegistered(bytes32 indexed recordHash, address indexed signer, uint8 scheme, uint16 documentType, bytes32 metadataCommitment, bytes32 orbReportHash, uint256 timestamp)",
+];
+
 // From niaragaed/niara-contracts-Register, src/mletr/TransferableRecordRegistry.sol (events only).
 export const TRANSFERABLE_RECORD_ABI = [
   "event RecordIssued(uint256 indexed tokenId, address indexed issuer, address indexed holder, bytes32 documentHash, bytes32 metadataCommitment)",

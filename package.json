@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx tests/commitments.test.ts && tsx tests/pades.test.ts && tsx tests/eu.test.ts && tsx --conditions=react-server tests/vc.test.ts",
+    "test": "tsx tests/commitments.test.ts && tsx tests/commit-reveal.test.ts && tsx tests/pades.test.ts && tsx tests/eu.test.ts && tsx --conditions=react-server tests/vc.test.ts",
     "trust:eu": "node scripts/fetch-eu-trusted-lists.mjs"
   },
   "dependencies": {

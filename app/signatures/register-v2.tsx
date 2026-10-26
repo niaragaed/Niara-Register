@@ -2,7 +2,7 @@
 // v2 registration: (optionally) PAdES-sign a PDF with ICP-Brasil, commit the
 // file privately, register it on one of the six networks with a soulbound
 // receipt, then build the holder's proof package (W3C VC 2.0 + presentation).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Contract } from "ethers";
 import type { Signer } from "ethers";
@@ -21,15 +21,20 @@ import {
 } from "@/lib/commitments";
 import { inspectPdfSignatures, type PadesSignatureReport } from "@/lib/pades/inspect";
 import { EVM_NETWORKS, evmTxLink } from "@/lib/register-contract";
-import { SIGNATURE_REGISTRY_V2_ABI, v2Deployment } from "@/lib/register-v2-evm";
+import { SIGNATURE_REGISTRY_V2_ABI, SIGNATURE_REGISTRY_V3_ABI, v2Deployment, v3Registry } from "@/lib/register-v2-evm";
+import { evmCommitment, newNonce, solanaCommitment } from "@/lib/commit-reveal";
 import {
+  SOLANA_REGISTER_V3,
+  commitInstruction,
   computeBudgetIx,
+  fetchCommitmentSlot,
   fetchReceiptConfig,
-  fetchRecordV2,
+  fetchRecordAny,
   registerV2Instruction,
+  registerV3Instruction,
   solanaV2ErrorReason,
 } from "@/lib/register-v2-solana";
-import { fetchSolanaRecord, solanaExplorerLink } from "@/lib/register-solana";
+import { SOLANA_PROGRAM_ID, fetchSolanaRecord, solanaExplorerLink } from "@/lib/register-solana";
 import { didPkh, isEvm, type RegisterNetwork } from "@/lib/networks";
 import {
   WalletMissing,
@@ -45,7 +50,7 @@ import {
 import type { SolanaProvider } from "@/lib/solana";
 import { createEvmPresentation, createSolanaPresentation } from "@/lib/vc/presentation";
 import { PROOF_PACKAGE_FORMAT, type ProofPackage } from "@/lib/proof-package";
-import { readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
+import { evmProvider, readLegacyRecord, readRecordV2 } from "@/lib/v2-reader";
 import { DOCUMENT_TYPES, documentTypeBySlug } from "@/lib/document-types";
 import { previousRegistrations, rememberRegistration, type LocalRegistration } from "@/lib/local-registrations";
 import { lookupOnAllNetworks, type LookupResult } from "@/lib/multichain-lookup";
@@ -70,7 +75,14 @@ type Mode = "sign" | "signed" | "other";
 type Wallet =
   | { kind: "evm"; signer: Signer; address: string; name: string }
   | { kind: "solana"; provider: SolanaProvider; address: string; name: string };
-type Existing = { version: 1 | 2; signer: string; timestamp: number } | null;
+type Existing = { version: 1 | 2 | 3; signer: string; timestamp: number } | null;
+/** Steps of a commit-reveal registration (v3). */
+type Phase = "committing" | "waiting" | "revealing" | null;
+
+const ZERO32 = `0x${"0".repeat(64)}`;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** How long to wait for the chain to move past the commit before giving up. */
+const REVEAL_WAIT_MS = 5 * 60_000;
 type Texts = Pick<Dictionary, "register" | "pades" | "proof">;
 
 class ContractNotOnWallet extends Error {}
@@ -94,6 +106,10 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [existing, setExisting] = useState<Existing>(null);
   const [status, setStatus] = useState<"idle" | "reading" | "connecting" | "checking" | "registering" | "done">("idle");
+  const [phase, setPhase] = useState<Phase>(null);
+  // Commit-reveal nonce for the current record hash. Kept across a failed
+  // reveal so a retry reuses the pending commitment instead of committing again.
+  const nonceRef = useRef<{ recordHash: string; nonce: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [receiptId, setReceiptId] = useState<string | null>(null);
@@ -177,7 +193,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   }, [fileSha, salt, name, type, scheme]);
 
   const deployment = isEvm(network) ? v2Deployment(network) : null;
-  const evmUnavailable = isEvm(network) && !deployment?.registry;
+  const evmUnavailable = isEvm(network) && !deployment?.registry && !v3Registry(network);
+  const usesCommitReveal = isEvm(network) ? Boolean(v3Registry(network)) : SOLANA_REGISTER_V3;
 
   function explain(e: unknown): string {
     if (e instanceof WalletMissing) return isEvm(network) ? tr.noWallet : tr.noSolanaWallet;
@@ -192,8 +209,11 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     const reason = !isEvm(network) ? solanaV2ErrorReason(e) : null;
     if (reason === "AlreadyRegistered") return tr.alreadyRecorded;
     if (reason === "AlreadyRegisteredV1") return tr.alreadyRecordedV1;
+    if (reason === "AlreadyRegisteredV2") return tr.alreadyRecorded;
+    if (reason === "CommitmentExpired") return tr.commitExpired;
     const message = e instanceof Error ? e.message : String(e);
     if (message.includes("AlreadyRegistered")) return tr.alreadyRecorded;
+    if (message.includes("CommitmentExpired")) return tr.commitExpired;
     return `${tr.error} ${message}`;
   }
 
@@ -211,7 +231,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         // Reads go through the site's RPC for the chosen network, not the wallet's.
         const rec = await readRecordV2(network, recordHash);
         if (rec) {
-          setExisting({ version: 2, signer: rec.signer, timestamp: rec.timestamp });
+          setExisting({ version: rec.version, signer: rec.signer, timestamp: rec.timestamp });
         } else {
           const v1 = await readLegacyRecord(network, fileSha);
           if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
@@ -222,8 +242,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         setWallet({ kind: "solana", provider, address, name: chosen.name });
         setStatus("checking");
         const conn = solanaConnection();
-        const rec = await fetchRecordV2(conn, recordHash);
-        if (rec) setExisting({ version: 2, signer: rec.signer, timestamp: rec.timestamp });
+        const rec = await fetchRecordAny(conn, recordHash);
+        if (rec) setExisting({ version: rec.version, signer: rec.signer, timestamp: rec.timestamp });
         else {
           const v1 = await fetchSolanaRecord(conn, fileSha);
           if (v1) setExisting({ version: 1, signer: v1.signer, timestamp: v1.timestamp });
@@ -249,23 +269,52 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         // The wallet may have changed network since it connected.
         const chainId = Number((await wallet.signer.provider!.getNetwork()).chainId);
         if (chainId !== Number(EVM_NETWORKS[network].chainIdHex)) throw new WrongEvmNetwork(chainId);
-        if ((await wallet.signer.provider!.getCode(deployment!.registry!)) === "0x") throw new ContractNotOnWallet();
-        const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, wallet.signer);
-        const tx = await registry.register(`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`);
-        const receipt = await tx.wait();
-        doneTx = receipt?.hash ?? tx.hash;
+        const v3 = v3Registry(network);
+        if (v3) {
+          doneTx = await registerEvmV3(wallet.signer, wallet.address, chainId, v3);
+        } else {
+          if ((await wallet.signer.provider!.getCode(deployment!.registry!)) === "0x") throw new ContractNotOnWallet();
+          const registry = new Contract(deployment!.registry!, SIGNATURE_REGISTRY_V2_ABI, wallet.signer);
+          const tx = await registry.register(`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`);
+          const receipt = await tx.wait();
+          doneTx = receipt?.hash ?? tx.hash;
+        }
         doneReceipt = BigInt(`0x${recordHash}`).toString();
       } else if (wallet.kind === "solana") {
         const conn = solanaConnection();
         const cfg = await fetchReceiptConfig(conn);
         if (!cfg) throw new Error(tr.noReceiptConfig);
-        const sig = await sendSolana(
-          wallet.provider,
-          computeBudgetIx(),
-          registerV2Instruction(wallet.provider.publicKey!, cfg, recordHash, scheme, typeCode, metaCommit),
-        );
-        doneTx = sig;
-        doneReceipt = (await fetchRecordV2(conn, recordHash))?.receiptAssetId ?? null;
+        const pk = wallet.provider.publicKey!;
+        if (SOLANA_REGISTER_V3) {
+          const nonce = nonceFor(recordHash);
+          const c = await solanaCommitment(SOLANA_PROGRAM_ID, pk, recordHash, nonce);
+          let slot = await fetchCommitmentSlot(conn, pk, c);
+          if (slot === null) {
+            setPhase("committing");
+            await sendSolana(wallet.provider, commitInstruction(pk, c));
+            slot = await fetchCommitmentSlot(conn, pk, c);
+            if (slot === null) throw new Error(tr.commitNotFound);
+          }
+          setPhase("waiting");
+          const deadline = Date.now() + REVEAL_WAIT_MS;
+          while ((await conn.getSlot("confirmed")) <= slot) {
+            if (Date.now() > deadline) throw new Error(tr.revealTimeout);
+            await sleep(400);
+          }
+          setPhase("revealing");
+          doneTx = await sendSolana(
+            wallet.provider,
+            computeBudgetIx(),
+            registerV3Instruction(pk, cfg, c, recordHash, scheme, typeCode, metaCommit, nonce),
+          );
+        } else {
+          doneTx = await sendSolana(
+            wallet.provider,
+            computeBudgetIx(),
+            registerV2Instruction(pk, cfg, recordHash, scheme, typeCode, metaCommit),
+          );
+        }
+        doneReceipt = (await fetchRecordAny(conn, recordHash))?.receiptAssetId ?? null;
       }
       setTxHash(doneTx);
       setReceiptId(doneReceipt);
@@ -277,12 +326,65 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
       console.error(e);
       setError(explain(e));
       setStatus("idle");
+      setPhase(null);
       return;
     }
+    setPhase(null);
     // The receipt is already in the wallet (minted in the same transaction).
     // Now the proof package: credential from Niara, then saved automatically.
     const jwt = await requestCredential();
     saveProofPackage({ txHash: doneTx ?? undefined, receiptId: doneReceipt ?? undefined, credential: jwt ?? undefined });
+  }
+
+  function nonceFor(rh: string): string {
+    if (nonceRef.current?.recordHash !== rh) nonceRef.current = { recordHash: rh, nonce: newNonce() };
+    return nonceRef.current.nonce;
+  }
+
+  /**
+   * v3 on EVM: commit, wait until the contract accepts the reveal, register.
+   * Reads go through the site's RPC. "Accepts the reveal" is checked with a
+   * static call instead of comparing block numbers, because on Arbitrum-based
+   * chains (Robinhood) the contract's block.number is the L1 block, not the
+   * block number the RPC reports.
+   */
+  async function registerEvmV3(signer: Signer, address: string, chainId: number, registryAddress: string): Promise<string> {
+    if (!recordHash || !metaCommit || !isEvm(network)) throw new Error("not ready");
+    if ((await signer.provider!.getCode(registryAddress)) === "0x") throw new ContractNotOnWallet();
+    const nonce = nonceFor(recordHash);
+    const c = `0x${evmCommitment(chainId, registryAddress, address, recordHash, nonce)}`;
+    const reader = new Contract(registryAddress, SIGNATURE_REGISTRY_V3_ABI, evmProvider(network));
+    const writer = new Contract(registryAddress, SIGNATURE_REGISTRY_V3_ABI, signer);
+    const args = [`0x${recordHash}`, scheme, typeCode, `0x${metaCommit}`, `0x${nonce}`, ZERO32, "0x"] as const;
+
+    const [committedAt] = await reader.commitmentInfo(address, c);
+    if (committedAt === BigInt(0)) {
+      setPhase("committing");
+      const tx = await writer.commit(c);
+      await tx.wait();
+    }
+    setPhase("waiting");
+    const deadline = Date.now() + REVEAL_WAIT_MS;
+    for (;;) {
+      try {
+        await reader.register.staticCall(...args, { from: address });
+        break;
+      } catch (e) {
+        // ethers decodes the custom error with the ABI. The site's RPC may lag
+        // behind the wallet's: NoCommitment right after the commit means "not
+        // seen yet", like RevealTooEarly.
+        const revert = (e as { revert?: { name?: string } }).revert?.name ?? "";
+        const text = e instanceof Error ? e.message : String(e);
+        const notYet = ["RevealTooEarly", "NoCommitment"].includes(revert) || /RevealTooEarly|NoCommitment/.test(text);
+        if (!notYet) throw e;
+        if (Date.now() > deadline) throw new Error(tr.revealTimeout);
+        await sleep(2000);
+      }
+    }
+    setPhase("revealing");
+    const tx = await writer.register(...args);
+    const receipt = await tx.wait();
+    return receipt?.hash ?? tx.hash;
   }
 
   type PackageExtras = Partial<Pick<ProofPackage, "txHash" | "receiptId" | "credential" | "presentation">>;
@@ -563,7 +665,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
 
           {existing && (
             <Notice tone="neutral">
-              {existing.version === 2 ? tr.alreadyRecorded : tr.alreadyRecordedV1} {short(existing.signer)} ·{" "}
+              {existing.version >= 2 ? tr.alreadyRecorded : tr.alreadyRecordedV1} {short(existing.signer)} ·{" "}
               {formatTimestamp(existing.timestamp, locale)}
             </Notice>
           )}
@@ -577,7 +679,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               ) : (
                 <button
                   className={primaryButton}
-                  disabled={evmUnavailable || status === "registering" || existing?.version === 2 || !nameAndTypeOk}
+                  disabled={evmUnavailable || status === "registering" || (existing !== null && existing.version >= 2) || !nameAndTypeOk}
                   onClick={register}
                 >
                   {tr.register}
@@ -602,7 +704,18 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
               )}
             </div>
           )}
-          {status === "registering" && <p className="mt-3 font-body text-sm text-slate">{tr.waiting}</p>}
+          {status === "registering" && (
+            <p className="mt-3 font-body text-sm text-slate">
+              {phase === "committing"
+                ? tr.phaseCommit
+                : phase === "waiting"
+                  ? tr.phaseWait
+                  : phase === "revealing"
+                    ? tr.phaseReveal
+                    : tr.waiting}
+            </p>
+          )}
+          {usesCommitReveal && !registered && <p className="mt-2 max-w-xl font-body text-xs text-slate">{tr.commitRevealNote}</p>}
           {error && <Notice tone="bad">{error}</Notice>}
 
           {registered && txHash && (

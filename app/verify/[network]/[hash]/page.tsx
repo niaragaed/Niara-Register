@@ -80,6 +80,23 @@ export default async function VerifyRecordPage({ params }: Props) {
             {isEvm(network) ? "ERC-721 + ERC-5192 · token id " : "Bubblegum v2 cNFT · asset id "}
             <span className="font-mono text-xs">{record.receiptId}</span>
           </Row>
+          <Row label={t.registration}>{record.version === 3 ? t.registrationV3 : t.registrationV2}</Row>
+          <Row label={t.orb}>
+            {record.orbReportHash ? (
+              <>
+                {t.orbYes} <span className="break-all font-mono text-xs">0x{record.orbReportHash}</span>
+              </>
+            ) : (
+              t.orbNo
+            )}
+          </Row>
+          {record.alsoOnV2 && (
+            <Row label={t.alsoOnV2Title}>
+              {t.alsoOnV2
+                .replace("{signer}", record.alsoOnV2.signer)
+                .replace("{date}", formatTimestamp(record.alsoOnV2.timestamp, locale))}
+            </Row>
+          )}
         </dl>
       ) : legacy ? (
         <div className="mt-8">
