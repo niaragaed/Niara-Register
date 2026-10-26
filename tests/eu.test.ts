@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync, createHash, X509Certificate, sign as cryptoSign } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as pkijs from "pkijs";
@@ -174,7 +174,7 @@ async function main() {
         "-content", join(work, `content${i}.bin`),
         "-CAfile", join(work, "root.pem"),
         "-purpose", "any",
-        "-out", "/dev/null",
+        "-out", devNull,
       ], { stdio: "pipe" });
     }
     console.log("ok - eu: OpenSSL verifies both CMS signatures to the test root");
@@ -221,7 +221,7 @@ async function main() {
     const signed = signer.getSignedXml();
     assert.doesNotThrow(() => verifyXmlSignature(signed, [certDer]), `${kind}: valid trusted-list signature accepted`);
     assert.throws(() => verifyXmlSignature(signed.replace("<TSLSequenceNumber>7", "<TSLSequenceNumber>8"), [certDer]), `${kind}: changed list rejected`);
-    const other = execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "/dev/null", "-subj", "/CN=other", "-days", "2"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const other = execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", devNull, "-subj", "/CN=other", "-days", "2"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
     assert.throws(() => verifyXmlSignature(signed, [new Uint8Array(new X509Certificate(other).raw)]), `${kind}: signer not allowed`);
   }
   console.log("ok - eu: trusted-list XML signature check");

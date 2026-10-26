@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as asn1js from "asn1js";
@@ -134,7 +134,7 @@ async function main() {
           "-CAfile", intermediate,
           "-partial_chain",
           "-purpose", "any",
-          "-out", "/dev/null",
+          "-out", devNull,
         ], { stdio: "pipe" });
       }
     }
