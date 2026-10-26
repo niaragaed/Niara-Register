@@ -4,17 +4,21 @@
 //   - whether the last signature covers the whole file (nothing appended after);
 //   - who signed (certificate CN; CPF/CNPJ from the ICP-Brasil SAN fields);
 //   - which signature policy it declares;
-//   - whether the certificate chains to an ICP-Brasil root.
+//   - whether the certificate chains to an ICP-Brasil root or, failing that, to
+//     a qualified CA on the EU trusted lists (eIDAS), and whether it is a
+//     qualified certificate (eu-trust.ts).
 // NOT checked here: revocation (CRL/OCSP) and the full policy rules. The ITI
-// verifier (https://validar.iti.gov.br) is the reference for those, and the
-// UI says so.
+// verifier (https://validar.iti.gov.br) and the European Commission's DSS
+// validator are the references for those, and the UI says so.
 import * as asn1js from "asn1js";
 import * as pkijs from "pkijs";
 import { ICP_BRASIL_PADES_POLICIES, OID } from "./cms";
 import { ICP_BRASIL_ROOTS } from "./icp-roots";
+import { checkEuChain, loadEuTrustListFromSite, type EuChainResult, type EuTrustList } from "./eu-trust";
 
 export type ChainStatus =
   | { status: "icp-brasil"; root: string }
+  | NonNullable<EuChainResult>
   | { status: "incomplete"; detail: string }
   | { status: "untrusted"; detail: string };
 
@@ -42,6 +46,8 @@ export type PadesSignatureReport = {
   subFilter?: string;
   /** Raw /M value of the signature dictionary, e.g. D:20261021143000+00'00'. */
   pdfSigningTime?: string;
+  /** /SubFilter ETSI.CAdES.detached: a PAdES baseline signature (ETSI EN 319 142-1). */
+  padesBaseline: boolean;
   chain: ChainStatus;
   error?: string;
 };
@@ -140,10 +146,19 @@ function roots(): pkijs.Certificate[] {
   return rootCache;
 }
 
+export type InspectOptions = {
+  /**
+   * Source of the EU trusted-list CAs. Defaults to the site's
+   * /trust/eu-trusted-cas.json in the browser; pass null to skip the EU check.
+   */
+  euTrustList?: (() => Promise<EuTrustList | null>) | null;
+};
+
 async function checkChain(
   leaf: pkijs.Certificate,
   embedded: pkijs.Certificate[],
   at: Date,
+  options: InspectOptions,
 ): Promise<ChainStatus> {
   const trusted = roots();
   const engine = new pkijs.CertificateChainValidationEngine({
@@ -157,6 +172,17 @@ async function checkChain(
     const top = path[path.length - 1];
     const idx = top ? trusted.findIndex((r) => r === top || hexOf(r.tbsView.slice().buffer as ArrayBuffer) === hexOf(top.tbsView.slice().buffer as ArrayBuffer)) : -1;
     return { status: "icp-brasil", root: idx >= 0 ? ICP_BRASIL_ROOTS[idx].name : "ICP-Brasil" };
+  }
+  const loadEu =
+    options.euTrustList === undefined
+      ? typeof window !== "undefined"
+        ? loadEuTrustListFromSite
+        : null
+      : options.euTrustList;
+  const euList = loadEu ? await loadEu() : null;
+  if (euList) {
+    const eu = await checkEuChain(leaf, embedded, euList, at);
+    if (eu) return eu;
   }
   const issuerKnown = embedded.some(
     (c) => c !== leaf && rdnValue(c.subject, "2.5.4.3") === rdnValue(leaf.issuer, "2.5.4.3"),
@@ -174,7 +200,10 @@ function dictField(text: string, key: string): string | undefined {
   return v.startsWith("(") ? v.slice(1, -1) : v.slice(1);
 }
 
-export async function inspectPdfSignatures(pdf: Uint8Array): Promise<PadesSignatureReport[]> {
+export async function inspectPdfSignatures(
+  pdf: Uint8Array,
+  options: InspectOptions = {},
+): Promise<PadesSignatureReport[]> {
   const text = latin1(pdf, 0, pdf.length);
   const seen = new Set<string>();
   const reports: PadesSignatureReport[] = [];
@@ -201,6 +230,7 @@ export async function inspectPdfSignatures(pdf: Uint8Array): Promise<PadesSignat
       filter: dictField(sigObject, "Filter"),
       subFilter: dictField(sigObject, "SubFilter"),
       pdfSigningTime: dictField(sigObject, "M"),
+      padesBaseline: dictField(sigObject, "SubFilter") === "ETSI.CAdES.detached",
     };
 
     try {
@@ -248,7 +278,7 @@ export async function inspectPdfSignatures(pdf: Uint8Array): Promise<PadesSignat
         signer: leaf ? identity(leaf) : null,
         policyOid,
         policyName: policyOid ? ICP_BRASIL_PADES_POLICIES[policyOid] : undefined,
-        chain: leaf ? await checkChain(leaf, certs, new Date()) : { status: "incomplete", detail: "Signer certificate not embedded." },
+        chain: leaf ? await checkChain(leaf, certs, new Date(), options) : { status: "incomplete", detail: "Signer certificate not embedded." },
       });
     } catch (error) {
       reports.push({

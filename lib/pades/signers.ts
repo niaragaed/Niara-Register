@@ -1,9 +1,11 @@
-// Ways to reach an ICP-Brasil private key from the browser. In both cases the
-// key stays on the user's machine; Niara never receives it.
+// Ways to reach a signing key from the browser (ICP-Brasil, or an EU
+// certificate). In both cases the key stays on the user's machine; Niara never
+// receives it.
 //
-// - A1 (file .pfx/.p12): opened here with the password the user types, the key
-//   is imported into WebCrypto as NON-extractable and the parsed copy is
-//   dropped. Only RSA keys (all current ICP-Brasil A1 certificates are RSA).
+// - Certificate file (.pfx/.p12, "A1" in ICP-Brasil): opened here with the
+//   password the user types, the key is imported into WebCrypto as
+//   NON-extractable and the parsed copy is dropped. RSA (all current ICP-Brasil
+//   A1 certificates) and ECDSA P-256/P-384/P-521 (common in EU certificates).
 // - A3 (token or smart card) and A1 installed in the operating system: through
 //   the Lacuna Web PKI browser component, which signs a precomputed hash with
 //   the key inside the device. Web PKI is free on localhost; on any other
@@ -59,38 +61,100 @@ export async function openPfx(file: Uint8Array, password: string): Promise<Brows
     ...(p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] ?? []),
     ...(p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] ?? []),
   ];
-  const key = keyBags.find((b) => b.key)?.key as forge.pki.rsa.PrivateKey | undefined;
-  if (!key) throw new Error("No private key in the file (or it is not an RSA key).");
+  const rsaKey = keyBags.find((b) => b.key)?.key as forge.pki.rsa.PrivateKey | undefined;
+  // node-forge only turns RSA keys into objects; for EC keys it leaves the
+  // decrypted PKCS#8 PrivateKeyInfo in `asn1`.
+  const ecInfo = rsaKey ? undefined : keyBags.find((b) => !b.key && b.asn1)?.asn1;
+  if (!rsaKey && !ecInfo) throw new Error("No private key in the file.");
 
   const certs = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? [])
     .map((b) => b.cert)
     .filter((c): c is forge.pki.Certificate => Boolean(c));
-  const leaf = certs.find((c) => {
-    const pub = c.publicKey as forge.pki.rsa.PublicKey;
-    return pub.n && pub.n.equals(key.n) && pub.e.equals(key.e);
-  });
-  if (!leaf) throw new Error("The file has a private key but not its certificate.");
-  const chain = certs.filter((c) => c !== leaf);
+  // node-forge cannot parse certificates with EC keys either: it leaves them
+  // as raw ASN.1 in `asn1`. Keep every certificate as DER so none is lost.
+  const rawCerts = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? [])
+    .map((b) => (b.cert ? certDer(b.cert) : b.asn1 ? fromBinaryString(forge.asn1.toDer(b.asn1).getBytes()) : null))
+    .filter((d): d is Uint8Array => Boolean(d));
 
-  const pkcs8 = forge.asn1.toDer(forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(key))).getBytes();
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    fromBinaryString(pkcs8) as BufferSource,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
+  if (rsaKey) {
+    const leaf = certs.find((c) => {
+      const pub = c.publicKey as forge.pki.rsa.PublicKey;
+      return pub.n && pub.n.equals(rsaKey.n) && pub.e.equals(rsaKey.e);
+    });
+    if (!leaf) throw new Error("The file has a private key but not its certificate.");
+    const leafDer = certDer(leaf);
+    const pkcs8 = forge.asn1.toDer(forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(rsaKey))).getBytes();
+    const cryptoKey = await crypto.subtle.importKey(
+      "pkcs8",
+      fromBinaryString(pkcs8) as BufferSource,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    return {
+      certificate: leafDer,
+      chain: rawCerts.filter((d) => !sameBytes(d, leafDer)),
+      summary: { subject: cn(leaf.subject.attributes), issuer: cn(leaf.issuer.attributes), validTo: leaf.validity.notAfter },
+      async sign(toBeSigned) {
+        return new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, toBeSigned as BufferSource));
+      },
+    };
+  }
+  return openEcKey(fromBinaryString(forge.asn1.toDer(ecInfo!).getBytes()), rawCerts);
+}
 
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+const EC_CURVES: Record<string, { curve: "P-256" | "P-384" | "P-521"; size: number }> = {
+  "1.2.840.10045.3.1.7": { curve: "P-256", size: 32 },
+  "1.3.132.0.34": { curve: "P-384", size: 48 },
+  "1.3.132.0.35": { curve: "P-521", size: 66 },
+};
+
+const b64urlToBytes = (s: string) => fromBase64(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4));
+
+/** EC key from a PKCS#8 PrivateKeyInfo; the certificate is found by its public point. */
+async function openEcKey(pkcs8: Uint8Array, certsDer: Uint8Array[]): Promise<BrowserSigner> {
+  const pkijs = await import("pkijs");
+  const info = pkijs.PrivateKeyInfo.fromBER(pkcs8.slice().buffer as ArrayBuffer);
+  const params = info.privateKeyAlgorithm.algorithmParams as { valueBlock?: { toString(): string } } | undefined;
+  const curveOid = params?.valueBlock?.toString() ?? "";
+  const curve = EC_CURVES[curveOid];
+  if (info.privateKeyAlgorithm.algorithmId !== "1.2.840.10045.2.1" || !curve) {
+    throw new Error("Unsupported key type in the certificate file (expected RSA or ECDSA P-256/P-384/P-521).");
+  }
+  // Import once as extractable only to read the public point, then again as
+  // non-extractable for signing; the extractable handle is dropped.
+  const algo = { name: "ECDSA", namedCurve: curve.curve } as const;
+  const probe = await crypto.subtle.importKey("pkcs8", pkcs8 as BufferSource, algo, true, ["sign"]);
+  const jwk = await crypto.subtle.exportKey("jwk", probe);
+  const point = new Uint8Array([4, ...b64urlToBytes(jwk.x!), ...b64urlToBytes(jwk.y!)]);
+
+  let leafDer: Uint8Array | null = null;
+  let leaf: import("pkijs").Certificate | null = null;
+  for (const der of certsDer) {
+    const c = pkijs.Certificate.fromBER(der.slice().buffer as ArrayBuffer);
+    const spk = new Uint8Array(c.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHexView);
+    if (sameBytes(spk, point)) {
+      leaf = c;
+      leafDer = der;
+      break;
+    }
+  }
+  if (!leaf || !leafDer) throw new Error("The file has a private key but not its certificate.");
+  const cryptoKey = await crypto.subtle.importKey("pkcs8", pkcs8 as BufferSource, algo, false, ["sign"]);
+  const rdnCn = (n: import("pkijs").RelativeDistinguishedNames) =>
+    String((n.typesAndValues.find((t) => t.type === "2.5.4.3")?.value as { valueBlock?: { value?: string } } | undefined)?.valueBlock?.value ?? "");
   return {
-    certificate: certDer(leaf),
-    chain: chain.map(certDer),
-    summary: { subject: cn(leaf.subject.attributes), issuer: cn(leaf.issuer.attributes), validTo: leaf.validity.notAfter },
+    certificate: leafDer,
+    chain: certsDer.filter((d) => d !== leafDer),
+    summary: { subject: rdnCn(leaf.subject), issuer: rdnCn(leaf.issuer), validTo: leaf.notAfter.value },
     async sign(toBeSigned) {
-      return new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, toBeSigned as BufferSource));
+      // Raw r||s; buildPadesCms converts it to DER.
+      return new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, cryptoKey, toBeSigned as BufferSource));
     },
   };
 }
-
 // ---------------------------------------------------------------------------
 // A3 (and OS-installed A1) through Lacuna Web PKI
 // ---------------------------------------------------------------------------

@@ -7,7 +7,8 @@
  *   - the CMS carries the ICP-Brasil AD-RB v1.3 attributes,
  *   - signer identity (CN, masked CPF, CNPJ) is read from the certificate,
  *   - a changed byte is detected,
- *   - OpenSSL agrees the CMS is valid and chains to the test root, and qpdf
+ *   - OpenSSL agrees the CMS is valid and chains to the test intermediate
+ *     (taken from the .p12; the test root is not committed), and qpdf
  *     finds no structural problem (both skipped if the tool is missing).
  * Run: npm test
  */
@@ -30,7 +31,9 @@ const work = mkdtempSync(join(tmpdir(), "pades-"));
 
 function has(tool: string): boolean {
   try {
-    execFileSync(tool, ["--version"], { stdio: "ignore" });
+    // OpenSSL 3 has no --version flag: "openssl --version" fails even when it
+    // is installed, which used to skip the OpenSSL check silently.
+    execFileSync(tool, [tool === "openssl" ? "version" : "--version"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -115,6 +118,9 @@ async function main() {
       assert.match(out, /No syntax or stream encoding errors found/, `${label}: qpdf`);
     }
     if (has("openssl")) {
+      const intermediate = join(work, "intermediate.pem");
+      const b64 = Buffer.from(pf.chain[0]).toString("base64").replace(/(.{64})/g, "$1\n");
+      writeFileSync(intermediate, `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`);
       for (const [i, r] of reports.entries()) {
         const [, rb, rc] = r.byteRange;
         const h = new TextDecoder("latin1").decode(twice.subarray(rb + 1, rc - 1));
@@ -125,7 +131,8 @@ async function main() {
           "cms", "-verify", "-binary", "-inform", "DER",
           "-in", join(work, `sig${i}.der`),
           "-content", join(work, `content${i}.bin`),
-          "-CAfile", join(fixtures, "test-root.pem"),
+          "-CAfile", intermediate,
+          "-partial_chain",
           "-purpose", "any",
           "-out", "/dev/null",
         ], { stdio: "pipe" });

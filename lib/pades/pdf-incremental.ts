@@ -6,11 +6,13 @@
 // pdf-lib is only used to PARSE the document and to serialize individual
 // dictionaries; it never rewrites the file (pdf-lib has no incremental save).
 //
-// The signature dictionary follows the ICP-Brasil PAdES policy
-// PA_PAdES_AD_RB_v1_3, which requires /Type /Sig, /Filter /PBAD_PAdES,
-// /SubFilter /PBAD.PAdES, /Contents and /ByteRange. Note: Adobe Acrobat does
-// not know the PBAD_PAdES handler and will list the signature as "unknown";
-// the ITI verifier (validar.iti.gov.br) is the reference for this policy.
+// The signature dictionary has /Type /Sig, /Filter, /SubFilter, /Contents,
+// /ByteRange and /M. /Filter and /SubFilter come from the framework
+// (frameworks.ts): /PBAD_PAdES + /PBAD.PAdES for the ICP-Brasil policy
+// PA_PAdES_AD_RB_v1_3 (the default here), /Adobe.PPKLite +
+// /ETSI.CAdES.detached for eIDAS PAdES baseline. Adobe Acrobat does not know
+// the PBAD_PAdES handler and lists those signatures as "unknown"; the ITI
+// verifier (validar.iti.gov.br) is the reference for that policy.
 import {
   PDFArray,
   PDFDict,

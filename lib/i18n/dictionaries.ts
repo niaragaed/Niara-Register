@@ -71,7 +71,7 @@ export const en = {
     eyebrow: "Document Signing",
     title: "Prove that a document is authentic",
     lede:
-      "Sign a PDF with your ICP-Brasil certificate (PAdES) or register any file, and record its fingerprint on-chain. You receive a non-transferable receipt in your wallet and a proof package with a W3C verifiable credential. The document never leaves your browser.",
+      "Sign a PDF with your ICP-Brasil or EU (eIDAS) certificate (PAdES) or register any file, and record its fingerprint on-chain. You receive a non-transferable receipt in your wallet and a proof package with a W3C verifiable credential. The document never leaves your browser.",
     contractPrefix: "The signature registry contract (",
     contractSuffix:
       ") is the same contract on Ethereum Sepolia, Base Sepolia, Robinhood Chain Testnet, HyperEVM Testnet and Tempo Testnet. The hash is computed in your browser and each signature becomes a real transaction, verifiable on the network's explorer: ",
@@ -98,8 +98,8 @@ export const en = {
   register: {
     networkTitle: "Network",
     modeTitle: "Document",
-    modeSign: "Sign a PDF with ICP-Brasil",
-    modeSignHint: "PAdES signature made in your browser with your A1 or A3 certificate",
+    modeSign: "Sign a PDF with a digital certificate (ICP-Brasil or EU)",
+    modeSignHint: "PAdES signature made in your browser with your certificate file, token or smart card",
     modeSigned: "PDF already signed",
     modeSignedHint: "A PDF that already carries PAdES signatures",
     modeOther: "Any other file",
@@ -191,6 +191,15 @@ export const en = {
   },
 
   pades: {
+    frameworkTitle: "Country / legal framework of your certificate",
+    frameworkBr: "Brazil — ICP-Brasil",
+    frameworkEu: "European Union — eIDAS",
+    sourceFileEu: "Certificate file (.pfx / .p12)",
+    sourceDeviceEu: "Smart card, token, eID card or installed certificate",
+    euLevelNote:
+      "A qualified electronic signature (QES) needs the key on a qualified device: smart card, token or national eID card. With a certificate file the result is at most an advanced signature with a qualified certificate.",
+    policyNoteEu:
+      "PAdES baseline B-B (ETSI EN 319 142-1), no timestamp. Check it on the European Commission's DSS validator.",
     sourceTitle: "Certificate",
     sourceA1: "A1 file (.pfx / .p12)",
     sourceA3: "A3 token or installed certificate",
@@ -226,12 +235,21 @@ export const en = {
     coversAll: "covers the whole file",
     chainIcp: "chains to",
     chainIncomplete: "chain not included in the file",
-    chainUntrusted: "does not chain to ICP-Brasil",
+    chainUntrusted: "does not chain to ICP-Brasil or to the EU trusted lists",
+    chainEu: "EU trusted list",
+    levelQes: "qualified electronic signature (QES)",
+    levelAdesqc: "advanced signature with a qualified certificate",
+    levelNotQualified: "certificate not declared qualified for this use",
+    seal: "electronic seal",
     policy: "policy",
     noPolicy: "no ICP-Brasil policy declared",
+    padesBaseline: "PAdES baseline (ETSI)",
     revocationNote:
       "Revocation (CRL/OCSP) is not checked here. For the official validation use the ITI verifier:",
     itiLink: "validar.iti.gov.br",
+    revocationNoteEu:
+      "EU result: from the EU trusted lists ({list}), without the status history, the list qualifiers, revocation or timestamps. The reference is the European Commission's validator:",
+    dssLink: "EU DSS validator",
   },
 
   proof: {
@@ -310,7 +328,7 @@ export const en = {
     mletrNote:
       "Designed to line up with the UNCITRAL Model Law on Electronic Transferable Records (MLETR): singularity, exclusive control, integrity, amendment, surrender and termination. MLETR only has legal effect where a country has enacted it, and Brazil has not: this is not a claim of legal compliance.",
     issueTitle: "Issue a record",
-    documentFile: "Document (ideally the ICP-Brasil-signed PDF)",
+    documentFile: "Document (ideally the signed PDF)",
     holder: "First holder (wallet address)",
     issue: "Issue",
     lookupTitle: "Open a record",
@@ -602,7 +620,7 @@ export const pt: Dictionary = {
     eyebrow: "Assinatura de documentos",
     title: "Prove que um documento é original",
     lede:
-      "Assine um PDF com seu certificado ICP-Brasil (PAdES) ou registre qualquer arquivo, e grave a impressão digital dele on-chain. Você recebe um recibo intransferível na carteira e um pacote de prova com uma credencial verificável W3C. O documento nunca sai do seu navegador.",
+      "Assine um PDF com seu certificado ICP-Brasil ou da UE (eIDAS) (PAdES) ou registre qualquer arquivo, e grave a impressão digital dele on-chain. Você recebe um recibo intransferível na carteira e um pacote de prova com uma credencial verificável W3C. O documento nunca sai do seu navegador.",
     contractPrefix: "O contrato de registro de assinaturas (",
     contractSuffix:
       ") é o mesmo contrato na Ethereum Sepolia, na Base Sepolia, na Robinhood Chain Testnet, na HyperEVM Testnet e na Tempo Testnet. O hash é calculado no seu navegador e cada assinatura vira uma transação de verdade, verificável no explorador da rede: ",
@@ -629,8 +647,8 @@ export const pt: Dictionary = {
   register: {
     networkTitle: "Rede",
     modeTitle: "Documento",
-    modeSign: "Assinar um PDF com ICP-Brasil",
-    modeSignHint: "Assinatura PAdES feita no seu navegador, com seu certificado A1 ou A3",
+    modeSign: "Assinar um PDF com certificado digital (ICP-Brasil ou UE)",
+    modeSignHint: "Assinatura PAdES feita no seu navegador, com seu arquivo de certificado, token ou cartão",
     modeSigned: "PDF já assinado",
     modeSignedHint: "Um PDF que já tem assinaturas PAdES",
     modeOther: "Outro arquivo",
@@ -722,6 +740,15 @@ export const pt: Dictionary = {
   },
 
   pades: {
+    frameworkTitle: "País / marco legal do seu certificado",
+    frameworkBr: "Brasil — ICP-Brasil",
+    frameworkEu: "União Europeia — eIDAS",
+    sourceFileEu: "Arquivo do certificado (.pfx / .p12)",
+    sourceDeviceEu: "Cartão inteligente, token, cartão de identidade eletrônico ou certificado instalado",
+    euLevelNote:
+      "Uma assinatura eletrônica qualificada (QES) exige a chave num dispositivo qualificado: cartão inteligente, token ou cartão de identidade eletrônico. Com um arquivo de certificado, o resultado é no máximo uma assinatura avançada com certificado qualificado.",
+    policyNoteEu:
+      "PAdES baseline B-B (ETSI EN 319 142-1), sem carimbo do tempo. Confira no validador DSS da Comissão Europeia.",
     sourceTitle: "Certificado",
     sourceA1: "Arquivo A1 (.pfx / .p12)",
     sourceA3: "Token A3 ou certificado instalado",
@@ -757,12 +784,21 @@ export const pt: Dictionary = {
     coversAll: "cobre o arquivo inteiro",
     chainIcp: "encadeia até a",
     chainIncomplete: "cadeia não incluída no arquivo",
-    chainUntrusted: "não encadeia até a ICP-Brasil",
+    chainUntrusted: "não encadeia até a ICP-Brasil nem às listas de confiança da UE",
+    chainEu: "lista de confiança da UE",
+    levelQes: "assinatura eletrônica qualificada (QES)",
+    levelAdesqc: "assinatura avançada com certificado qualificado",
+    levelNotQualified: "certificado não declarado qualificado para este uso",
+    seal: "selo eletrônico",
     policy: "política",
     noPolicy: "nenhuma política ICP-Brasil declarada",
+    padesBaseline: "PAdES baseline (ETSI)",
     revocationNote:
       "A revogação (LCR/OCSP) não é verificada aqui. Para a validação oficial, use o verificador do ITI:",
     itiLink: "validar.iti.gov.br",
+    revocationNoteEu:
+      "Resultado UE: pelas listas de confiança da UE ({list}), sem o histórico de status, os qualificadores das listas, a revogação ou carimbos do tempo. A referência é o validador da Comissão Europeia:",
+    dssLink: "validador DSS da UE",
   },
 
   proof: {
@@ -841,7 +877,7 @@ export const pt: Dictionary = {
     mletrNote:
       "Desenhado para seguir a Lei Modelo da UNCITRAL sobre Registros Eletrônicos Transferíveis (MLETR): singularidade, controle exclusivo, integridade, aditamento, apresentação e extinção. A MLETR só tem efeito jurídico onde um país a promulgou, e o Brasil não promulgou: isto não é uma afirmação de conformidade legal.",
     issueTitle: "Emitir um registro",
-    documentFile: "Documento (de preferência o PDF assinado com ICP-Brasil)",
+    documentFile: "Documento (de preferência o PDF assinado)",
     holder: "Primeiro portador (endereço da carteira)",
     issue: "Emitir",
     lookupTitle: "Abrir um registro",
