@@ -69,15 +69,18 @@ export function v2Deployment(network: EvmNetwork): V2Deployment {
 }
 
 // SignatureRegistryV3 (commit-reveal + ORB attestation; niara-contracts-Register
-// script/DeploySignatureRegistryV3.s.sol). Not deployed yet: while a network's
-// entry is null the site keeps registering on v2 there. v2 stays readable
-// either way. Override for local testing with NEXT_PUBLIC_V3_<NETWORK>_REGISTRY.
+// script/DeploySignatureRegistryV3.s.sol, main 67d48c0), deployed 2026-10-27 with
+// ORB off (orbAttester = 0). Source: broadcast/DeploySignatureRegistryV3.s.sol/<chainId>/run-latest.json.
+// Base, Robinhood, HyperEVM and Tempo share the address (same wallet, same nonce).
+// A null entry keeps that network on v2. Override for local testing with
+// NEXT_PUBLIC_V3_<NETWORK>_REGISTRY.
+const V3_SHARED = "0x0d0c016E11b259050647EEa2e69A887C1128E499" as const;
 const DEPLOYED_V3: Record<EvmNetwork, `0x${string}` | null> = {
-  sepolia: null,
-  "base-sepolia": null,
-  "robinhood-testnet": null,
-  "hyperevm-testnet": null,
-  "tempo-testnet": null,
+  sepolia: "0x9fCc83555547384178Ab64a00ce579A469bd5650", // block 12007158
+  "base-sepolia": V3_SHARED, // block 51033363
+  "robinhood-testnet": V3_SHARED, // block 143759726
+  "hyperevm-testnet": V3_SHARED, // block 68047077
+  "tempo-testnet": V3_SHARED, // block 41444021
 };
 
 const OVERRIDES_V3: Record<EvmNetwork, string | undefined> = {
@@ -97,11 +100,11 @@ const OVERRIDES_V3: Record<EvmNetwork, string | undefined> = {
  * count them. null = v2 is still the active registry there.
  */
 export const V2_RETIRED_AT: Record<EvmNetwork, number | null> = {
-  sepolia: null,
-  "base-sepolia": null,
-  "robinhood-testnet": null,
-  "hyperevm-testnet": null,
-  "tempo-testnet": null,
+  sepolia: 1793128524, // 2026-10-27, v3 deploy block 12007158
+  "base-sepolia": 1793128541, // block 51033363
+  "robinhood-testnet": 1793128552, // block 143759726
+  "hyperevm-testnet": 1793129011, // block 68047077
+  "tempo-testnet": 1793129021, // block 41444021
 };
 
 export function v3Registry(network: EvmNetwork): `0x${string}` | null {

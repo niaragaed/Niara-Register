@@ -72,6 +72,9 @@ function v2EvmNetwork(base: {
   confirmations: number;
   maxChunksPerCycle?: number;
   chunkIntervalMs?: number;
+  /** SignatureRegistryV3 on this network and the timestamp of its deploy block (= v2 retirement). */
+  registryV3?: string;
+  v2RetiredAt?: number;
 }) {
   const env = (name: string) => process.env[`${base.prefix}_V2_${name}`];
   return {
@@ -84,10 +87,12 @@ function v2EvmNetwork(base: {
     // SignatureRegistryV3 (commit-reveal + ORB), once deployed: <PREFIX>_V3_REGISTRY.
     // Scanned by this same loop. If v3 events happened before the variable was
     // set, lower this source's checkpoint to the v3 deploy block once.
-    registryV3: process.env[`${base.prefix}_V3_REGISTRY`]?.toLowerCase() || undefined,
+    registryV3: (process.env[`${base.prefix}_V3_REGISTRY`] || base.registryV3)?.toLowerCase() || undefined,
     // Unix seconds of the v3 deploy block: v2 rows after it are flagged
     // apos_aposentadoria_v2 (same value as V2_RETIRED_AT in the site).
-    v2RetiredAt: process.env[`${base.prefix}_V2_RETIRED_AT`] ? Number(process.env[`${base.prefix}_V2_RETIRED_AT`]) : undefined,
+    v2RetiredAt: process.env[`${base.prefix}_V2_RETIRED_AT`]
+      ? Number(process.env[`${base.prefix}_V2_RETIRED_AT`])
+      : base.v2RetiredAt,
     etr: (env("ETR") ?? base.etr).toLowerCase(),
     deployBlock: Number(env("START_BLOCK") ?? base.deployBlock),
     chunk: base.chunk,
@@ -99,6 +104,13 @@ function v2EvmNetwork(base: {
 }
 
 // Same addresses on Base, Robinhood, HyperEVM and Tempo (same wallet, same nonce).
+// SignatureRegistryV3, deployed 2026-10-27 (niara-contracts-Register main 67d48c0,
+// broadcast/DeploySignatureRegistryV3.s.sol). Same address on Base, Robinhood,
+// HyperEVM and Tempo. v2RetiredAt = timestamp of the v3 deploy block; the same
+// values are V2_RETIRED_AT in lib/register-v2-evm.ts. Env variables
+// <PREFIX>_V3_REGISTRY / <PREFIX>_V2_RETIRED_AT only exist for a redeploy.
+const V3_SHARED = "0x0d0c016E11b259050647EEa2e69A887C1128E499";
+
 const V2_SHARED = {
   registry: "0x0E20b7c965a772fECc1d3a1DF2B4a9CC39Fc7156",
   etr: "0x09081D02b06f10D87DE7c99E48F8f07505D25f26",
@@ -254,6 +266,8 @@ export const config = {
         registry: "0xAcC6BddCD560e4fd87F179d2bc6C1C518c50F514",
         etr: "0x764A5de7baF5B33444c271E230007b81755aD424",
         deployBlock: 11966993,
+        registryV3: "0x9fCc83555547384178Ab64a00ce579A469bd5650",
+        v2RetiredAt: 1793128524,
         // Same chunk as the v1 Sepolia batch (BLOCK_RANGE_CHUNK), which already fits the Alchemy plan in use.
         chunk: Number(process.env.BLOCK_RANGE_CHUNK ?? 500),
         confirmations: 5,
@@ -262,6 +276,8 @@ export const config = {
         network: "base-sepolia",
         ...V2_SHARED,
         deployBlock: 48593926,
+        registryV3: V3_SHARED,
+        v2RetiredAt: 1793128541,
         prefix: "BASE",
         chainId: 84532,
         rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
@@ -272,6 +288,8 @@ export const config = {
         network: "robinhood-testnet",
         ...V2_SHARED,
         deployBlock: 140484857,
+        registryV3: V3_SHARED,
+        v2RetiredAt: 1793128552,
         prefix: "ROBINHOOD",
         chainId: 46630,
         rpcUrl: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.testnet.chain.robinhood.com",
@@ -282,6 +300,8 @@ export const config = {
         network: "hyperevm-testnet",
         ...V2_SHARED,
         deployBlock: 67552236,
+        registryV3: V3_SHARED,
+        v2RetiredAt: 1793129011,
         prefix: "HYPEREVM",
         chainId: 998,
         rpcUrl: process.env.HYPEREVM_RPC_URL ?? "https://rpc.hyperliquid-testnet.xyz/evm",
@@ -294,6 +314,8 @@ export const config = {
         network: "tempo-testnet",
         ...V2_SHARED,
         deployBlock: 40637977,
+        registryV3: V3_SHARED,
+        v2RetiredAt: 1793129021,
         prefix: "TEMPO",
         chainId: 42431,
         rpcUrl: process.env.TEMPO_RPC_URL ?? "https://rpc.moderato.tempo.xyz",
