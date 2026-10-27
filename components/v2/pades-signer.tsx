@@ -1,6 +1,8 @@
 "use client";
-// Signs a PDF in the browser with an ICP-Brasil certificate (A1 file or A3/
-// installed certificate through Web PKI) and hands back the signed bytes.
+// Signs a PDF in the browser and hands back the signed bytes. The user first
+// picks the country / legal framework of the certificate (ICP-Brasil or EU
+// eIDAS, see lib/pades/frameworks.ts), then a certificate file or a device /
+// installed certificate through Web PKI.
 import { useState } from "react";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import {
@@ -13,6 +15,7 @@ import {
   type WebPkiCertificate,
 } from "@/lib/pades/signers";
 import { signPdf } from "@/lib/pades/sign";
+import { FRAMEWORK_IDS, type FrameworkId } from "@/lib/pades/frameworks";
 import { Choice, Label, Notice, inputClass, primaryButton, readFile, secondaryButton } from "./ui";
 
 type Source = "a1" | "a3";
@@ -26,6 +29,7 @@ export function PadesSigner({
   t: Dictionary["pades"];
   onSigned: (signed: Uint8Array) => void;
 }) {
+  const [framework, setFramework] = useState<FrameworkId>("br-icp");
   const [source, setSource] = useState<Source>("a1");
   const [pfx, setPfx] = useState<Uint8Array | null>(null);
   const [password, setPassword] = useState("");
@@ -81,10 +85,12 @@ export function PadesSigner({
     setBusy("signing");
     setError(null);
     try {
-      const signed = await signPdf(pdf, signer, {
-        signerName: signer.summary.subject,
-        reason: reason.trim() || undefined,
-      });
+      const signed = await signPdf(
+        pdf,
+        signer,
+        { signerName: signer.summary.subject, reason: reason.trim() || undefined },
+        framework,
+      );
       onSigned(signed);
     } catch (e) {
       setError(`${t.signError} ${e instanceof Error ? e.message : String(e)}`);
@@ -95,7 +101,30 @@ export function PadesSigner({
 
   return (
     <div className="mt-5 border-t border-slate/15 pt-5">
-      <Label>{t.sourceTitle}</Label>
+      <label className="block">
+        <Label>{t.frameworkTitle}</Label>
+        <select
+          className={`${inputClass} max-w-md`}
+          value={framework}
+          disabled={busy !== null}
+          onChange={(e) => {
+            setFramework(e.target.value as FrameworkId);
+            setSigner(null);
+            setCerts(null);
+            setError(null);
+          }}
+        >
+          {FRAMEWORK_IDS.map((id) => (
+            <option key={id} value={id}>
+              {id === "eu-eidas" ? t.frameworkEu : t.frameworkBr}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="mt-4">
+        <Label>{t.sourceTitle}</Label>
+      </div>
       <Choice<Source>
         value={source}
         onChange={(s) => {
@@ -105,8 +134,8 @@ export function PadesSigner({
         }}
         disabled={busy !== null}
         options={[
-          { id: "a1", title: t.sourceA1 },
-          { id: "a3", title: t.sourceA3, hint: t.sourceA3Hint },
+          { id: "a1", title: framework === "eu-eidas" ? t.sourceFileEu : t.sourceA1 },
+          { id: "a3", title: framework === "eu-eidas" ? t.sourceDeviceEu : t.sourceA3, hint: t.sourceA3Hint },
         ]}
       />
 
@@ -158,7 +187,7 @@ export function PadesSigner({
                   <button className={`${secondaryButton} w-full max-w-md text-left`} onClick={() => pickA3(c)}>
                     <span className="block">{c.subjectName}</span>
                     <span className="block font-mono text-[11px] text-slate">
-                      {c.isIcpBrasil && `${t.icpBadge} · `}
+                      {framework === "br-icp" && c.isIcpBrasil && `${t.icpBadge} · `}
                       {c.issuerName} · {t.validUntil} {c.validityEnd.toLocaleDateString()}
                     </span>
                   </button>
@@ -188,7 +217,10 @@ export function PadesSigner({
       )}
 
       <p className="mt-4 max-w-xl font-body text-xs text-slate">{t.keyNote}</p>
-      <p className="mt-1 max-w-xl font-body text-xs text-slate">{t.policyNote}</p>
+      {framework === "eu-eidas" && <p className="mt-1 max-w-xl font-body text-xs text-slate">{t.euLevelNote}</p>}
+      <p className="mt-1 max-w-xl font-body text-xs text-slate">
+        {framework === "eu-eidas" ? t.policyNoteEu : t.policyNote}
+      </p>
       {error && <Notice tone="bad">{error}</Notice>}
     </div>
   );

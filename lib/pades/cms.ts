@@ -1,11 +1,13 @@
-// CMS (CAdES) signature for PAdES, built to the ICP-Brasil policy
-// PA_PAdES_AD_RB_v1_3 ("Assinatura Digital com Referência Básica").
+// CMS (CAdES) signature for PAdES.
 //
-// The policy (http://politicas.icpbrasil.gov.br/PA_PAdES_AD_RB_v1_3.der,
-// listed in LPA_PAdES.der) requires exactly these signed attributes:
+// With the ICP-Brasil policy PA_PAdES_AD_RB_v1_3 ("Assinatura Digital com
+// Referência Básica", http://politicas.icpbrasil.gov.br/PA_PAdES_AD_RB_v1_3.der,
+// listed in LPA_PAdES.der) the signed attributes are exactly:
 //   contentType, messageDigest, signingCertificateV2, sigPolicyId.
-// No signingTime: in PAdES the signing time is the /M entry of the signature
-// dictionary.
+// Without a policy (PAdES baseline B-B, ETSI EN 319 142-1, used for eIDAS)
+// they are contentType, messageDigest, signingCertificateV2.
+// Never signingTime: in PAdES the signing time is the /M entry of the
+// signature dictionary.
 //
 // The private key never reaches this module: it receives a `sign` function
 // (WebCrypto key from an A1 file, or the Web PKI component for A3 tokens).
@@ -161,12 +163,14 @@ function signaturePolicyId(policy: { oid: string; uri: string; sha256Hex: string
 
 /**
  * Builds a detached CMS SignedData over `contentDigest` (the SHA-256 of the
- * PDF /ByteRange bytes) with the ICP-Brasil AD-RB v1.3 signed attributes.
+ * PDF /ByteRange bytes). `policy` adds the sigPolicyId attribute (default:
+ * ICP-Brasil AD-RB v1.3); pass null for a PAdES baseline signature without
+ * an explicit policy.
  */
 export async function buildPadesCms(
   contentDigest: Uint8Array,
   signer: CmsSigner,
-  policy = ICP_BRASIL_PADES_AD_RB_V1_3,
+  policy: { oid: string; uri: string; sha256Hex: string } | null = ICP_BRASIL_PADES_AD_RB_V1_3,
 ): Promise<Uint8Array> {
   const cert = parseCertificate(signer.certificate);
   const kind = keyKindOf(cert);
@@ -182,7 +186,7 @@ export async function buildPadesCms(
       values: [new asn1js.OctetString({ valueHex: ab(contentDigest) })],
     }),
     signingCertificateV2(cert, certHash),
-    signaturePolicyId(policy),
+    ...(policy ? [signaturePolicyId(policy)] : []),
   ];
 
   // DER: a SET OF is sorted by the encodings of its elements. The bytes that

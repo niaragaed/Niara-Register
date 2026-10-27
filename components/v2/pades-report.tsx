@@ -1,9 +1,29 @@
 "use client";
 import type { PadesSignatureReport } from "@/lib/pades/inspect";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
+import { FRAMEWORKS } from "@/lib/pades/frameworks";
 import { Label, linkClass } from "./ui";
 
+function chainText(r: PadesSignatureReport, t: Dictionary["pades"]): string {
+  const c = r.chain;
+  switch (c.status) {
+    case "icp-brasil":
+      return `${t.chainIcp} ${c.root}`;
+    case "eu-trusted-list": {
+      const level = c.level === "qes" ? t.levelQes : c.level === "adesqc" ? t.levelAdesqc : t.levelNotQualified;
+      return `${t.chainEu} (${c.country}) · ${c.tsp} · ${c.seal ? `${t.seal}, ` : ""}${level}`;
+    }
+    case "incomplete":
+      return t.chainIncomplete;
+    default:
+      return t.chainUntrusted;
+  }
+}
+
 export function PadesReport({ reports, t }: { reports: PadesSignatureReport[]; t: Dictionary["pades"] }) {
+  const eu = reports.find((r) => r.chain.status === "eu-trusted-list");
+  const showEu = Boolean(eu) || reports.some((r) => r.padesBaseline);
+  const showIti = !showEu || reports.some((r) => r.chain.status === "icp-brasil" || r.policyOid);
   return (
     <div className="mt-5">
       <Label>{t.reportTitle}</Label>
@@ -25,15 +45,11 @@ export function PadesReport({ reports, t }: { reports: PadesSignatureReport[]; t
                   <span className="text-slate"> · {r.coversWholeFile ? t.coversAll : t.modified}</span>
                   <span className="text-slate">
                     {" · "}
-                    {r.chain.status === "icp-brasil"
-                      ? `${t.chainIcp} ${r.chain.root}`
-                      : r.chain.status === "incomplete"
-                        ? t.chainIncomplete
-                        : t.chainUntrusted}
+                    {chainText(r, t)}
                   </span>
                   <span className="text-slate">
                     {" · "}
-                    {r.policyName ? `${t.policy} ${r.policyName}` : t.noPolicy}
+                    {r.policyName ? `${t.policy} ${r.policyName}` : r.padesBaseline ? t.padesBaseline : t.noPolicy}
                   </span>
                 </p>
                 {r.signer?.issuerCommonName && (
@@ -47,12 +63,25 @@ export function PadesReport({ reports, t }: { reports: PadesSignatureReport[]; t
           })}
         </ol>
       )}
-      <p className="mt-3 max-w-xl font-body text-xs text-slate">
-        {t.revocationNote}{" "}
-        <a href="https://validar.iti.gov.br" target="_blank" rel="noreferrer" className={linkClass}>
-          {t.itiLink} ↗
-        </a>
-      </p>
+      {showIti && (
+        <p className="mt-3 max-w-xl font-body text-xs text-slate">
+          {t.revocationNote}{" "}
+          <a href={FRAMEWORKS["br-icp"].validator} target="_blank" rel="noreferrer" className={linkClass}>
+            {t.itiLink} ↗
+          </a>
+        </p>
+      )}
+      {showEu && (
+        <p className="mt-2 max-w-xl font-body text-xs text-slate">
+          {t.revocationNoteEu.replace(
+            "{list}",
+            eu && eu.chain.status === "eu-trusted-list" ? `LOTL #${eu.chain.listSequence}` : "LOTL",
+          )}{" "}
+          <a href={FRAMEWORKS["eu-eidas"].validator} target="_blank" rel="noreferrer" className={linkClass}>
+            {t.dssLink} ↗
+          </a>
+        </p>
+      )}
     </div>
   );
 }
