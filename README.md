@@ -91,7 +91,20 @@ The signing flow (`/signatures`) now works like this, all in the browser:
 
 v2 addresses (transferable records deployed 2026-10-22; `SignatureRegistryV2` with the document type redeployed 2026-10-23, the first one is retired) live in [`lib/register-v2-evm.ts`](lib/register-v2-evm.ts) and [`indexer/config.ts`](indexer/config.ts); `NEXT_PUBLIC_V2_<NETWORK>_REGISTRY` / `_ETR` and `<PREFIX>_V2_REGISTRY` / `_ETR` / `_START_BLOCK` only override them after a redeploy. Run `supabase/migrations_011_v2.sql` and `supabase/migrations_012_v2_document_type.sql` before starting the indexer with the v2 sources.
 
-### v3: commit-reveal and ORB attestation (contracts ready, not deployed yet)
+### v3: commit-reveal and ORB attestation
+
+`SignatureRegistryV3` deployed 2026-10-27 (ORB off: `orbAttester` = 0), from niara-contracts-Register main `67d48c0`:
+
+| Network | Address | Block | v2 retired at (unix) |
+|---|---|---|---|
+| Ethereum Sepolia | `0x9fCc83555547384178Ab64a00ce579A469bd5650` | 12007158 | 1793128524 |
+| Base Sepolia | `0x0d0c016E11b259050647EEa2e69A887C1128E499` | 51033363 | 1793128541 |
+| Robinhood Chain Testnet | `0x0d0c016E11b259050647EEa2e69A887C1128E499` | 143759726 | 1793128552 |
+| HyperEVM Testnet | `0x0d0c016E11b259050647EEa2e69A887C1128E499` | 68047077 | 1793129011 |
+| Tempo Testnet | `0x0d0c016E11b259050647EEa2e69A887C1128E499` | 41444021 | 1793129021 |
+
+Solana: `register_v3` goes live with the program upgrade; the site switches with
+`NEXT_PUBLIC_SOLANA_REGISTER_V3=1` in the same release.
 
 v2's single `register` call could be front-run: anyone watching the mempool could copy it and land
 first. v3 (`SignatureRegistryV3` on EVM, `commit` + `register_v3` on Solana) registers in two
