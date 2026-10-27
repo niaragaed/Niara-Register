@@ -118,6 +118,9 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [receiptId, setReceiptId] = useState<string | null>(null);
+  // EVM: the registry that minted the receipt (v2 or v3), for "add to wallet".
+  const [receiptContract, setReceiptContract] = useState<string | null>(null);
+  const [walletAdd, setWalletAdd] = useState<"idle" | "busy" | "done" | "failed">("idle");
   const [recordHash, setRecordHash] = useState<string | null>(null);
   const [metaCommit, setMetaCommit] = useState<string | null>(null);
   const [credential, setCredential] = useState<string | null>(null);
@@ -138,6 +141,8 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     setExisting(null);
     setTxHash(null);
     setReceiptId(null);
+    setReceiptContract(null);
+    setWalletAdd("idle");
     setCredential(null);
     setSavedAt(null);
     setPresentation(null);
@@ -290,6 +295,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
         const v3 = v3Registry(network);
         if (v3) {
           doneTx = await registerEvmV3(wallet.signer, wallet.address, chainId, v3);
+          setReceiptContract(v3);
           // v3 token id = recordIdOf(recordHash, signer) = keccak256(abi.encode(recordHash, signer)).
           doneReceipt = BigInt(
             keccak256(AbiCoder.defaultAbiCoder().encode(["bytes32", "address"], [`0x${recordHash}`, wallet.address])),
@@ -301,6 +307,7 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
           const receipt = await tx.wait();
           doneTx = receipt?.hash ?? tx.hash;
           doneReceipt = BigInt(`0x${recordHash}`).toString();
+          setReceiptContract(deployment!.registry!);
         }
       } else if (wallet.kind === "solana") {
         const conn = solanaConnection();
@@ -409,6 +416,24 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
     const tx = await writer.register(...args);
     const receipt = await tx.wait();
     return receipt?.hash ?? tx.hash;
+  }
+
+  /**
+   * MetaMask does not detect NFTs on testnets by itself: ask the wallet to
+   * show this receipt (EIP-747 wallet_watchAsset, type ERC721). Wallets that
+   * do not support it get the contract and token id to add by hand.
+   */
+  async function addReceiptToWallet() {
+    if (wallet?.kind !== "evm" || !receiptContract || !receiptId) return;
+    setWalletAdd("busy");
+    try {
+      const provider = wallet.signer.provider as unknown as { send(method: string, params: unknown): Promise<unknown> };
+      await provider.send("wallet_watchAsset", { type: "ERC721", options: { address: receiptContract, tokenId: receiptId } });
+      setWalletAdd("done");
+    } catch (e) {
+      console.error(e);
+      setWalletAdd(isRejection(e) ? "idle" : "failed");
+    }
   }
 
   type PackageExtras = Partial<Pick<ProofPackage, "txHash" | "receiptId" | "credential" | "presentation">>;
@@ -760,7 +785,21 @@ export function RegisterV2({ t, locale }: { t: Texts; locale: Locale }) {
                   {isEvm(network) ? tr.receiptEvm : tr.receiptSolana}: {receiptId}
                 </p>
               )}
-              <p className="mt-1 max-w-xl font-body text-xs text-slate">{tr.receiptWalletNote}</p>
+              <p className="mt-1 max-w-xl font-body text-xs text-slate">
+                {isEvm(network) ? tr.receiptWalletNoteEvm : tr.receiptWalletNote}
+              </p>
+              {isEvm(network) && receiptContract && receiptId && (
+                <div className="mt-2">
+                  <button className={secondaryButton} disabled={walletAdd === "busy"} onClick={addReceiptToWallet}>
+                    {walletAdd === "done" ? tr.addToWalletDone : tr.addToWallet}
+                  </button>
+                  {walletAdd === "failed" && (
+                    <p className="mt-2 max-w-xl break-all font-mono text-xs text-slate">
+                      {tr.addToWalletManual} {receiptContract} · token id {receiptId}
+                    </p>
+                  )}
+                </div>
+              )}
               <p className="mt-2 flex flex-wrap gap-4">
                 <a href={txLink(txHash)} target="_blank" rel="noreferrer" className={linkClass}>
                   {tr.viewTx} ↗
