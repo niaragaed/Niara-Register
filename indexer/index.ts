@@ -113,6 +113,8 @@ const v2EvmIndexers = config.v2.evm
         },
         db,
         registry: n.registry,
+        registryV3: n.registryV3,
+        v2RetiredAt: n.v2RetiredAt,
         etr: n.etr,
         deployBlock: n.deployBlock,
         chunk: n.chunk,
@@ -176,7 +178,7 @@ async function startV2(): Promise<void> {
   for (const v2 of v2EvmIndexers) {
     try {
       await v2.idx.start();
-      console.log(`[indexer] ${v2.cfg.network}-v2: registry ${v2.cfg.registry ?? "-"} etr ${v2.cfg.etr ?? "-"} — checkpoint block ${v2.idx.checkpoint}`);
+      console.log(`[indexer] ${v2.cfg.network}-v2: registry ${v2.cfg.registry ?? "-"} v3 ${v2.cfg.registryV3 ?? "-"} etr ${v2.cfg.etr ?? "-"} — checkpoint block ${v2.idx.checkpoint}`);
       if (config.dryRun) {
         const r = await v2.idx.cycle();
         console.log(`[dry-run] ${v2.cfg.network}-v2: ${r.saved} row(s) would be saved (up to date: ${r.upToDate})`);

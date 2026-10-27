@@ -1,5 +1,5 @@
 // Metadata of the soulbound receipts. On EVM it is generated on-chain by
-// SignatureRegistryV2.tokenURI; on Solana the cNFT points to
+// SignatureRegistryV2/V3.tokenURI; on Solana the cNFT points to
 // /api/receipts/solana/<hash>, which serves the same JSON shape. Nothing
 // private goes in: hash, date, scheme, public type and the verification link.
 import { documentTypeName } from "./document-types";
@@ -26,6 +26,10 @@ export function receiptJson(opts: {
   scheme?: number;
   documentType?: number;
   timestamp?: number;
+  /** v3 only; undefined for v2 receipts (the trait is then left out). */
+  orbAnalysed?: boolean;
+  /** v3 receipts name the wallet whose record it is. */
+  signer?: string;
 }) {
   const attributes: { trait_type: string; value: string | number; display_type?: string }[] = [
     { trait_type: "Record hash", value: `0x${opts.hashHex}` },
@@ -38,6 +42,10 @@ export function receiptJson(opts: {
   }
   if (opts.documentType) {
     attributes.push({ trait_type: "Document type", value: documentTypeName(opts.documentType, "en") });
+  }
+  if (opts.signer) attributes.push({ trait_type: "Signer", value: opts.signer });
+  if (opts.orbAnalysed !== undefined) {
+    attributes.push({ trait_type: "ORB analysis", value: opts.orbAnalysed ? "Yes" : "No" });
   }
   if (opts.timestamp) attributes.push({ display_type: "date", trait_type: "Registered at", value: opts.timestamp });
   return {

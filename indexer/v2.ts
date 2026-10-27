@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { PublicKey } from "@solana/web3.js";
-import { SIGNATURE_REGISTRY_V2_ABI, TRANSFERABLE_RECORD_ABI } from "./abi";
+import { SIGNATURE_REGISTRY_V2_ABI, SIGNATURE_REGISTRY_V3_ABI, TRANSFERABLE_RECORD_ABI } from "./abi";
 import { BorshReader, programDataPayloads, type SolanaRpc } from "./solana";
 import { withBackoff, type BackoffOptions } from "./rate-limit";
 
@@ -16,6 +16,11 @@ import { withBackoff, type BackoffOptions } from "./rate-limit";
  * Each EVM network runs its own loop and checkpoint ("<network>-v2"); the
  * Solana v2 source has its own checkpoint ("solana-v2"), separate from the
  * v1 source, so both can scan the same program history independently.
+ *
+ * v3 (SignatureRegistryV3 / register_v3: commit-reveal + ORB attestation) is
+ * read by the same loops: on EVM the v3 registry address joins the v2 scan of
+ * that network; on Solana DocumentRegisteredV3 comes from the same program.
+ * v3 rows carry versao_contrato = 3 and hash_relatorio_orb (migration 014).
  */
 
 export type V2Network = "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet" | "solana-devnet";
@@ -38,6 +43,12 @@ export type NewSignatureV2 = {
   bloco: number | null;
   slot?: number;
   assinado_em: string;
+  /** 2 = SignatureRegistryV2 / register_v2; 3 = commit-reveal (v3). */
+  versao_contrato: 2 | 3;
+  /** v3: "0x" + 64 hex of the attested ORB report, or null. */
+  hash_relatorio_orb: string | null;
+  /** EVM v2 row written after v2 was retired on that network (migration 015). */
+  apos_aposentadoria_v2: boolean;
 };
 
 /** Event names stored in tipo_evento (Portuguese, like the rest of the database). */
@@ -78,6 +89,8 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 // ── EVM ──────────────────────────────────────────────────────────────────────────
 
 const registryIface = new ethers.Interface(SIGNATURE_REGISTRY_V2_ABI);
+const registryV3Iface = new ethers.Interface(SIGNATURE_REGISTRY_V3_ABI);
+const ZERO32 = `0x${"0".repeat(64)}`;
 const etrIface = new ethers.Interface(TRANSFERABLE_RECORD_ABI);
 
 export type DecodedEvm = { signature?: NewSignatureV2; etr?: NewEtrEvent };
@@ -89,16 +102,18 @@ export type DecodedEvm = { signature?: NewSignatureV2; etr?: NewEtrEvent };
 export function decodeEvmV2Log(
   log: ethers.Log,
   network: Exclude<V2Network, "solana-devnet">,
-  addresses: { registry?: string; etr?: string },
+  addresses: { registry?: string; registryV3?: string; etr?: string; v2RetiredAt?: number },
   blockTime: number | null,
 ): DecodedEvm | null {
   const address = log.address.toLowerCase();
   const base = { rede: network, tx_hash: log.transactionHash, log_index: log.index, endereco_contrato: log.address, bloco: log.blockNumber };
 
-  if (addresses.registry && address === addresses.registry.toLowerCase()) {
+  const isV2 = Boolean(addresses.registry && address === addresses.registry.toLowerCase());
+  const isV3 = Boolean(addresses.registryV3 && address === addresses.registryV3.toLowerCase());
+  if (isV2 || isV3) {
     let parsed: ethers.LogDescription | null = null;
     try {
-      parsed = registryIface.parseLog(log);
+      parsed = (isV3 ? registryV3Iface : registryIface).parseLog(log);
     } catch {
       return null;
     }
@@ -116,8 +131,13 @@ export function decodeEvmV2Log(
         tipo_documento: documentType,
         compromisso_metadados: hex32(parsed.args.metadataCommitment as string),
         assinante_endereco: parsed.args.signer as string,
-        recibo_id: BigInt(hash).toString(),
+        // v2: token id = record hash; v3: token id = recordIdOf(hash, signer), carried by the event.
+        recibo_id: isV3 ? BigInt(parsed.args.tokenId as bigint).toString() : BigInt(hash).toString(),
         assinado_em: new Date(Number(parsed.args.timestamp as bigint) * 1000).toISOString(),
+        versao_contrato: isV3 ? 3 : 2,
+        apos_aposentadoria_v2:
+          !isV3 && addresses.v2RetiredAt !== undefined && Number(parsed.args.timestamp as bigint) > addresses.v2RetiredAt,
+        hash_relatorio_orb: isV3 && hex32(parsed.args.orbReportHash as string) !== ZERO32 ? hex32(parsed.args.orbReportHash as string) : null,
       },
     };
   }
@@ -184,6 +204,10 @@ export function createEvmV2Indexer(deps: {
   rpc: LightEvmRpcV2;
   db: V2Db;
   registry?: string;
+  /** SignatureRegistryV3 on this network, once deployed (scanned by the same loop). */
+  registryV3?: string;
+  /** Unix seconds when v2 was retired there (v2 rows after it are flagged). */
+  v2RetiredAt?: number;
   etr?: string;
   deployBlock: number;
   chunk: number;
@@ -194,7 +218,7 @@ export function createEvmV2Indexer(deps: {
   sleep: (ms: number) => Promise<void>;
 }) {
   const { rpc, db } = deps;
-  const addresses = [deps.registry, deps.etr].filter((a): a is string => Boolean(a)).map((a) => a.toLowerCase());
+  const addresses = [deps.registry, deps.registryV3, deps.etr].filter((a): a is string => Boolean(a)).map((a) => a.toLowerCase());
   const options: BackoffOptions = { ...deps.backoff, sleep: deps.sleep };
   const net = <T,>(fn: () => Promise<T>, context: string) => withBackoff(fn, `${deps.network}-v2: ${context}`, options);
   let checkpoint = 0;
@@ -223,7 +247,12 @@ export function createEvmV2Indexer(deps: {
           }
           blockTime = times.get(log.blockNumber) ?? null;
         }
-        const decoded = decodeEvmV2Log(log, deps.network, { registry: deps.registry, etr: deps.etr }, blockTime);
+        const decoded = decodeEvmV2Log(
+          log,
+          deps.network,
+          { registry: deps.registry, registryV3: deps.registryV3, etr: deps.etr, v2RetiredAt: deps.v2RetiredAt },
+          blockTime,
+        );
         if (decoded?.signature) {
           await db.saveSignatureV2(decoded.signature);
           saved++;
@@ -254,6 +283,7 @@ export const SOURCE_SOLANA_V2 = "solana-v2";
 // Discriminators from niara-register-solana's IDL.
 const EVENT_DISC: Record<string, number[]> = {
   DocumentRegisteredV2: [23, 150, 17, 90, 254, 203, 21, 8],
+  DocumentRegisteredV3: [39, 180, 202, 184, 125, 217, 187, 244],
   RecordIssued: [44, 242, 204, 114, 101, 237, 254, 224],
   ControlTransferred: [107, 178, 53, 201, 22, 6, 115, 185],
   AmendmentProposed: [240, 0, 141, 249, 56, 195, 144, 207],
@@ -263,9 +293,11 @@ const EVENT_DISC: Record<string, number[]> = {
   RecordTerminated: [232, 108, 26, 67, 156, 123, 136, 73],
 };
 const RECORD_V2_DISC = Buffer.from([255, 235, 84, 155, 197, 94, 92, 26]);
+const RECORD_V3_DISC = Buffer.from([219, 193, 191, 49, 92, 106, 138, 205]);
 
 export type SolanaV2Event =
   | { kind: "DocumentRegisteredV2"; recordHash: string; signer: string; scheme: number; documentType: number; metadataCommitment: string; timestamp: number; slot: number; receiptAssetId: string }
+  | { kind: "DocumentRegisteredV3"; recordHash: string; signer: string; scheme: number; documentType: number; metadataCommitment: string; orbReportHash: string; timestamp: number; slot: number; receiptAssetId: string }
   | { kind: "RecordIssued"; record: string; issuer: string; holder: string; documentHash: string; metadataCommitment: string }
   | { kind: "ControlTransferred"; record: string; from: string; to: string }
   | { kind: "AmendmentProposed"; record: string; newDocumentHash: string; newMetadataCommitment: string }
@@ -295,6 +327,17 @@ export function decodeSolanaV2Event(base64: string): SolanaV2Event | null {
         const slot = Number(r.u64());
         return { kind, recordHash, signer, scheme, documentType, metadataCommitment, timestamp, slot, receiptAssetId: pk() };
       }
+      case "DocumentRegisteredV3": {
+        const recordHash = h();
+        const signer = pk();
+        const scheme = r.bytes(1)[0];
+        const documentType = r.bytes(2).readUInt16LE(0);
+        const metadataCommitment = h();
+        const orbReportHash = h();
+        const timestamp = Number(r.i64());
+        const slot = Number(r.u64());
+        return { kind, recordHash, signer, scheme, documentType, metadataCommitment, orbReportHash, timestamp, slot, receiptAssetId: pk() };
+      }
       case "RecordIssued":
         return { kind, record: pk(), issuer: pk(), holder: pk(), documentHash: h(), metadataCommitment: h() };
       case "ControlTransferred":
@@ -316,11 +359,13 @@ export function decodeSolanaV2Event(base64: string): SolanaV2Event | null {
   return null;
 }
 
-/** The RecordV2 account fields the indexer cross-checks against the event. */
-export function decodeRecordV2Account(
+/** The RecordV2/RecordV3 account fields the indexer cross-checks against the event. */
+export function decodeRecordAccount(
   data: Buffer,
-): { signer: string; recordHash: string; documentType: number; timestamp: number } | null {
-  if (data.length < 8 || !data.subarray(0, 8).equals(RECORD_V2_DISC)) return null;
+  version: 2 | 3 = 2,
+): { signer: string; recordHash: string; documentType: number; orbReportHash: string | null; timestamp: number } | null {
+  const disc = version === 3 ? RECORD_V3_DISC : RECORD_V2_DISC;
+  if (data.length < 8 || !data.subarray(0, 8).equals(disc)) return null;
   try {
     const r = new BorshReader(data.subarray(8));
     const signer = new PublicKey(r.bytes(32)).toBase58();
@@ -328,15 +373,27 @@ export function decodeRecordV2Account(
     r.bytes(1); // scheme
     const documentType = r.bytes(2).readUInt16LE(0);
     r.bytes(32); // metadata commitment
+    const orbReportHash = version === 3 ? r.bytes(32).toString("hex") : null;
     const timestamp = Number(r.i64());
-    return { signer, recordHash, documentType, timestamp };
+    return { signer, recordHash, documentType, orbReportHash, timestamp };
   } catch {
     return null;
   }
 }
 
+/** v2 name kept for existing callers. */
+export const decodeRecordV2Account = (data: Buffer) => decodeRecordAccount(data, 2);
+
 export function recordV2Address(hashHex: string, program: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("record_v2"), Buffer.from(hashHex, "hex")], program)[0];
+}
+
+/** v3 records are one per (hash, signer). */
+export function recordV3Address(hashHex: string, signer: string, program: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("record_v3"), Buffer.from(hashHex, "hex"), new PublicKey(signer).toBuffer()],
+    program,
+  )[0];
 }
 
 const PAGE_SIZE = 1000;
@@ -396,12 +453,21 @@ export function createSolanaV2Indexer(deps: {
     for (const [index, payload] of programDataPayloads(tx.meta.logMessages ?? [], deps.programId).entries()) {
       const e = decodeSolanaV2Event(payload);
       if (!e) continue;
-      if (e.kind === "DocumentRegisteredV2") {
+      if (e.kind === "DocumentRegisteredV2" || e.kind === "DocumentRegisteredV3") {
         // The account is the source of truth, as in the v1 source.
-        const pda = recordV2Address(e.recordHash, program);
+        const version = e.kind === "DocumentRegisteredV3" ? 3 : 2;
+        const orbHex = e.kind === "DocumentRegisteredV3" ? e.orbReportHash : null;
+        const pda = version === 3 ? recordV3Address(e.recordHash, e.signer, program) : recordV2Address(e.recordHash, program);
         const account = await net(() => rpc.getAccountInfo(pda, "finalized"), `getAccountInfo ${pda.toBase58().slice(0, 8)}`);
-        const acc = account && account.owner.equals(program) ? decodeRecordV2Account(Buffer.from(account.data)) : null;
-        if (!acc || acc.recordHash !== e.recordHash || acc.signer !== e.signer || acc.timestamp !== e.timestamp || acc.documentType !== e.documentType) {
+        const acc = account && account.owner.equals(program) ? decodeRecordAccount(Buffer.from(account.data), version) : null;
+        if (
+          !acc ||
+          acc.recordHash !== e.recordHash ||
+          acc.signer !== e.signer ||
+          acc.timestamp !== e.timestamp ||
+          acc.documentType !== e.documentType ||
+          acc.orbReportHash !== orbHex
+        ) {
           console.warn(`[indexer] solana-v2: event in ${signature} does not match account ${pda.toBase58()}; ignored`);
           continue;
         }
@@ -417,6 +483,10 @@ export function createSolanaV2Indexer(deps: {
           assinante_endereco: e.signer,
           recibo_id: e.receiptAssetId,
           assinado_em: new Date(e.timestamp * 1000).toISOString(),
+          versao_contrato: version,
+          hash_relatorio_orb: orbHex && !/^0+$/.test(orbHex) ? `0x${orbHex}` : null,
+          // register_v2 is removed by the v3 upgrade: no v2 rows can appear after it.
+          apos_aposentadoria_v2: false,
         });
         saved++;
         continue;

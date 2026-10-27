@@ -7,9 +7,16 @@
 // Salted v2 records (scheme 1) cannot be found this way by design: their hash
 // depends on a random salt that only the proof package holds.
 import { REGISTER_NETWORKS, type RegisterNetwork } from "./networks";
-import { readLegacyRecord, readRecordV2 } from "./v2-reader";
+import { readLegacyRecord, readRecords } from "./v2-reader";
 
-export type NetworkHit = { network: RegisterNetwork; version: 1 | 2; signer: string; timestamp: number };
+export type NetworkHit = {
+  network: RegisterNetwork;
+  version: 1 | 2 | 3;
+  signer: string;
+  timestamp: number;
+  /** EVM v2 record made after v2 was retired there: shown, not counted. */
+  afterV2Retirement?: boolean;
+};
 export type LookupResult = { hits: NetworkHit[]; failed: RegisterNetwork[] };
 
 const TIMEOUT_MS = 12_000;
@@ -19,13 +26,22 @@ function withTimeout<T>(p: Promise<T>): Promise<T> {
 }
 
 async function lookupOne(network: RegisterNetwork, fileSha: string): Promise<NetworkHit[]> {
-  const [v2, v1] = await Promise.all([
-    withTimeout(readRecordV2(network, fileSha)),
+  const [records, v1] = await Promise.all([
+    withTimeout(readRecords(network, fileSha)),
     withTimeout(readLegacyRecord(network, fileSha)),
   ]);
   const hits: NetworkHit[] = [];
   // Only a signed-PDF record (scheme 0) is keyed by the file hash itself.
-  if (v2 && v2.scheme === 0) hits.push({ network, version: 2, signer: v2.signer, timestamp: v2.timestamp });
+  for (const r of records) {
+    if (r.scheme !== 0) continue;
+    hits.push({
+      network,
+      version: r.version,
+      signer: r.signer,
+      timestamp: r.timestamp,
+      ...(r.afterV2Retirement ? { afterV2Retirement: true } : {}),
+    });
+  }
   if (v1) hits.push({ network, version: 1, signer: v1.signer, timestamp: v1.timestamp });
   return hits;
 }

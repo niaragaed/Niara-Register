@@ -1,4 +1,5 @@
-// Metadata JSON of a Solana cNFT receipt (its on-chain URI points here).
+// Metadata JSON of a v2 Solana cNFT receipt (its on-chain URI points here).
+// v3 receipts point to ./[signer] instead (one record per hash and signer).
 import { NextResponse } from "next/server";
 import { isHash32 } from "@/lib/commitments";
 import { receiptJson } from "@/lib/receipt-metadata";

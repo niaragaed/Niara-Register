@@ -58,6 +58,7 @@ function extraEvmNetwork(base: {
  * of the two (the transferable-record deploy), so one scan covers both. The
  * variables <PREFIX>_V2_REGISTRY, <PREFIX>_V2_ETR and <PREFIX>_V2_START_BLOCK
  * only exist for a redeploy. <PREFIX>_V2_DESATIVADO=1 turns the source off.
+ * <PREFIX>_V3_REGISTRY adds SignatureRegistryV3 to the same scan.
  */
 function v2EvmNetwork(base: {
   network: "sepolia" | "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet";
@@ -80,6 +81,13 @@ function v2EvmNetwork(base: {
     enabled: env("DESATIVADO") !== "1",
     rpcUrl: base.rpcUrl,
     registry: (env("REGISTRY") ?? base.registry).toLowerCase(),
+    // SignatureRegistryV3 (commit-reveal + ORB), once deployed: <PREFIX>_V3_REGISTRY.
+    // Scanned by this same loop. If v3 events happened before the variable was
+    // set, lower this source's checkpoint to the v3 deploy block once.
+    registryV3: process.env[`${base.prefix}_V3_REGISTRY`]?.toLowerCase() || undefined,
+    // Unix seconds of the v3 deploy block: v2 rows after it are flagged
+    // apos_aposentadoria_v2 (same value as V2_RETIRED_AT in the site).
+    v2RetiredAt: process.env[`${base.prefix}_V2_RETIRED_AT`] ? Number(process.env[`${base.prefix}_V2_RETIRED_AT`]) : undefined,
     etr: (env("ETR") ?? base.etr).toLowerCase(),
     deployBlock: Number(env("START_BLOCK") ?? base.deployBlock),
     chunk: base.chunk,

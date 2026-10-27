@@ -52,6 +52,18 @@ export const PROGRAM_ERRORS_V2: Record<number, string> = {
   6016: "HashAlreadyUsed",
   6017: "UnknownTerminationReason",
   6018: "InvalidDocumentType",
+  // v3 (commit-reveal and ORB attestation)
+  6019: "InvalidCommitment",
+  6020: "RevealTooEarly",
+  6021: "CommitmentExpired",
+  6022: "AlreadyRegisteredV2",
+  6023: "OrbDisabled",
+  6024: "InvalidOrbAttestation",
+  6025: "NotOrbAuthority",
+  6026: "CommitmentMismatch",
+  6027: "ReceiptUriTooLong",
+  // Anchor: the commitment account does not exist (no commit, or wrong nonce/signer).
+  3012: "NoCommitment",
 };
 
 const pda = (seeds: Uint8Array[], program = SOLANA_PROGRAM_ID) =>
@@ -60,6 +72,12 @@ const pda = (seeds: Uint8Array[], program = SOLANA_PROGRAM_ID) =>
 export const configAddress = () => pda([enc.encode("config")]);
 export const receiptAuthorityAddress = () => pda([enc.encode("receipt_authority")]);
 export const recordV2Address = (hashHex: string) => pda([enc.encode("record_v2"), fromHex(hashHex)]);
+/** v3 records are one per (hash, signer). */
+export const recordV3Address = (hashHex: string, signer: PublicKey) =>
+  pda([enc.encode("record_v3"), fromHex(hashHex), signer.toBytes()]);
+export const commitmentAddress = (signer: PublicKey, commitmentHex: string) =>
+  pda([enc.encode("commitment"), signer.toBytes(), fromHex(commitmentHex)]);
+export const orbConfigAddress = () => pda([enc.encode("orb_config")]);
 export const legacyRecordAddress = (hashHex: string) => pda([enc.encode("assinatura"), fromHex(hashHex)]);
 export const transferableRecordAddress = (originalHashHex: string) => pda([enc.encode("etr"), fromHex(originalHashHex)]);
 export const usedHashAddress = (hashHex: string) => pda([enc.encode("etr_hash"), fromHex(hashHex)]);
@@ -316,4 +334,173 @@ export function solanaV2ErrorReason(error: unknown): string | null {
   if (custom) return PROGRAM_ERRORS_V2[parseInt(custom[1], 16)] ?? null;
   for (const name of Object.values(PROGRAM_ERRORS_V2)) if (text.includes(name)) return name;
   return null;
+}
+
+// --- v3: commit-reveal and ORB attestation -----------------------------------
+//
+// register_v2 is removed from the program once v3 is deployed (it was
+// front-runnable). Until Niara upgrades the devnet program, the site keeps
+// using register_v2; set NEXT_PUBLIC_SOLANA_REGISTER_V3=1 in the same deploy
+// that follows the program upgrade.
+
+export const SOLANA_REGISTER_V3 = process.env.NEXT_PUBLIC_SOLANA_REGISTER_V3 === "1";
+
+export const DISC_V3 = {
+  commit: [223, 140, 142, 165, 229, 208, 156, 74],
+  cancelCommitment: [36, 39, 70, 137, 71, 179, 88, 232],
+  registerV3: [158, 43, 192, 255, 225, 42, 188, 131],
+} as const;
+export const ACCOUNT_DISC_V3 = {
+  recordV3: [219, 193, 191, 49, 92, 106, 138, 205],
+  commitment: [61, 112, 129, 128, 24, 147, 77, 87],
+} as const;
+
+const INSTRUCTIONS_SYSVAR = new PublicKey("Sysvar1nstructions1111111111111111111111111");
+
+export type SolanaRecordV3 = SolanaRecordV2 & { orbReportHash: string | null };
+
+function decodeRecordV3(data: Uint8Array): SolanaRecordV3 | null {
+  const rd = readerFor(data, ACCOUNT_DISC_V3.recordV3);
+  if (!rd) return null;
+  const signer = rd.pubkey().toBase58();
+  const recordHash = toHex(rd.bytes(32));
+  const scheme = rd.u8();
+  const typeBytes = rd.bytes(2);
+  const documentType = typeBytes[0] | (typeBytes[1] << 8);
+  const metadataCommitment = toHex(rd.bytes(32));
+  const orb = toHex(rd.bytes(32));
+  const timestamp = rd.i64();
+  const slot = Number(rd.u64());
+  const receiptAssetId = rd.pubkey().toBase58();
+  return {
+    signer,
+    recordHash,
+    scheme,
+    documentType,
+    metadataCommitment,
+    orbReportHash: /^0+$/.test(orb) ? null : orb,
+    timestamp,
+    slot,
+    receiptAssetId,
+  };
+}
+
+/** `signer`'s v3 record of a hash, or null. */
+export async function fetchRecordV3(connection: Connection, hashHex: string, signer: PublicKey): Promise<SolanaRecordV3 | null> {
+  const acc = await connection.getAccountInfo(recordV3Address(hashHex, signer));
+  if (!acc || !acc.owner.equals(SOLANA_PROGRAM_ID)) return null;
+  return decodeRecordV3(Uint8Array.from(acc.data));
+}
+
+/**
+ * Every v3 record of a hash (one per signer), oldest first. Uses
+ * getProgramAccounts filtered on the discriminator and on record_hash
+ * (offset 8 + 32): the program does not keep a list per hash.
+ */
+export async function fetchRecordsV3(connection: Connection, hashHex: string): Promise<SolanaRecordV3[]> {
+  const bs58 = (bytes: Uint8Array) => new PublicKey(bytes).toBase58(); // 32 bytes -> base58
+  const accounts = await connection.getProgramAccounts(SOLANA_PROGRAM_ID, {
+    filters: [
+      { memcmp: { offset: 0, bytes: base58Of(Uint8Array.from(ACCOUNT_DISC_V3.recordV3)) } },
+      { memcmp: { offset: 40, bytes: bs58(fromHex(hashHex)) } },
+    ],
+  });
+  return accounts
+    .map((a) => decodeRecordV3(Uint8Array.from(a.account.data)))
+    .filter((r): r is SolanaRecordV3 => r !== null && r.recordHash === hashHex.toLowerCase())
+    .sort((a, b) => a.slot - b.slot || a.timestamp - b.timestamp);
+}
+
+/** All records of a hash: v3 (one per signer) and the single v2 one, if any. */
+export async function fetchRecordsAll(
+  connection: Connection,
+  hashHex: string,
+): Promise<(SolanaRecordV3 & { version: 2 | 3 })[]> {
+  const [v3, v2] = await Promise.all([fetchRecordsV3(connection, hashHex), fetchRecordV2(connection, hashHex)]);
+  const out: (SolanaRecordV3 & { version: 2 | 3 })[] = [];
+  if (v2) out.push({ ...v2, orbReportHash: null, version: 2 });
+  for (const r of v3) out.push({ ...r, version: 3 });
+  return out;
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/** Base58 of a short byte string (the 8-byte discriminator; PublicKey only takes 32 bytes). */
+function base58Of(bytes: Uint8Array): string {
+  let n = BigInt(`0x${toHex(bytes) || "0"}`);
+  let out = "";
+  while (n > BigInt(0)) {
+    out = B58[Number(n % BigInt(58))] + out;
+    n /= BigInt(58);
+  }
+  for (const b of bytes) {
+    if (b !== 0) break;
+    out = "1" + out;
+  }
+  return out;
+}
+
+/** Slot in which `signer` committed, or null if there is no pending commitment. */
+export async function fetchCommitmentSlot(
+  connection: Connection,
+  signer: PublicKey,
+  commitmentHex: string,
+): Promise<number | null> {
+  const acc = await connection.getAccountInfo(commitmentAddress(signer, commitmentHex), "confirmed");
+  if (!acc || !acc.owner.equals(SOLANA_PROGRAM_ID)) return null;
+  const rd = readerFor(Uint8Array.from(acc.data), ACCOUNT_DISC_V3.commitment);
+  if (!rd) return null;
+  rd.pubkey();
+  return Number(rd.u64());
+}
+
+export function commitInstruction(signer: PublicKey, commitmentHex: string): TransactionInstruction {
+  return ix(
+    [w(signer, true), w(commitmentAddress(signer, commitmentHex)), r(SystemProgram.programId)],
+    concat(DISC_V3.commit, fromHex(commitmentHex)),
+  );
+}
+
+export function registerV3Instruction(
+  signer: PublicKey,
+  cfg: ReceiptConfig,
+  commitmentHex: string,
+  recordHashHex: string,
+  scheme: number,
+  documentType: number,
+  metadataCommitmentHex: string,
+  nonceHex: string,
+  orbReportHashHex: string | null = null,
+): TransactionInstruction {
+  const treeConfig = pda([cfg.merkleTree.toBytes()], MPL_BUBBLEGUM_ID);
+  const coreCpiSigner = pda([enc.encode("mpl_core_cpi_signer")], MPL_BUBBLEGUM_ID);
+  return ix(
+    [
+      w(signer, true),
+      w(commitmentAddress(signer, commitmentHex)),
+      r(configAddress()),
+      w(recordV3Address(recordHashHex, signer)),
+      // Optional account: the program id stands for "none" (Anchor convention).
+      r(orbReportHashHex ? orbConfigAddress() : SOLANA_PROGRAM_ID),
+      r(INSTRUCTIONS_SYSVAR),
+      r(receiptAuthorityAddress()),
+      w(treeConfig),
+      w(cfg.merkleTree),
+      w(cfg.coreCollection),
+      r(coreCpiSigner),
+      r(MPL_NOOP_ID),
+      r(MPL_ACCOUNT_COMPRESSION_ID),
+      r(MPL_CORE_ID),
+      r(MPL_BUBBLEGUM_ID),
+      r(SystemProgram.programId),
+    ],
+    concat(
+      DISC_V3.registerV3,
+      fromHex(recordHashHex),
+      [scheme],
+      [documentType & 0xff, (documentType >> 8) & 0xff],
+      fromHex(metadataCommitmentHex),
+      fromHex(nonceHex),
+      fromHex(orbReportHashHex ?? "0".repeat(64)),
+    ),
+  );
 }

@@ -28,6 +28,8 @@ type Body = {
   fileSha256?: string;
   salt?: string;
   metadata?: { name?: string; type?: string } | null;
+  /** Wallet whose record this is (v3: one record per hash and signer). */
+  signer?: string;
 };
 
 const bad = (status: number, error: string) => NextResponse.json({ error }, { status });
@@ -62,7 +64,9 @@ export async function POST(request: Request) {
 
   let record;
   try {
-    record = await readRecordV2(network, recordHash);
+    // v3 records are one per (hash, signer): the holder says which one is theirs.
+    const signer = typeof body.signer === "string" && body.signer.length <= 64 ? body.signer : undefined;
+    record = await readRecordV2(network, recordHash, signer);
   } catch (e) {
     if (e instanceof NotDeployed) return bad(409, "v2_not_deployed");
     return bad(502, "chain_unavailable");
