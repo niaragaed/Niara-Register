@@ -73,7 +73,8 @@ export function VerifyTool({
     setIssueError(null);
     const out: Line[] = [];
     let pkg: ProofPackage | null = null;
-    let doc: { bytes: Uint8Array; isPdf: boolean } | null = null;
+    let doc: { bytes: Uint8Array; isPdf: boolean; name: string } | null = null;
+    let fileMatched = false;
 
     for (const file of Array.from(files)) {
       const bytes = await readFile(file);
@@ -88,7 +89,7 @@ export function VerifyTool({
           // not JSON: treat as the document itself
         }
       }
-      doc = { bytes, isPdf: bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 };
+      doc = { bytes, isPdf: bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46, name: file.name };
     }
 
     // 1. The document against the record.
@@ -98,11 +99,15 @@ export function VerifyTool({
         if (!pkg) out.push({ tone: "neutral", text: tv.needSalt });
         else {
           const rh = await saltedRecordHash(fileSha, fromHex(pkg.salt));
-          out.push(rh === record.recordHash ? { tone: "ok", text: tv.fileMatches } : { tone: "bad", text: tv.fileDoesNotMatch });
+          fileMatched = rh === record.recordHash;
+          out.push(fileMatched ? { tone: "ok", text: tv.fileMatches } : { tone: "bad", text: tv.fileDoesNotMatch });
         }
       } else {
-        out.push(fileSha === record.recordHash ? { tone: "ok", text: tv.fileMatches } : { tone: "bad", text: tv.fileDoesNotMatch });
+        fileMatched = fileSha === record.recordHash;
+        out.push(fileMatched ? { tone: "ok", text: tv.fileMatches } : { tone: "bad", text: tv.fileDoesNotMatch });
       }
+      // The name of the file the visitor chose: real, but not part of the record.
+      if (fileMatched) out.push({ tone: "neutral", text: `${tv.fileNameChecked} ${doc.name}` });
       setReports(doc.isPdf ? await inspectPdfSignatures(doc.bytes) : null);
     }
 
@@ -110,7 +115,13 @@ export function VerifyTool({
     if (pkg) {
       if (!doc && record.scheme === SCHEME_SALTED) {
         const rh = await saltedRecordHash(pkg.fileSha256, fromHex(pkg.salt));
-        out.push(rh === record.recordHash ? { tone: "ok", text: tv.fileMatches } : { tone: "bad", text: tv.fileDoesNotMatch });
+        fileMatched = rh === record.recordHash;
+        out.push(fileMatched ? { tone: "ok", text: tv.fileMatches } : { tone: "bad", text: tv.fileDoesNotMatch });
+      }
+      // The file name in the package is what the holder's browser recorded at
+      // registration; it is not committed on-chain, so it is shown as declared.
+      if (pkg.fileName && !doc && (fileMatched || pkg.fileSha256 === record.recordHash)) {
+        out.push({ tone: "neutral", text: `${tv.fileNameDeclared} ${pkg.fileName}` });
       }
       if (pkg.metadata) {
         const mc = await metadataCommitment(pkg.metadata, fromHex(pkg.salt));

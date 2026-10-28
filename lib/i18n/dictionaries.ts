@@ -81,7 +81,7 @@ export const en = {
     hyperEvmReader: "HyperEVM (read from RPC)",
     solanaPrefix: "The Solana program (",
     solanaSuffix:
-      ") follows the same rules on Solana devnet: one record per hash, immutable, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
+      ") follows the same rules on Solana devnet: commit-reveal, one immutable record per document and wallet, with rent paid by the signer's own wallet — Niara never holds the document or the keys.",
     empty: "No documents recorded yet.",
     historyV2Title: "Registered documents",
     historyV2Lede:
@@ -190,6 +190,11 @@ export const en = {
     receiptSolana: "Soulbound receipt (compressed NFT, frozen collection), asset id",
     receiptWalletNote:
       "It shows in wallets that list NFTs (on Solana, only with an RPC that supports the DAS API). It cannot be transferred, not even by you.",
+    receiptWalletNoteEvm:
+      "It is already in your wallet (on-chain). MetaMask does not list NFTs on testnets by itself: use the button below to show it there. It cannot be transferred, not even by you.",
+    addToWallet: "Show the receipt in my wallet",
+    addToWalletDone: "Added to your wallet",
+    addToWalletManual: "Your wallet did not accept the request. Add it by hand (NFTs → Import NFT):",
     viewTx: "view transaction",
     verifyLink: "open the verification page",
     networks: {
@@ -204,6 +209,8 @@ export const en = {
 
   pades: {
     frameworkTitle: "Country / legal framework of your certificate",
+    frameworkPlaceholder: "Select the certificate's country / framework…",
+    frameworkRequired: "Choose the country / framework of your digital certificate to continue.",
     frameworkBr: "Brazil — ICP-Brasil",
     frameworkEu: "European Union — eIDAS",
     sourceFileEu: "Certificate file (.pfx / .p12)",
@@ -308,7 +315,7 @@ export const en = {
     documentType: "Document type",
     metadata: "Document name",
     metadataNone: "none committed",
-    metadataPrivate: "private (revealed only by the proof package)",
+    metadataPrivate: "private: drop the proof package below to see and check the name and file name",
     registration: "Registration",
     registrationV3: "commit-reveal (v3): the signer committed before revealing, so the record could not be taken from the mempool",
     registrationV2: "single transaction (v2, before commit-reveal)",
@@ -334,6 +341,8 @@ export const en = {
     fileDoesNotMatch: "The document does NOT match this record.",
     needSalt: "This record is salted: add the proof package to check the document.",
     metaMatches: "Name and type match the on-chain commitment:",
+    fileNameChecked: "File checked:",
+    fileNameDeclared: "File name stated in the proof package (not on-chain, for privacy):",
     metaDoesNotMatch: "Name and type in the package do NOT match the on-chain commitment.",
     vcValid: "Credential signature valid, issued by",
     vcInvalid: "Credential signature INVALID:",
@@ -657,7 +666,7 @@ export const pt: Dictionary = {
     hyperEvmReader: "HyperEVM (lido do RPC)",
     solanaPrefix: "O programa na Solana (",
     solanaSuffix:
-      ") segue as mesmas regras na devnet da Solana: um registro por hash, imutável, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
+      ") segue as mesmas regras na devnet da Solana: commit-reveal, um registro imutável por documento e carteira, com o rent pago pela própria carteira de quem assina — a Niara nunca guarda o documento nem as chaves.",
     empty: "Nenhum documento registrado ainda.",
     historyV2Title: "Documentos registrados",
     historyV2Lede:
@@ -766,6 +775,11 @@ export const pt: Dictionary = {
     receiptSolana: "Recibo intransferível (NFT comprimido, coleção congelada), asset id",
     receiptWalletNote:
       "Aparece nas carteiras que listam NFTs (na Solana, só com RPC que suporte a DAS API). Não pode ser transferido, nem por você.",
+    receiptWalletNoteEvm:
+      "Ele já está na sua carteira (on-chain). A MetaMask não lista NFTs de testnet sozinha: use o botão abaixo para mostrá-lo lá. Não pode ser transferido, nem por você.",
+    addToWallet: "Mostrar o recibo na minha carteira",
+    addToWalletDone: "Adicionado à sua carteira",
+    addToWalletManual: "Sua carteira não aceitou o pedido. Adicione manualmente (NFTs → Importar NFT):",
     viewTx: "ver transação",
     verifyLink: "abrir a página de verificação",
     networks: {
@@ -780,6 +794,8 @@ export const pt: Dictionary = {
 
   pades: {
     frameworkTitle: "País / marco legal do seu certificado",
+    frameworkPlaceholder: "Selecione o país / padrão do certificado…",
+    frameworkRequired: "Escolha o país / padrão do seu certificado digital para continuar.",
     frameworkBr: "Brasil — ICP-Brasil",
     frameworkEu: "União Europeia — eIDAS",
     sourceFileEu: "Arquivo do certificado (.pfx / .p12)",
@@ -884,7 +900,7 @@ export const pt: Dictionary = {
     documentType: "Tipo do documento",
     metadata: "Nome do documento",
     metadataNone: "nenhum compromisso",
-    metadataPrivate: "privado (revelado só pelo pacote de prova)",
+    metadataPrivate: "privado: solte o pacote de prova abaixo para ver e conferir o nome e o nome do arquivo",
     registration: "Registro",
     registrationV3: "commit-reveal (v3): o signatário se comprometeu antes de revelar, então o registro não podia ser tomado pelo mempool",
     registrationV2: "transação única (v2, antes do commit-reveal)",
@@ -910,6 +926,8 @@ export const pt: Dictionary = {
     fileDoesNotMatch: "O documento NÃO corresponde a este registro.",
     needSalt: "Este registro usa salt: adicione o pacote de prova para conferir o documento.",
     metaMatches: "Nome e tipo conferem com o compromisso on-chain:",
+    fileNameChecked: "Arquivo conferido:",
+    fileNameDeclared: "Nome do arquivo informado no pacote de prova (não fica on-chain, por privacidade):",
     metaDoesNotMatch: "Nome e tipo do pacote NÃO conferem com o compromisso on-chain.",
     vcValid: "Assinatura da credencial válida, emitida por",
     vcInvalid: "Assinatura da credencial INVÁLIDA:",
