@@ -70,6 +70,40 @@ Documents are idempotent per `(rede, hash_sha256)`, which requires `supabase/mig
 | `PMES_SOLANA_POLL_INTERVAL_MS` | `30000` | |
 | `PMES_SOLANA_DESATIVADO` | (unset) | `1` turns off only the SMEs source |
 
+## Exchange settlements (`exchange-*.ts`)
+
+The Global Registry (`/global-registry` in the site) is an independent on-chain record of Niara Exchange settlements. Every row is read **directly from each network** by this indexer; nothing comes from the Exchange's database (`niara-exchange-dev`) or its order service API.
+
+Sources (read-only; never edit those repositories):
+
+| Network (slug) | What is read | Where the address and start point come from |
+|---|---|---|
+| `solana-devnet` | `Settled` event of the `niara_exchange` program, emitted with `emit_cpi!` (an inner instruction of the program to itself, signed by its `__event_authority` PDA) | niara-exchange-solana: `declare_id!` in `programs/niara_exchange/src/lib.rs`; deploy slot in `docs/devnet-deploy.md` |
+| `base-sepolia`, `robinhood-testnet`, `tempo-testnet` | `Settled` from `NiaraSettlement` (matchId is `bytes16`, not indexed) and the `FeeRecorded` that `CashbackDistributor.recordFee` emits in the same transaction (the cashback; `Settled` has no cashback field) | niara-contracts: `broadcast/Deploy.s.sol/<chainId>/run-latest.json` (CREATE receipts) and the README "v1 deployments" section |
+| `hyperevm-testnet` | same as the other EVM networks | **not deployed** (niara-contracts has only a dry run for chain 998): in the config, off until `EXCHANGE_HYPEREVM_ENABLED=1` |
+
+Values at the time of writing (2026-11-25), to copy into the Railway variables:
+
+| Variable | Value | Source |
+|---|---|---|
+| `EXCHANGE_SOLANA_PROGRAM_ID` | `B311xH3PcEx86gdRbuinrGrh1r9G2qzjDCji8uc6eD9v` | niara-exchange-solana `ed7d32c`, `lib.rs` and `Anchor.toml` |
+| `EXCHANGE_SOLANA_START_SLOT` | `521888257` | deploy transaction slot, `docs/devnet-deploy.md` |
+| `EXCHANGE_BASE_SEPOLIA_SETTLEMENT` / `_CASHBACK_DISTRIBUTOR` | `0x14C6F9DeD6C97F67149B4305c57331F9d3820B6F` / `0x4b10fF1a44Aca4118F75b1f326cC2EE46b73ADD4` | niara-contracts `ffbfa68`, `broadcast/Deploy.s.sol/84532/run-latest.json` |
+| `EXCHANGE_BASE_SEPOLIA_START_BLOCK` | `59342270` | NiaraSettlement CREATE receipt (84532) |
+| `EXCHANGE_ROBINHOOD_SETTLEMENT` / `_CASHBACK_DISTRIBUTOR` | same two addresses | `broadcast/Deploy.s.sol/46630/run-latest.json` |
+| `EXCHANGE_ROBINHOOD_START_BLOCK` | `153889914` | NiaraSettlement CREATE receipt (46630) |
+| `EXCHANGE_TEMPO_SETTLEMENT` / `_CASHBACK_DISTRIBUTOR` | same two addresses | `broadcast/Deploy.s.sol/42431/run-latest.json` |
+| `EXCHANGE_TEMPO_START_BLOCK` | `44456032` | NiaraSettlement CREATE receipt (42431) |
+
+Required per network (a network with any of them missing is logged as "not configured" and skipped; nothing is guessed):
+
+- Solana: `EXCHANGE_SOLANA_RPC_URL`, `EXCHANGE_SOLANA_PROGRAM_ID`, `EXCHANGE_SOLANA_START_SLOT`.
+- EVM, with the prefixes `EXCHANGE_BASE_SEPOLIA_`, `EXCHANGE_ROBINHOOD_`, `EXCHANGE_TEMPO_`, `EXCHANGE_HYPEREVM_`: `RPC_URL`, `SETTLEMENT`, `CASHBACK_DISTRIBUTOR`, `START_BLOCK`.
+
+RPC URLs are Railway secrets (they may carry a provider key).
+
+Optional: `<PREFIX>FINALITY` (`finalized`, the default, or `depth`), `<PREFIX>CONFIRMATIONS` (depth mode, and the fallback when an RPC rejects the `finalized` tag), `<PREFIX>MAX_BLOCK_RANGE`, `<PREFIX>RANGES_PER_CYCLE`, `<PREFIX>RANGE_INTERVAL_MS`, `<PREFIX>POLL_INTERVAL_MS`, `<PREFIX>DISABLED=1`; `EXCHANGE_SOLANA_POLL_INTERVAL_MS`, `EXCHANGE_SOLANA_DISABLED=1`; `EXCHANGE_POLL_INTERVAL_MS` (all networks, default 30 s); `EXCHANGE_INDEXER_DISABLED=1` (every settlement source off; the API keeps running); `EXCHANGE_LEASE_TTL_SECONDS` (default 90).
+
 ## Tests
 
 `npm test` runs `test/backlog.test.ts`, `test/solana.test.ts`, `test/evm-signatures.test.ts` and `test/pmes-solana.test.ts`.
