@@ -10,6 +10,9 @@ import { createEvmSignatureIndexer } from "./evm-signatures";
 import { createEvmV2Indexer, createSolanaV2Indexer, SOURCE_SOLANA_V2 } from "./v2";
 import { Tokens } from "./tokens";
 import { Connection } from "@solana/web3.js";
+import { loadExchangeConfig } from "./exchange-config";
+import { createExchangeDb } from "./exchange-db";
+import { startExchangeIndexer } from "./exchange";
 
 // Entry point: wires the core (indexer.ts) to the real dependencies (Alchemy
 // RPC, Supabase, the real clock) and runs the loop.
@@ -405,13 +408,27 @@ async function dryRunReport(): Promise<void> {
   }
 }
 
-process.on("SIGINT", () => {
-  console.log("\n[indexer] shutting down (SIGINT)...");
-  process.exit(0);
+// ── Niara Exchange settlements (Global Registry) ───────────────────────────────────
+// Started before loop() and independent of it: an error in the Sepolia batch
+// never stops the settlement sources, and the other way round.
+
+const exchangeConfig = loadExchangeConfig();
+const exchangeDb = createExchangeDb(db.supabase, { dryRun: config.dryRun });
+const exchange = startExchangeIndexer({
+  cfg: exchangeConfig,
+  db: exchangeDb,
+  backoff: config.backoff,
+  sleep,
+  dryRun: config.dryRun,
 });
-process.on("SIGTERM", () => {
-  console.log("[indexer] shutting down (SIGTERM)...");
+
+/** Frees the exchange lease (at most 5 s), then exits. */
+async function shutdown(signal: string): Promise<void> {
+  console.log(`[indexer] shutting down (${signal})...`);
+  await Promise.race([exchange.stop(), sleep(5_000)]);
   process.exit(0);
-});
+}
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 loop();

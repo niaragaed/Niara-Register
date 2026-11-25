@@ -102,6 +102,20 @@ Required per network (a network with any of them missing is logged as "not confi
 
 RPC URLs are Railway secrets (they may carry a provider key).
 
+**Finality.** Solana reads everything at commitment `finalized`. EVM networks scan up to the RPC's `finalized` block (Base Sepolia, Robinhood Chain testnet, Tempo testnet and HyperEVM testnet all answered the tag on 2026-11-25); if an RPC rejects it, that cycle uses latest − `CONFIRMATIONS`.
+
+**EVM scan.** One `eth_getLogs` per range over both addresses with topic0 `Settled` OR `FeeRecorded`. Each `Settled` is paired with the first later `FeeRecorded` of the same transaction, from the configured distributor, with the same asset, payment token and fee (`settle` reverts unless `recordFee` succeeds when the fee is above zero). A `Settled` with a fee and no such `FeeRecorded` stops that network with an error instead of storing a guessed cashback. When an RPC refuses a range, the range is halved (down to one block) and grows back after five successes. Block time comes from the block; symbol and decimals from the token (`symbol()`, `decimals()`).
+
+**Solana scan.** `getSignaturesForAddress(program)` back to the cursor slot, then `getTransaction` (encoding `json`) for each successful transaction. The program emits `Settled` with `emit_cpi!`, so the event is an inner instruction of the program to itself (`EVENT_IX_TAG` + discriminator + Borsh fields) whose only account is the `__event_authority` PDA; only those are read, so a log line or another program cannot fake one. Symbol and decimals come from the mint (Token-2022 metadata extension).
+
+**Stored** in `exchange_settlements` (`supabase/migrations_016_exchange_settlements.sql`): network, tx hash / signature, log index, block / slot, block time, match id, asset (address, symbol, decimals), payment token, base quantity, lots, price, notional, fee, cashback, buyer, seller. Unique on `(network, tx_hash, log_index)`; writes are upserts, so a re-scan changes nothing. Amounts are integers in base units. The lot size is an off-chain Exchange market parameter and is not in any event, so **one lot = one whole token** (`base quantity / 10^decimals`), the lot of every Exchange market so far; **price** = notional per lot, in payment base units. Cursors: `registro_checkpoints`, `fonte = 'exchange-<network>'`.
+
+**One network never blocks another:** each has its own loop, cursor and RPC; an error is logged and retried next cycle.
+
+**Single instance.** Railway can run several replicas and overlaps deployments. Only the holder of the `exchange_indexer_lease` row (taken and renewed every TTL/3 through `exchange_indexer_try_lease`, freed on SIGTERM) runs the settlement sources; the read API runs on every replica.
+
+Run migration 016 in the Register's Supabase project (`niara-register-dev`) **before** deploying this version. Without it the settlement sources log "did not start" every minute; the other sources are unaffected.
+
 Optional: `<PREFIX>FINALITY` (`finalized`, the default, or `depth`), `<PREFIX>CONFIRMATIONS` (depth mode, and the fallback when an RPC rejects the `finalized` tag), `<PREFIX>MAX_BLOCK_RANGE`, `<PREFIX>RANGES_PER_CYCLE`, `<PREFIX>RANGE_INTERVAL_MS`, `<PREFIX>POLL_INTERVAL_MS`, `<PREFIX>DISABLED=1`; `EXCHANGE_SOLANA_POLL_INTERVAL_MS`, `EXCHANGE_SOLANA_DISABLED=1`; `EXCHANGE_POLL_INTERVAL_MS` (all networks, default 30 s); `EXCHANGE_INDEXER_DISABLED=1` (every settlement source off; the API keeps running); `EXCHANGE_LEASE_TTL_SECONDS` (default 90).
 
 ## Tests
@@ -175,4 +189,3 @@ Whichever option you choose, set the same variables as the `.env` file in the se
 ## Future extensions (out of scope for this version)
 
 - Index `EmissaoGateway` (share minting) and `LiquidacaoSecundaria` (secondary market): same logic, different ABI and address.
-- The Global Registry area (Niara Exchange) is waiting for the Exchange to have real transactions before any indexer is written for it (see `app/global-registry/page.tsx` in the site).
