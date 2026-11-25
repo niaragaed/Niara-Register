@@ -114,6 +114,19 @@ RPC URLs are Railway secrets (they may carry a provider key).
 
 **Single instance.** Railway can run several replicas and overlaps deployments. Only the holder of the `exchange_indexer_lease` row (taken and renewed every TTL/3 through `exchange_indexer_try_lease`, freed on SIGTERM) runs the settlement sources; the read API runs on every replica.
 
+### Public read API (`exchange-api.ts`)
+
+The same process serves a read-only HTTP API on `PORT` (Railway sets it once the service has a public domain; 8080 otherwise), on every replica:
+
+| Route | Returns |
+|---|---|
+| `GET /v1/settlements?network=&limit=&cursor=` | `{ items, nextCursor }`, newest first (block time, then id). `network` is a slug, `limit` 1–100 (default 50), `cursor` the previous page's `nextCursor` (opaque). |
+| `GET /v1/settlements/{network}/{tx}` | `{ network, txHash, indexed, items }`: every settlement of that transaction; **404** with `indexed: false` when it is not indexed (yet). |
+| `GET /v1/networks` | per network: `indexed` (configured and on), `contract`, `unit` (`block`/`slot`), `lastSynced`, `syncedAt`. |
+| `GET /health` | `{ ok: true }` |
+
+Amounts are integers in base units, as strings (`baseQuantity`, `notional`, `fee`, `cashback`, `sellerReceives`), plus `lots` and `price` as above and the asset / payment token with `symbol` and `decimals`. CORS allows only the origins in `API_CORS_ORIGINS` (comma-separated; default `https://register.niaraglobal.com,https://niara-register.vercel.app`). GET and OPTIONS only, no credentials. `EXCHANGE_API_DISABLED=1` turns it off.
+
 Run migration 016 in the Register's Supabase project (`niara-register-dev`) **before** deploying this version. Without it the settlement sources log "did not start" every minute; the other sources are unaffected.
 
 Optional: `<PREFIX>FINALITY` (`finalized`, the default, or `depth`), `<PREFIX>CONFIRMATIONS` (depth mode, and the fallback when an RPC rejects the `finalized` tag), `<PREFIX>MAX_BLOCK_RANGE`, `<PREFIX>RANGES_PER_CYCLE`, `<PREFIX>RANGE_INTERVAL_MS`, `<PREFIX>POLL_INTERVAL_MS`, `<PREFIX>DISABLED=1`; `EXCHANGE_SOLANA_POLL_INTERVAL_MS`, `EXCHANGE_SOLANA_DISABLED=1`; `EXCHANGE_POLL_INTERVAL_MS` (all networks, default 30 s); `EXCHANGE_INDEXER_DISABLED=1` (every settlement source off; the API keeps running); `EXCHANGE_LEASE_TTL_SECONDS` (default 90).

@@ -13,6 +13,7 @@ import { Connection } from "@solana/web3.js";
 import { loadExchangeConfig } from "./exchange-config";
 import { createExchangeDb } from "./exchange-db";
 import { startExchangeIndexer } from "./exchange";
+import { startApiServer } from "./exchange-api";
 
 // Entry point: wires the core (indexer.ts) to the real dependencies (Alchemy
 // RPC, Supabase, the real clock) and runs the loop.
@@ -421,6 +422,9 @@ const exchange = startExchangeIndexer({
   sleep,
   dryRun: config.dryRun,
 });
+
+// Public read API (exchange-api.ts), on every replica. EXCHANGE_API_DISABLED=1 turns it off.
+if (exchangeConfig.api.enabled && !config.dryRun) startApiServer({ cfg: exchangeConfig, db: exchangeDb });
 
 /** Frees the exchange lease (at most 5 s), then exits. */
 async function shutdown(signal: string): Promise<void> {
