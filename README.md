@@ -2,7 +2,7 @@
 
 **The record and trust layer of Niara: on-chain proof of existence and authorship for documents, plus a public ledger of real on-chain transactions across six networks.**
 
-- **Live app:** [niara-register.vercel.app](https://niara-register.vercel.app)
+- **Live app:** [register.niaraglobal.com](https://register.niaraglobal.com) (also served at [niara-register.vercel.app](https://niara-register.vercel.app))
 - **Product demo (3 min):** [youtube.com/watch?v=ZNhbzGMrvZo](https://www.youtube.com/watch?v=ZNhbzGMrvZo)
 - **Try it:** [niara-register.vercel.app/signatures](https://niara-register.vercel.app/signatures). Pick a network, drop a file and sign with your own wallet.
 
@@ -139,7 +139,7 @@ program) after `supabase/migrations_014_v3_commit_reveal_orb.sql` and
 
 ## Running locally
 
-Web app: create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and, optionally, `NEXT_PUBLIC_SOLANA_RPC_URL`, `NIARA_VC_PRIVATE_JWK` (from `node scripts/generate-vc-key.mjs`; keep it in the host's secret store), `NIARA_DID_DOMAIN`, `NIARA_VC_X5C`, `NEXT_PUBLIC_WEBPKI_LICENSE` and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free, from dashboard.reown.com, with the site's domains in the project's allowlist; without it the WalletConnect option is hidden). Then:
+Web app: create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and, optionally, `NEXT_PUBLIC_SOLANA_RPC_URL`, `NIARA_VC_PRIVATE_JWK` (from `node scripts/generate-vc-key.mjs`; keep it in the host's secret store), `NIARA_DID_DOMAIN`, `NIARA_VC_X5C`, `NEXT_PUBLIC_WEBPKI_LICENSE` `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free, from dashboard.reown.com, with the site's domains in the project's allowlist; without it the WalletConnect option is hidden), `NEXT_PUBLIC_GLOBAL_REGISTRY_API_URL` (public origin of the Register backend on Railway, which serves the Global Registry API; without it `/global-registry` says the API is not connected), `NEXT_PUBLIC_SITE_URL` (canonical domain; default `https://register.niaraglobal.com`) and `CSP_REPORT_ONLY=1` (sends the `connect-src` policy from `next.config.ts` as report-only). Every origin the browser fetches from must be in that policy: add it there when a new RPC or service is used. Then:
 
 ```bash
 npm install

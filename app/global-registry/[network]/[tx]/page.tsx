@@ -22,8 +22,12 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ network: string; tx: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { tx } = await params;
-  return { title: `Settlement ${tx.slice(0, 10)}… · Niara Register` };
+  const { network, tx } = await params;
+  const id = isSettlementNetwork(network) ? normaliseTxId(network, tx) : null;
+  return {
+    title: `Settlement ${tx.slice(0, 10)}… · Niara Register`,
+    alternates: id ? { canonical: `/global-registry/${network}/${id}` } : undefined,
+  };
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { LedgerEntry } from "@/components/ledger-entry";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import type { OfferingRow, LedgerTransaction } from "@/lib/supabase";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
+
+// Canonical URL on the production domain (metadataBase in app/layout.tsx).
+export const metadata: Metadata = { alternates: { canonical: "/sme-registry" } };
 export const dynamic = "force-dynamic";
 export default async function SmeRegistryPage() {
   const locale = await getLocale();

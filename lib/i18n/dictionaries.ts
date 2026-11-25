@@ -19,6 +19,9 @@ export const en = {
     signing: "Document Signing",
     verify: "Verify",
     transferable: "Transferable Records",
+    productsLabel: "Other Niara products",
+    exchange: "Exchange",
+    sme: "SME",
     languageLabel: "Language",
   },
 
@@ -663,6 +666,9 @@ export const pt: Dictionary = {
     signing: "Assinatura",
     verify: "Verificar",
     transferable: "Registros Transferíveis",
+    productsLabel: "Outros produtos Niara",
+    exchange: "Exchange",
+    sme: "PMEs",
     languageLabel: "Idioma",
   },
 

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { GlobalRegistryTable } from "@/components/global-registry-table";
 import {
@@ -11,6 +12,9 @@ import {
 } from "@/lib/global-registry";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
+
+// Canonical URL on the production domain (metadataBase in app/layout.tsx).
+export const metadata: Metadata = { alternates: { canonical: "/global-registry" } };
 
 // Read on every request: new settlements and sync points arrive every cycle.
 export const dynamic = "force-dynamic";

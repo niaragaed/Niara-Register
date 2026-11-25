@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 import { LookupForm } from "./lookup-form";
+
+// Canonical URL on the production domain (metadataBase in app/layout.tsx).
+export const metadata: Metadata = { alternates: { canonical: "/verify" } };
 
 export default async function VerifyPage() {
   const locale = await getLocale();

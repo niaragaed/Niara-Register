@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { NiaraGlobe } from "@/components/niara-globe";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
+
+// Canonical URL on the production domain (metadataBase in app/layout.tsx).
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
   const t = dictionaries[await getLocale()];

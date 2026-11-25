@@ -8,6 +8,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
   const t = dictionaries[locale];
   return {
+    // Production domain: relative canonical and Open Graph URLs resolve
+    // against it. NEXT_PUBLIC_SITE_URL overrides it (e.g. a staging domain).
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://register.niaraglobal.com"),
     title: t.meta.title,
     description: t.meta.description,
     openGraph: {

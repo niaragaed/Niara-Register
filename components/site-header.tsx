@@ -14,6 +14,10 @@ export function SiteHeader({ locale }: { locale: Locale }) {
     { href: "/verify", label: t.nav.verify },
     { href: "/transferable", label: t.nav.transferable },
   ];
+  const products = [
+    { href: "https://niaraglobal.com", label: t.nav.exchange },
+    { href: "https://sme.niaraglobal.com", label: t.nav.sme },
+  ];
 
   return (
     <header className="border-b border-slate/15 bg-bone">
@@ -49,6 +53,19 @@ export function SiteHeader({ locale }: { locale: Locale }) {
             >
               {area.label}
             </Link>
+          ))}
+          {/* The other Niara products, on their own domains. */}
+          <span aria-hidden="true" className="hidden text-slate/40 sm:inline">|</span>
+          {products.map((p) => (
+            <a
+              key={p.href}
+              href={p.href}
+              aria-label={`${p.label} (${t.nav.productsLabel})`}
+              className="font-body text-xs text-slate transition-colors hover:text-ink sm:text-sm"
+            >
+              {p.label}
+              <span aria-hidden="true"> ↗</span>
+            </a>
           ))}
         </nav>
       </div>

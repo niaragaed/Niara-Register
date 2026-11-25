@@ -1,6 +1,10 @@
+import type { Metadata } from "next";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 import { EtrPanel } from "./etr-panel";
+
+// Canonical URL on the production domain (metadataBase in app/layout.tsx).
+export const metadata: Metadata = { alternates: { canonical: "/transferable" } };
 
 export default async function TransferablePage() {
   const locale = await getLocale();
