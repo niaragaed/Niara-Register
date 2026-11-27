@@ -313,6 +313,13 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
   check(r.upToDate && viaAlchemy.cursor === FINALIZED && viaAlchemy.range === 10, `Alchemy 10-block cap: 10000 → 10 at once, scanned to the head (range ${viaAlchemy.range})`);
   check(saves.length === 41 && saves[0] === 62176009 && saves.every((v, i) => i === 0 || v - saves[i - 1] <= 10), `cursor saved after every successful range (${saves.length} saves)`);
   check(m8.rows.size === 1, "the settlement inside the scanned blocks is stored");
+  // The learned 10-block ceiling lives only in the process: the database holds the cursor and
+  // nothing else about ranges, so a restart on another RPC (public, 50000) starts at the configured size.
+  check([...m8.cursors.keys()].join() === "exchange-base-sepolia" && typeof m8.cursors.get("exchange-base-sepolia") === "number", "the only thing persisted for the source is its cursor (no range, no limit)");
+  m8.cursors.set("exchange-base-sepolia", 62175999);
+  const afterRestart = createEvmSettlementSource({ cfg: { ...baseCfg, maxBlockRange: 50000 }, rpc: evmRpc, db: m8.db, backoff, sleep });
+  await afterRestart.start();
+  check(afterRestart.range === 50000, `after a restart the range starts at the configured maximum, not at the 10 learned from Alchemy (${afterRestart.range})`);
   // A later failure in the same cycle keeps every range already done.
   let okRanges = 0;
   const dying: JsonRpc = async <T,>(method: string, params: unknown[]): Promise<T> => {
