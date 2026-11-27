@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeaderMenu } from "@/components/header-menu";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/locale";
@@ -19,55 +20,69 @@ export function SiteHeader({ locale }: { locale: Locale }) {
     { href: "https://sme.niaraglobal.com", label: t.nav.sme },
   ];
 
+  const inline = "whitespace-nowrap font-body text-[13px] text-slate transition-colors hover:text-ink xl:text-sm";
+  const stacked = "block px-4 py-2 font-body text-sm text-slate transition-colors hover:bg-slate/5 hover:text-ink";
+
   return (
     <header className="border-b border-slate/15 bg-bone">
       {/*
-        A single DOM, in two shapes.
+        Two shapes, never wrapping.
 
-        Below lg: a first row with the brand on the left and the selector on
-        the right; the links drop together to a second row aligned on
-        the brand's margin. Before, they broke into three misaligned rows in
-        English ("Document Signing" was left on its own) and, worse, the long
-        labels pushed the page width and created horizontal scrolling.
+        From lg up: one row — brand, every link, the other products, the
+        language selector. The container is wider than the pages' content
+        (max-w-7xl) and the spacing tightens at lg, so even the longest
+        language fits on one line at 1024 px; every item is nowrap.
 
-        From lg up: brand on the left, navigation and selector on the right,
-        which is exactly the usual header. The order is swapped with `order`,
-        without repeating any element in the HTML.
+        Below lg: brand, language selector and a "Menu" disclosure that holds
+        the same links stacked. Before, the links wrapped onto extra rows
+        ("SME ↗" dropped to a second line at desktop widths).
       */}
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-6 py-5 lg:flex-nowrap lg:gap-x-6">
-        <Link href="/" className="order-1 flex items-baseline gap-2">
+      <div className="mx-auto flex max-w-7xl items-center gap-x-4 px-4 py-5 sm:px-6 lg:gap-x-5 lg:px-5 xl:gap-x-8 xl:px-6">
+        <Link href="/" className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
           <span className="font-display text-lg text-ink">{t.nav.brand}</span>
           <span className="font-body text-sm text-slate">{t.nav.product}</span>
         </Link>
 
-        <div className="order-2 ml-auto lg:order-3 lg:ml-0">
-          <LanguageSwitcher locale={locale} label={t.nav.languageLabel} />
-        </div>
-
-        <nav className="order-3 flex w-full flex-wrap gap-x-5 gap-y-1 lg:order-2 lg:ml-auto lg:w-auto lg:gap-x-6">
+        <nav aria-label={t.nav.mainLabel} className="ml-auto hidden flex-nowrap items-center gap-x-3.5 lg:flex xl:gap-x-5">
           {areas.map((area) => (
-            <Link
-              key={area.href}
-              href={area.href}
-              className="font-body text-xs text-slate transition-colors hover:text-ink sm:text-sm"
-            >
+            <Link key={area.href} href={area.href} className={inline}>
               {area.label}
             </Link>
           ))}
           {/* The other Niara products, on their own domains. */}
-          <span aria-hidden="true" className="hidden text-slate/40 sm:inline">|</span>
+          <span aria-hidden="true" className="text-slate/40">
+            |
+          </span>
           {products.map((p) => (
-            <a
-              key={p.href}
-              href={p.href}
-              aria-label={`${p.label} (${t.nav.productsLabel})`}
-              className="font-body text-xs text-slate transition-colors hover:text-ink sm:text-sm"
-            >
+            <a key={p.href} href={p.href} aria-label={`${p.label} (${t.nav.productsLabel})`} className={inline}>
               {p.label}
               <span aria-hidden="true"> ↗</span>
             </a>
           ))}
         </nav>
+
+        <div className="ml-auto shrink-0 lg:ml-0">
+          <LanguageSwitcher locale={locale} label={t.nav.languageLabel} />
+        </div>
+
+        <HeaderMenu label={t.nav.menu}>
+          <nav aria-label={t.nav.mainLabel}>
+            {areas.map((area) => (
+              <Link key={area.href} href={area.href} className={stacked}>
+                {area.label}
+              </Link>
+            ))}
+            <p className="mt-2 border-t border-slate/15 px-4 pb-1 pt-3 font-mono text-[10px] uppercase tracking-wide text-slate">
+              {t.nav.productsLabel}
+            </p>
+            {products.map((p) => (
+              <a key={p.href} href={p.href} className={stacked}>
+                {p.label}
+                <span aria-hidden="true"> ↗</span>
+              </a>
+            ))}
+          </nav>
+        </HeaderMenu>
       </div>
     </header>
   );
