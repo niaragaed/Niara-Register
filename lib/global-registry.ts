@@ -118,6 +118,9 @@ export type ApiNetworkStatus = {
   contract: string | null;
   unit: "block" | "slot";
   lastSynced: number | null;
+  /** Chain head the indexer scans up to (null if unknown) and head − lastSynced. */
+  head?: number | null;
+  lag?: number | null;
   syncedAt: string | null;
 };
 

@@ -26,6 +26,9 @@ type Props = { searchParams: Promise<{ network?: string }> };
  * (indexer/exchange-*.ts). Every row was read from the network itself; the
  * Exchange's database and API are never consulted.
  */
+/** Below this many blocks/slots behind the head, a network counts as up to date (finality depth and polling jitter). */
+const CATCHING_UP_FROM = 1000;
+
 export default async function GlobalRegistryPage({ searchParams }: Props) {
   const locale = await getLocale();
   const t = dictionaries[locale].global;
@@ -78,6 +81,10 @@ export default async function GlobalRegistryPage({ searchParams }: Props) {
               else
                 text = `${s.unit === "slot" ? t.syncSlot : t.syncBlock} ${numberFormat.format(s.lastSynced)}${
                   s.syncedAt ? ` · ${t.syncAt} ${formatUtc(s.syncedAt)}` : ""
+                }${
+                  s.lag != null && s.lag > CATCHING_UP_FROM
+                    ? ` · ${t.syncCatchingUp} ${numberFormat.format(s.lag)} ${s.unit === "slot" ? t.syncBehindSlots : t.syncBehindBlocks}`
+                    : ""
                 }`;
               return (
                 <li key={n} className="font-body text-xs text-slate">

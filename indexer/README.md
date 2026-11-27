@@ -40,7 +40,9 @@ The same `RegistroAssinaturas` (`0x5627…d93a`) on **Base Sepolia**, **Robinhoo
 
 Run a network's migration **before** deploying the indexer with that network.
 
-Per-network variables, prefixed with `BASE_`, `ROBINHOOD_`, `HYPEREVM_` or `TEMPO_`: `REGISTRO_ASSINATURAS_ENDERECO`, `START_BLOCK`, `BLOCK_RANGE_CHUNK`, `PEDACOS_POR_CICLO`, `INTERVALO_PEDACOS_MS`, `CONFIRMACOES`, `POLL_INTERVAL_MS`, `DESATIVADO=1`. RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL` / `HYPEREVM_RPC_URL` / `TEMPO_RPC_URL`.
+**Provider refusals and timeouts.** `eth_getLogs` goes through `chunking.ts`: `BLOCK_RANGE_CHUNK` (per network) is the ceiling of an adaptive range. When the provider refuses a range (block-range cap, too many results, response size, HTTP 413) or times out (`-32000 execution aborted (timeout = 5s)`, HTTP 504, client abort), the range is halved and retried, with a wait after each timeout (`BACKOFF_BASE_MS`, doubling, capped by `BACKOFF_TETO_MS`), down to `MIN_BLOCK_RANGE_CHUNK` (default 1; per network `<PREFIX>_MIN_BLOCK_RANGE_CHUNK`, for the v2 source `<PREFIX>_V2_MIN_BLOCK_RANGE_CHUNK`); after 10 successes in a row it doubles again. This also applies to the v2 sources (`hyperevm-testnet-v2` and the others). A 429 is not a range problem and keeps going through the rate-limit backoff.
+
+Per-network variables, prefixed with `BASE_`, `ROBINHOOD_`, `HYPEREVM_` or `TEMPO_`: `REGISTRO_ASSINATURAS_ENDERECO`, `START_BLOCK`, `BLOCK_RANGE_CHUNK`, `MIN_BLOCK_RANGE_CHUNK`, `PEDACOS_POR_CICLO`, `INTERVALO_PEDACOS_MS`, `CONFIRMACOES`, `POLL_INTERVAL_MS`, `DESATIVADO=1`. RPC: `BASE_SEPOLIA_RPC_URL` / `ROBINHOOD_RPC_URL` / `HYPEREVM_RPC_URL` / `TEMPO_RPC_URL`.
 
 ## Solana sources (`solana.ts` and `pmes-solana.ts`)
 
@@ -122,14 +124,27 @@ The same process serves a read-only HTTP API on `PORT` (Railway sets it once the
 |---|---|
 | `GET /v1/settlements?network=&limit=&cursor=` | `{ items, nextCursor }`, newest first (block time, then id). `network` is a slug, `limit` 1–100 (default 50), `cursor` the previous page's `nextCursor` (opaque). |
 | `GET /v1/settlements/{network}/{tx}` | `{ network, txHash, indexed, items }`: every settlement of that transaction; **404** with `indexed: false` when it is not indexed (yet). |
-| `GET /v1/networks` | per network: `indexed` (configured and on), `contract`, `unit` (`block`/`slot`), `lastSynced`, `syncedAt`. |
+| `GET /v1/networks` | per network: `indexed` (configured and on), `contract`, `unit` (`block`/`slot`), `lastSynced`, `syncedAt`, `head` (the finalized block/slot the indexer scans up to, read from the RPC and cached 30 s; `null` if unknown) and `lag` (`head − lastSynced`, `null` if either is unknown). |
 | `GET /health` | `{ ok: true }` |
 
 Amounts are integers in base units, as strings (`baseQuantity`, `notional`, `fee`, `cashback`, `sellerReceives`), plus `lots` and `price` as above and the asset / payment token with `symbol` and `decimals`. CORS allows only the origins in `API_CORS_ORIGINS` (comma-separated; default `https://register.niaraglobal.com,https://niara-register.vercel.app`). GET and OPTIONS only, no credentials. `EXCHANGE_API_DISABLED=1` turns it off.
 
 Run migration 016 in the Register's Supabase project (`niara-register-dev`) **before** deploying this version. Without it the settlement sources log "did not start" every minute; the other sources are unaffected.
 
-Optional: `<PREFIX>FINALITY` (`finalized`, the default, or `depth`), `<PREFIX>CONFIRMATIONS` (depth mode, and the fallback when an RPC rejects the `finalized` tag), `<PREFIX>MAX_BLOCK_RANGE`, `<PREFIX>RANGES_PER_CYCLE`, `<PREFIX>RANGE_INTERVAL_MS`, `<PREFIX>POLL_INTERVAL_MS`, `<PREFIX>DISABLED=1`; `EXCHANGE_SOLANA_POLL_INTERVAL_MS`, `EXCHANGE_SOLANA_DISABLED=1`; `EXCHANGE_POLL_INTERVAL_MS` (all networks, default 30 s); `EXCHANGE_INDEXER_DISABLED=1` (every settlement source off; the API keeps running); `EXCHANGE_LEASE_TTL_SECONDS` (default 90).
+**Backfill throughput.** One cycle keeps fetching ranges until the cursor reaches the safe head (the `finalized` block, or latest − confirmations) or the cycle budget is spent, instead of one range per poll; a cycle that stops on the budget starts the next one at once. The range is adaptive (`chunking.ts`): it doubles after 3 successful ranges up to `MAX_BLOCK_RANGE`, and is halved, down to `MIN_BLOCK_RANGE`, when the RPC refuses it or times out (the same classification as the Register's loops, with a wait after each timeout). These settings are separate from the Register's `BLOCK_RANGE_CHUNK`. While behind, the source logs a progress line every `PROGRESS_EVERY_CHUNKS` ranges: block, head, blocks behind, blocks/s, current range and ETA.
+
+| Variable (prefix `EXCHANGE_{BASE_SEPOLIA, ROBINHOOD, TEMPO, HYPEREVM}_`) | Default | |
+|---|---|---|
+| `MAX_BLOCK_RANGE` | 10000 Base Sepolia, 20000 Robinhood, 10000 Tempo, 50 HyperEVM | Ceiling of the adaptive range |
+| `MIN_BLOCK_RANGE` | `1` | Floor of the adaptive range |
+| `CYCLE_BUDGET_MS` (all networks: `EXCHANGE_CYCLE_BUDGET_MS`) | `45000` | Time after which a cycle stops starting new ranges (a range in flight finishes) |
+| `RANGES_PER_CYCLE` | none | Optional hard cap of ranges per cycle (was 20 / 30) |
+| `PROGRESS_EVERY_CHUNKS` (all networks: `EXCHANGE_PROGRESS_EVERY_CHUNKS`) | `50` | Progress line every N ranges while behind; `0` turns it off |
+| `RANGE_INTERVAL_MS` | `0` (HyperEVM `1000`) | Pause between ranges of a cycle |
+
+Expected backfill time is bounded by the provider, not by this code: it is the remaining blocks ÷ (range ÷ the `eth_getLogs` round trip). On a public RPC answering an empty range in about 0.5 s, and with the provider accepting the ceiling, that is roughly: Base Sepolia 4.8 M blocks ≈ 4 min at 10,000 per call (≈ 20 min if the provider caps at 2,000; ≈ 3 h if it caps at 200); Robinhood 4.5 M ≈ 2 min at 20,000 (≈ 7.5 min at a 5,000 cap); Tempo 1.7 M ≈ 1.5 min at 10,000. These are estimates from the observed block counts, not measurements; the progress line gives the real figure per network.
+
+Optional: `<PREFIX>FINALITY` (`finalized`, the default, or `depth`), `<PREFIX>CONFIRMATIONS` (depth mode, and the fallback when an RPC rejects the `finalized` tag), `<PREFIX>MAX_BLOCK_RANGE`, `<PREFIX>MIN_BLOCK_RANGE`, `<PREFIX>CYCLE_BUDGET_MS`, `<PREFIX>PROGRESS_EVERY_CHUNKS`, `<PREFIX>RANGES_PER_CYCLE`, `<PREFIX>RANGE_INTERVAL_MS`, `<PREFIX>POLL_INTERVAL_MS`, `<PREFIX>DISABLED=1`; `EXCHANGE_SOLANA_POLL_INTERVAL_MS`, `EXCHANGE_SOLANA_DISABLED=1`; `EXCHANGE_POLL_INTERVAL_MS` (all networks, default 30 s); `EXCHANGE_INDEXER_DISABLED=1` (every settlement source off; the API keeps running); `EXCHANGE_LEASE_TTL_SECONDS` (default 90).
 
 ## Tests
 
