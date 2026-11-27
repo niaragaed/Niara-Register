@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { PublicKey } from "@solana/web3.js";
 import { SIGNATURE_REGISTRY_V2_ABI, SIGNATURE_REGISTRY_V3_ABI, TRANSFERABLE_RECORD_ABI } from "./abi";
 import { BorshReader, programDataPayloads, type SolanaRpc } from "./solana";
+import { createChunkController, fetchAdaptive } from "./chunking";
 import { withBackoff, type BackoffOptions } from "./rate-limit";
 
 /**
@@ -210,7 +211,10 @@ export function createEvmV2Indexer(deps: {
   v2RetiredAt?: number;
   etr?: string;
   deployBlock: number;
+  /** Ceiling of the adaptive chunk: halved on range/size/timeout refusals, grows back (chunking.ts). */
   chunk: number;
+  /** Floor of the adaptive chunk (default 1). */
+  minChunk?: number;
   maxChunksPerCycle: number;
   confirmations: number;
   chunkIntervalMs?: number;
@@ -218,6 +222,7 @@ export function createEvmV2Indexer(deps: {
   sleep: (ms: number) => Promise<void>;
 }) {
   const { rpc, db } = deps;
+  const controller = createChunkController({ min: deps.minChunk ?? 1, max: deps.chunk, growAfter: 10 });
   const addresses = [deps.registry, deps.registryV3, deps.etr].filter((a): a is string => Boolean(a)).map((a) => a.toLowerCase());
   const options: BackoffOptions = { ...deps.backoff, sleep: deps.sleep };
   const net = <T,>(fn: () => Promise<T>, context: string) => withBackoff(fn, `${deps.network}-v2: ${context}`, options);
@@ -232,9 +237,12 @@ export function createEvmV2Indexer(deps: {
     let saved = 0;
     for (let i = 0; i < deps.maxChunksPerCycle && checkpoint < tip; i++) {
       if (i > 0 && deps.chunkIntervalMs) await deps.sleep(deps.chunkIntervalMs);
-      const from = checkpoint + 1;
-      const to = Math.min(checkpoint + deps.chunk, tip);
-      const logs = await net(() => rpc.getLogs({ address: addresses, fromBlock: from, toBlock: to }), `getLogs ${from}–${to}`);
+      const { to, result: logs } = await fetchAdaptive(
+        checkpoint + 1,
+        tip,
+        (from, toBlock) => net(() => rpc.getLogs({ address: addresses, fromBlock: from, toBlock }), `getLogs ${from}–${toBlock}`),
+        { controller, timeoutBackoff: { baseMs: deps.backoff.baseMs, capMs: deps.backoff.capMs }, sleep: deps.sleep, label: `${deps.network}-v2: getLogs` },
+      );
       const sorted = [...logs].sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
       const times = new Map<number, number | null>();
       for (const log of sorted) {

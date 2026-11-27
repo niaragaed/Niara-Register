@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { REGISTRO_ASSINATURAS_ABI } from "./abi";
 import type { NewSignature } from "./db";
+import { createChunkController, fetchAdaptive } from "./chunking";
 import { withBackoff, type BackoffOptions } from "./rate-limit";
 
 /**
@@ -16,6 +17,10 @@ import { withBackoff, type BackoffOptions } from "./rate-limit";
  * Per cycle: from the checkpoint up to (tip − confirmations), in chunks of
  * `chunk` blocks, at most `maxChunksPerCycle` chunks. The checkpoint is saved
  * at the end of each chunk, so a crash in the middle resumes where it stopped.
+ * `chunk` is the ceiling: when the provider refuses a range (block-range cap,
+ * too many results, or a timeout such as HyperEVM's "execution aborted
+ * (timeout = 5s)") the range is halved and retried after a wait, down to
+ * `minChunk`, and grows back after a run of successes (chunking.ts).
  * The date comes from the event itself (its `timestamp` field), with no extra
  * getBlock.
  *
@@ -46,6 +51,8 @@ export function createEvmSignatureIndexer(deps: {
   /** Deploy block; the initial checkpoint is this − 1. */
   deployBlock: number;
   chunk: number;
+  /** Floor of the adaptive chunk (default 1). */
+  minChunk?: number;
   maxChunksPerCycle: number;
   /** Margin of blocks behind the tip, against reorgs. */
   confirmations: number;
@@ -60,6 +67,7 @@ export function createEvmSignatureIndexer(deps: {
   const net = <T,>(fn: () => Promise<T>, context: string) =>
     withBackoff(fn, `${deps.network}: ${context}`, options);
 
+  const controller = createChunkController({ min: deps.minChunk ?? 1, max: deps.chunk, growAfter: 10 });
   let checkpoint = 0;
 
   async function start(): Promise<void> {
@@ -102,11 +110,11 @@ export function createEvmSignatureIndexer(deps: {
     let saved = 0;
     for (let i = 0; i < deps.maxChunksPerCycle && checkpoint < tip; i++) {
       if (i > 0 && deps.chunkIntervalMs) await deps.sleep(deps.chunkIntervalMs);
-      const from = checkpoint + 1;
-      const to = Math.min(checkpoint + deps.chunk, tip);
-      const logs = await net(
-        () => rpc.getLogs({ address: [address], fromBlock: from, toBlock: to }),
-        `getLogs ${from}–${to}`,
+      const { to, result: logs } = await fetchAdaptive(
+        checkpoint + 1,
+        tip,
+        (from, toBlock) => net(() => rpc.getLogs({ address: [address], fromBlock: from, toBlock }), `getLogs ${from}–${toBlock}`),
+        { controller, timeoutBackoff: { baseMs: deps.backoff.baseMs, capMs: deps.backoff.capMs }, sleep: deps.sleep, label: `${deps.network}: getLogs` },
       );
       const sorted = [...logs].sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
       for (const log of sorted) if (await processLog(log)) saved++;
@@ -121,6 +129,9 @@ export function createEvmSignatureIndexer(deps: {
     cycle,
     get checkpoint() {
       return checkpoint;
+    },
+    get chunk() {
+      return controller.size;
     },
   };
 }

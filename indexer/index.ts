@@ -14,6 +14,7 @@ import { loadExchangeConfig } from "./exchange-config";
 import { createExchangeDb } from "./exchange-db";
 import { startExchangeIndexer } from "./exchange";
 import { startApiServer } from "./exchange-api";
+import { createHeadReader } from "./exchange-head";
 
 // Entry point: wires the core (indexer.ts) to the real dependencies (Alchemy
 // RPC, Supabase, the real clock) and runs the loop.
@@ -85,6 +86,7 @@ const extraEvmIndexers = config.extraEvmNetworks
         address: n.address,
         deployBlock: n.deployBlock,
         chunk: n.chunk,
+        minChunk: n.minChunk,
         maxChunksPerCycle: n.maxChunksPerCycle,
         confirmations: n.confirmations,
         chunkIntervalMs: n.chunkIntervalMs,
@@ -122,6 +124,7 @@ const v2EvmIndexers = config.v2.evm
         etr: n.etr,
         deployBlock: n.deployBlock,
         chunk: n.chunk,
+        minChunk: n.minChunk,
         maxChunksPerCycle: n.maxChunksPerCycle,
         confirmations: n.confirmations,
         chunkIntervalMs: n.chunkIntervalMs,
@@ -424,7 +427,7 @@ const exchange = startExchangeIndexer({
 });
 
 // Public read API (exchange-api.ts), on every replica. EXCHANGE_API_DISABLED=1 turns it off.
-if (exchangeConfig.api.enabled && !config.dryRun) startApiServer({ cfg: exchangeConfig, db: exchangeDb });
+if (exchangeConfig.api.enabled && !config.dryRun) startApiServer({ cfg: exchangeConfig, db: exchangeDb, head: createHeadReader(exchangeConfig) });
 
 /** Frees the exchange lease (at most 5 s), then exits. */
 async function shutdown(signal: string): Promise<void> {
