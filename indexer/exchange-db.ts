@@ -118,6 +118,8 @@ export function createExchangeDb(supabase: SupabaseClient, opts: { dryRun?: bool
 
   async function listSettlements(q: {
     network?: ExchangeNetwork;
+    /** Only settlements where this wallet is the buyer or the seller (already normalised: EVM lowercase, Solana base58). */
+    wallet?: string;
     limit: number;
     /** Exclusive keyset: rows strictly older than (block_time, id). */
     before?: { blockTime: string; id: number };
@@ -129,6 +131,8 @@ export function createExchangeDb(supabase: SupabaseClient, opts: { dryRun?: bool
       .order("id", { ascending: false })
       .limit(q.limit);
     if (q.network) query = query.eq("network", q.network);
+    // Safe inside or(): the API only lets hex or base58 through (normaliseWallet).
+    if (q.wallet) query = query.or(`buyer.eq.${q.wallet},seller.eq.${q.wallet}`);
     if (q.before) {
       // Double-quoted: a timestamp has ':' and '+', which PostgREST's or() syntax reserves.
       const t = `"${q.before.blockTime}"`;

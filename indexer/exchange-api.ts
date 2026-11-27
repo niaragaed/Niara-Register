@@ -6,7 +6,7 @@ import type { ExchangeDbClient, StoredSettlement } from "./exchange-db";
  * Public, read-only API over exchange_settlements. Served by the indexer
  * process on PORT (Railway), on every replica.
  *
- *   GET /v1/settlements?network=&limit=&cursor=   newest first, keyset pagination
+ *   GET /v1/settlements?network=&wallet=&limit=&cursor=   newest first, keyset pagination; wallet = buyer or seller
  *   GET /v1/settlements/{network}/{tx}            every settlement of one transaction
  *   GET /v1/networks                              per network: configured, contract, last synced block/slot, chain head and lag
  *   GET /health
@@ -34,6 +34,17 @@ const DEFAULT_LIMIT = 50;
 export function normaliseTx(network: ExchangeNetwork, tx: string): string | null {
   if (network === "solana-devnet") return SOLANA_SIGNATURE.test(tx) ? tx : null;
   return EVM_TX.test(tx) ? tx.toLowerCase() : null;
+}
+
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const SOLANA_KEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** A wallet as stored in buyer/seller (EVM lowercase, Solana base58 as is), or null if it is neither. */
+export function normaliseWallet(value: string): string | null {
+  const v = value.trim();
+  if (EVM_ADDRESS.test(v)) return v.toLowerCase();
+  if (SOLANA_KEY.test(v)) return v;
+  return null;
 }
 
 export function encodeCursor(row: Pick<StoredSettlement, "block_time" | "id">): string {
@@ -146,9 +157,17 @@ export function createApiHandler(deps: Deps) {
         const cursorRaw = url.searchParams.get("cursor");
         const before = cursorRaw ? decodeCursor(cursorRaw) : undefined;
         if (cursorRaw && !before) return respond(400, { error: "invalid cursor" }, origin);
+        const walletRaw = url.searchParams.get("wallet");
+        const wallet = walletRaw ? normaliseWallet(walletRaw) : undefined;
+        if (walletRaw && !wallet) return respond(400, { error: "wallet must be an EVM address (0x + 40 hex) or a Solana public key" }, origin);
 
         // One extra row tells whether there is a next page.
-        const rows = await deps.db.listSettlements({ network: network as ExchangeNetwork | undefined, limit: limit + 1, before: before ?? undefined });
+        const rows = await deps.db.listSettlements({
+          network: network as ExchangeNetwork | undefined,
+          wallet: wallet ?? undefined,
+          limit: limit + 1,
+          before: before ?? undefined,
+        });
         const page = rows.slice(0, limit);
         const nextCursor = rows.length > limit ? encodeCursor(page[page.length - 1]) : null;
         return respond(200, { items: page.map(toApiSettlement), nextCursor }, origin, 15);

@@ -110,6 +110,8 @@ RPC URLs are Railway secrets (they may carry a provider key).
 
 **Solana scan.** `getSignaturesForAddress(program)` back to the cursor slot, then `getTransaction` (encoding `json`) for each successful transaction. The program emits `Settled` with `emit_cpi!`, so the event is an inner instruction of the program to itself (`EVENT_IX_TAG` + discriminator + Borsh fields) whose only account is the `__event_authority` PDA; only those are read, so a log line or another program cannot fake one. Symbol and decimals come from the mint (Token-2022 metadata extension).
 
+**No taker side.** Neither chain records which order arrived last: EVM `settle(matchId, assetToken, paymentToken, buyer, seller, assetAmount, paymentAmount)` is called by the operator and `Settled` carries the same fields; the Solana `settle` instruction is signed only by the operator, its arguments are the match id, quantity and price, and buyer/seller are fixed account positions. The Register shows buyer and seller only, never a taker taken from the Exchange (contracts v2 list: emit the taker side in `Settled`).
+
 **Stored** in `exchange_settlements` (`supabase/migrations_016_exchange_settlements.sql`): network, tx hash / signature, log index, block / slot, block time, match id, asset (address, symbol, decimals), payment token, base quantity, lots, price, notional, fee, cashback, buyer, seller. Unique on `(network, tx_hash, log_index)`; writes are upserts, so a re-scan changes nothing. Amounts are integers in base units. The lot size is an off-chain Exchange market parameter and is not in any event, so **one lot = one whole token** (`base quantity / 10^decimals`), the lot of every Exchange market so far; **price** = notional per lot, in payment base units. Cursors: `registro_checkpoints`, `fonte = 'exchange-<network>'`.
 
 **One network never blocks another:** each has its own loop, cursor and RPC; an error is logged and retried next cycle.
@@ -122,7 +124,7 @@ The same process serves a read-only HTTP API on `PORT` (Railway sets it once the
 
 | Route | Returns |
 |---|---|
-| `GET /v1/settlements?network=&limit=&cursor=` | `{ items, nextCursor }`, newest first (block time, then id). `network` is a slug, `limit` 1–100 (default 50), `cursor` the previous page's `nextCursor` (opaque). |
+| `GET /v1/settlements?network=&wallet=&limit=&cursor=` | `{ items, nextCursor }`, newest first (block time, then id). `network` is a slug, `wallet` an EVM address (any hex case) or a Solana public key: only settlements where it is the buyer or the seller (400 if it is neither format), `limit` 1–100 (default 50), `cursor` the previous page's `nextCursor` (opaque). |
 | `GET /v1/settlements/{network}/{tx}` | `{ network, txHash, indexed, items }`: every settlement of that transaction; **404** with `indexed: false` when it is not indexed (yet). |
 | `GET /v1/networks` | per network: `indexed` (configured and on), `contract`, `unit` (`block`/`slot`), `lastSynced`, `syncedAt`, `head` (the finalized block/slot the indexer scans up to, read from the RPC and cached 30 s; `null` if unknown) and `lag` (`head − lastSynced`, `null` if either is unknown). |
 | `GET /health` | `{ ok: true }` |

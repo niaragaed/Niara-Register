@@ -14,6 +14,7 @@ import {
   SETTLEMENT_NETWORK_NAMES,
   settlementsPath,
   shortAddress,
+  sideOf,
   type ApiSettlement,
   type SettlementNetwork,
 } from "@/lib/global-registry";
@@ -31,7 +32,21 @@ function ExternalOrInternal({ href, children, title }: { href: string; children:
   );
 }
 
-export function SettlementRows({ items, t, locale }: { items: ApiSettlement[]; t: Dictionary["global"]; locale: Locale }) {
+/**
+ * One row per settlement. With `wallet`, a Side column says what that wallet
+ * did in it: bought (it is the buyer) or sold (it is the seller).
+ */
+export function SettlementRows({
+  items,
+  t,
+  locale,
+  wallet,
+}: {
+  items: ApiSettlement[];
+  t: Dictionary["global"];
+  locale: Locale;
+  wallet?: string;
+}) {
   return (
     <>
       {items.map((s) => {
@@ -48,6 +63,7 @@ export function SettlementRows({ items, t, locale }: { items: ApiSettlement[]; t
                 {formatUtc(s.blockTime)}
               </Link>
             </td>
+            {wallet && <SideCell side={sideOf(s, wallet)} t={t} />}
             <td className="py-3 pr-4 font-body text-xs text-ink">
               <span className="font-medium">{s.asset.symbol ?? t.noSymbol}</span>{" "}
               <span className="font-mono text-slate">
@@ -87,16 +103,33 @@ export function SettlementRows({ items, t, locale }: { items: ApiSettlement[]; t
   );
 }
 
+function SideCell({ side, t }: { side: "bought" | "sold" | null; t: Dictionary["global"] }) {
+  return (
+    <td className="whitespace-nowrap py-3 pr-4 font-body text-xs">
+      {side === "bought" ? (
+        <span className="border border-emerald-700/40 px-1.5 py-0.5 text-emerald-800">{t.bought}</span>
+      ) : side === "sold" ? (
+        <span className="border border-amber-700/40 px-1.5 py-0.5 text-amber-900">{t.sold}</span>
+      ) : (
+        <span className="text-slate">—</span>
+      )}
+    </td>
+  );
+}
+
 export function GlobalRegistryTable({
   initial,
   initialCursor,
   network,
+  wallet,
   t,
   locale,
 }: {
   initial: ApiSettlement[];
   initialCursor: string | null;
   network?: SettlementNetwork;
+  /** Normalised wallet filter: the rows are that wallet's settlements, with a Side column. */
+  wallet?: string;
   t: Dictionary["global"];
   locale: Locale;
 }) {
@@ -108,7 +141,7 @@ export function GlobalRegistryTable({
     if (!cursor || !GLOBAL_REGISTRY_API_URL) return;
     setState("loading");
     try {
-      const res = await fetch(`${GLOBAL_REGISTRY_API_URL}${settlementsPath({ network, cursor })}`, {
+      const res = await fetch(`${GLOBAL_REGISTRY_API_URL}${settlementsPath({ network, wallet, cursor })}`, {
         headers: { accept: "application/json" },
       });
       if (!res.ok) throw new Error(String(res.status));
@@ -133,6 +166,7 @@ export function GlobalRegistryTable({
             <tr className="border-b border-slate/20">
               <th className={th}>{t.colNetwork}</th>
               <th className={th}>{t.colTime}</th>
+              {wallet && <th className={th}>{t.colSide}</th>}
               <th className={th}>{t.colAsset}</th>
               <th className={thNum}>{t.colLots}</th>
               <th className={thNum}>{t.colPrice}</th>
@@ -145,7 +179,7 @@ export function GlobalRegistryTable({
             </tr>
           </thead>
           <tbody>
-            <SettlementRows items={items} t={t} locale={locale} />
+            <SettlementRows items={items} t={t} locale={locale} wallet={wallet} />
           </tbody>
         </table>
       </div>

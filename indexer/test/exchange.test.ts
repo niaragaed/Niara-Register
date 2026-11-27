@@ -394,6 +394,7 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
       async listSettlements(q) {
         return sorted
           .filter((x) => !q.network || x.network === q.network)
+          .filter((x) => !q.wallet || x.buyer === q.wallet || x.seller === q.wallet)
           .filter((x) => !q.before || x.block_time < q.before.blockTime || (x.block_time === q.before.blockTime && x.id < q.before.id))
           .slice(0, q.limit);
       },
@@ -464,6 +465,17 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
   const baseNet = nets.find((n: { network: string }) => n.network === "base-sepolia");
   const hyper = nets.find((n: { network: string }) => n.network === "hyperevm-testnet");
   check(nets.length === 5 && baseNet.lastSynced === FINALIZED && baseNet.unit === "block" && hyper.indexed === false, "networks: last synced block, HyperEVM not indexed");
+  // Wallet filter: buyer or seller, EVM in any hex case, Solana base58 as is.
+  const anyRow = stored.find((x) => x.network === "base-sepolia")!;
+  const evmBuyer = JSON.parse((await handle("GET", `/v1/settlements?wallet=${anyRow.buyer.toUpperCase().replace("0X", "0x")}`, undefined)).body);
+  check(evmBuyer.items.length >= 1 && evmBuyer.items.every((x: { buyer: string; seller: string }) => x.buyer === anyRow.buyer || x.seller === anyRow.buyer), "wallet (EVM, any case): only that wallet's settlements");
+  const solRow = stored.find((x) => x.network === "solana-devnet")!;
+  const bySeller = JSON.parse((await handle("GET", `/v1/settlements?network=solana-devnet&wallet=${solRow.seller}`, undefined)).body);
+  check(bySeller.items.length >= 1 && bySeller.items.every((x: { seller: string; buyer: string }) => x.seller === solRow.seller || x.buyer === solRow.seller), "wallet (Solana seller) + network");
+  const nobody = JSON.parse((await handle("GET", `/v1/settlements?wallet=0x${"00".repeat(20)}`, undefined)).body);
+  check(nobody.items.length === 0 && nobody.nextCursor === null, "wallet with no settlements: empty page");
+  check((await handle("GET", "/v1/settlements?wallet=nope", undefined)).status === 400, "malformed wallet: 400");
+  check((await handle("GET", "/v1/settlements?wallet=0x1234%27%29", undefined)).status === 400, "wallet cannot inject into the filter: 400");
   const c = decodeCursor(encodeCursor({ block_time: "2026-11-22T14:18:23+00:00", id: 7 }));
   check(c?.id === 7 && c.blockTime === "2026-11-22T14:18:23+00:00", "cursor round trip");
 

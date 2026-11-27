@@ -6,6 +6,7 @@ import {
   fetchSettlements,
   formatUtc,
   isSettlementNetwork,
+  normaliseWallet,
   SETTLEMENT_NETWORK_NAMES,
   SETTLEMENT_NETWORKS,
   type SettlementNetwork,
@@ -19,7 +20,16 @@ export const metadata: Metadata = { alternates: { canonical: "/global-registry" 
 // Read on every request: new settlements and sync points arrive every cycle.
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ network?: string }> };
+type Props = { searchParams: Promise<{ network?: string; wallet?: string }> };
+
+/** The registry URL for a network filter, keeping the wallet filter. */
+function registryHref(network: SettlementNetwork | undefined, wallet: string | undefined): string {
+  const params = new URLSearchParams();
+  if (network) params.set("network", network);
+  if (wallet) params.set("wallet", wallet);
+  const qs = params.toString();
+  return qs ? `/global-registry?${qs}` : "/global-registry";
+}
 
 /**
  * Niara Exchange settlements, from the Register's own indexer and read API
@@ -32,11 +42,14 @@ const CATCHING_UP_FROM = 1000;
 export default async function GlobalRegistryPage({ searchParams }: Props) {
   const locale = await getLocale();
   const t = dictionaries[locale].global;
-  const { network: networkParam } = await searchParams;
+  const { network: networkParam, wallet: walletParam } = await searchParams;
   const network: SettlementNetwork | undefined =
     networkParam && isSettlementNetwork(networkParam) ? networkParam : undefined;
+  const walletRaw = typeof walletParam === "string" ? walletParam.trim() : "";
+  const wallet = walletRaw ? (normaliseWallet(walletRaw) ?? undefined) : undefined;
+  const walletInvalid = walletRaw !== "" && !wallet;
 
-  const [settlements, networks] = await Promise.all([fetchSettlements({ network }), fetchNetworks()]);
+  const [settlements, networks] = await Promise.all([fetchSettlements({ network, wallet }), fetchNetworks()]);
   const statusByNetwork = new Map(networks.ok ? networks.data.networks.map((n) => [n.network, n]) : []);
   const numberFormat = new Intl.NumberFormat(locale === "pt" ? "pt-BR" : "en-US");
 
@@ -45,7 +58,7 @@ export default async function GlobalRegistryPage({ searchParams }: Props) {
     return (
       <Link
         key={value ?? "all"}
-        href={value ? `/global-registry?network=${value}` : "/global-registry"}
+        href={registryHref(value, wallet)}
         aria-current={active ? "page" : undefined}
         className={`border px-3 py-1 font-body text-xs transition-colors ${
           active ? "border-ink text-ink" : "border-slate/25 text-slate hover:border-ink hover:text-ink"
@@ -101,6 +114,43 @@ export default async function GlobalRegistryPage({ searchParams }: Props) {
         {SETTLEMENT_NETWORKS.map((n) => filterLink(n, SETTLEMENT_NETWORK_NAMES[n]))}
       </nav>
 
+      {/* A plain GET form: ?wallet= is the state, so the view can be linked and works without JS. */}
+      <form method="get" action="/global-registry" className="mt-4 flex max-w-2xl flex-wrap items-center gap-2">
+        {network && <input type="hidden" name="network" value={network} />}
+        <label htmlFor="wallet" className="font-mono text-[11px] uppercase tracking-wide text-slate">
+          {t.walletLabel}
+        </label>
+        <input
+          id="wallet"
+          name="wallet"
+          defaultValue={walletRaw}
+          placeholder={t.walletPlaceholder}
+          spellCheck={false}
+          autoComplete="off"
+          className="min-w-0 flex-1 basis-60 border border-slate/30 bg-transparent px-3 py-1.5 font-mono text-xs text-ink placeholder:text-slate/60 focus:border-ink focus:outline-none"
+        />
+        <button
+          type="submit"
+          className="border border-ink px-3 py-1.5 font-body text-xs text-ink transition-colors hover:bg-ink hover:text-bone"
+        >
+          {t.walletApply}
+        </button>
+        {walletRaw && (
+          <Link
+            href={registryHref(network, undefined)}
+            className="font-body text-xs text-slate underline decoration-slate/30 underline-offset-2 hover:text-ink"
+          >
+            {t.walletClear}
+          </Link>
+        )}
+      </form>
+      {walletInvalid && <p className="mt-2 font-body text-xs text-amber-900">{t.walletInvalid}</p>}
+      {wallet && (
+        <p className="mt-2 break-all font-body text-xs text-slate">
+          {t.walletShowing} <span className="font-mono text-ink">{wallet}</span>
+        </p>
+      )}
+
       <div className="mt-6">
         {!settlements.ok ? (
           <div className="border border-dashed border-slate/30 px-6 py-10">
@@ -110,14 +160,15 @@ export default async function GlobalRegistryPage({ searchParams }: Props) {
           </div>
         ) : settlements.data.items.length === 0 ? (
           <div className="border border-dashed border-slate/30 px-6 py-10">
-            <p className="font-body text-sm text-slate">{t.empty}</p>
+            <p className="font-body text-sm text-slate">{wallet ? t.walletEmpty : t.empty}</p>
           </div>
         ) : (
           <GlobalRegistryTable
-            key={network ?? "all"}
+            key={`${network ?? "all"}:${wallet ?? ""}`}
             initial={settlements.data.items}
             initialCursor={settlements.data.nextCursor}
             network={network}
+            wallet={wallet}
             t={t}
             locale={locale}
           />

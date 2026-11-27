@@ -141,15 +141,37 @@ async function getJson<T>(path: string, accept404 = false): Promise<ApiResult<T>
   }
 }
 
-export function settlementsPath(q: { network?: SettlementNetwork; cursor?: string; limit?: number }): string {
+/**
+ * A wallet as the API stores buyer/seller (EVM lowercase, Solana base58 as
+ * is), or null if it is neither. Same rule as normaliseWallet in
+ * indexer/exchange-api.ts.
+ */
+export function normaliseWallet(value: string): string | null {
+  const v = value.trim();
+  if (/^0x[0-9a-fA-F]{40}$/.test(v)) return v.toLowerCase();
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)) return v;
+  return null;
+}
+
+/** The wallet's side in one settlement: every settlement has exactly one buyer and one seller (buyer ≠ seller on-chain). */
+export function sideOf(s: Pick<ApiSettlement, "buyer" | "seller">, wallet: string): "bought" | "sold" | null {
+  if (s.buyer === wallet) return "bought";
+  if (s.seller === wallet) return "sold";
+  return null;
+}
+
+type SettlementsQuery = { network?: SettlementNetwork; wallet?: string; cursor?: string; limit?: number };
+
+export function settlementsPath(q: SettlementsQuery): string {
   const params = new URLSearchParams();
   if (q.network) params.set("network", q.network);
+  if (q.wallet) params.set("wallet", q.wallet);
   if (q.cursor) params.set("cursor", q.cursor);
   params.set("limit", String(q.limit ?? 50));
   return `/v1/settlements?${params}`;
 }
 
-export function fetchSettlements(q: { network?: SettlementNetwork; cursor?: string; limit?: number }) {
+export function fetchSettlements(q: SettlementsQuery) {
   return getJson<{ items: ApiSettlement[]; nextCursor: string | null }>(settlementsPath(q));
 }
 
