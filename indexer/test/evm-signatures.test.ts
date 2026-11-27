@@ -152,6 +152,80 @@ const create = () =>
   await withPause.cycle();
   check(pauses.length === 2 && pauses.every((ms) => ms === 1000), `3 chunks → 2 pauses of 1 s between them (${pauses.join(",")})`);
 
+  // Regression (production log, 2026-11-27): the public HyperEVM RPC answers
+  // HTTP 200 with {"error":{"code":-32000,"message":"execution aborted (timeout = 5s)"}}
+  // for 50 blocks of eth_getLogs (it scans ~2 blocks/s; 10 blocks ≈ 4.7 s).
+  // Through the real ethers provider, built as in index.ts, the error is
+  // "could not coalesce error". The source must halve (50 → 25 → 12), save the
+  // checkpoint after every range, and not grow back into the timed-out size.
+  {
+    const { createServer } = await import("node:http");
+    const START = 0x4092de4; // the logged range: 0x4092de4–0x4092e15
+    const TIP = START + 600;
+    const spans: number[] = [];
+    let timeouts = 0;
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const parsed = JSON.parse(body) as { id: number; method: string; params: { fromBlock: string; toBlock: string }[] } | { id: number; method: string; params: { fromBlock: string; toBlock: string }[] }[];
+        const answer = (r: { id: number; method: string; params: { fromBlock: string; toBlock: string }[] }) => {
+          if (r.method === "eth_chainId") return { jsonrpc: "2.0", id: r.id, result: "0x3e6" };
+          if (r.method === "eth_blockNumber") return { jsonrpc: "2.0", id: r.id, result: ethers.toQuantity(TIP) };
+          const span = Number(r.params[0].toBlock) - Number(r.params[0].fromBlock) + 1;
+          spans.push(span);
+          if (span > 12) {
+            timeouts++;
+            return { jsonrpc: "2.0", id: r.id, error: { code: -32000, message: "execution aborted (timeout = 5s)" } };
+          }
+          return { jsonrpc: "2.0", id: r.id, result: [] };
+        };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(Array.isArray(parsed) ? parsed.map(answer) : answer(parsed)));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as { port: number }).port;
+    const req = new ethers.FetchRequest(`http://127.0.0.1:${port}/evm`);
+    req.retryFunc = async () => false;
+    const provider = new ethers.JsonRpcProvider(req, 998, { staticNetwork: true });
+    const saves: number[] = [];
+    const hyper = createEvmSignatureIndexer({
+      network: "hyperevm-testnet",
+      source: "test-hyperevm-timeout",
+      rpc: provider,
+      db: {
+        readCheckpoint: async (_s: string, fallback: number) => fallback,
+        saveCheckpoints: async (_s: string[], block: number) => {
+          saves.push(block);
+        },
+        saveSignature: async () => {},
+      } as never,
+      address: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
+      deployBlock: START,
+      chunk: 50,
+      maxChunksPerCycle: 100,
+      confirmations: 0,
+      backoff: { attempts: 3, baseMs: 1, capMs: 1 },
+      sleep: async () => {},
+    });
+    await hyper.start();
+    let threw: unknown = null;
+    let result: { upToDate: boolean } | null = null;
+    try {
+      result = await hyper.cycle();
+    } catch (error) {
+      threw = error;
+    }
+    provider.destroy();
+    server.close();
+    check(threw === null && result?.upToDate === true && hyper.checkpoint === TIP, `HyperEVM timeout via ethers: the cycle reaches the tip without throwing (${threw ? (threw as Error).message.slice(0, 60) : hyper.checkpoint})`);
+    check(spans[0] === 50 && spans[1] === 25 && spans[2] === 12, `halves 50 → 25 → 12 (${spans.slice(0, 3).join(" → ")})`);
+    check(timeouts === 2, `only the first two ranges time out: it never grows back into a timed-out size (${timeouts} timeouts in ${spans.length} calls)`);
+    const contiguous = saves.every((b, i) => b > (i === 0 ? START - 1 : saves[i - 1]));
+    check(saves.length === spans.length - timeouts && contiguous && saves[saves.length - 1] === TIP, `checkpoint saved after every successful range (${saves.length} saves)`);
+  }
+
   console.log(failures === 0 ? "\nALL TESTS PASSED" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);
 })();

@@ -65,6 +65,24 @@ function check(c: boolean, d: string) {
   check(capped.size === 10, "and never grows back into the refusal");
   check(capped.refused(10, 10) === 5, "a refusal at the stated limit itself halves");
   check(createChunkController({ min: 20, max: 10 }).size === 20, "max below min is lifted to min");
+  const slow = createChunkController({ min: 1, max: 50, growAfter: 10, relaxAfter: 100 });
+  check(slow.refused(50, null, true) === 25 && slow.refused(25, null, true) === 12 && slow.ceiling === 12, "a timeout makes the halved range the ceiling (50 → 25 → 12)");
+  for (let i = 0; i < 99; i++) slow.success();
+  check(slow.size === 12, "and the range does not grow back into the timed-out size");
+  slow.success();
+  check(slow.ceiling === 50 && slow.size === 24, "the timeout ceiling is lifted after relaxAfter successes in a row, and the range grows");
+  for (let i = 0; i < 10; i++) slow.success();
+  check(slow.size === 48, "then growth goes on at the usual pace");
+  const refusedOnly = createChunkController({ min: 1, max: 50, growAfter: 1 });
+  refusedOnly.refused(50);
+  refusedOnly.success();
+  check(refusedOnly.size === 50, "a refusal that is not a timeout keeps no ceiling");
+  const both = createChunkController({ min: 1, max: 10000, growAfter: 1, relaxAfter: 1 });
+  both.refused(10000, 10);
+  both.refused(10, null, true);
+  both.success();
+  both.success();
+  check(both.ceiling === 10 && both.size === 10, "lifting a timeout ceiling never lifts a stated provider limit");
 
   console.log("\n— fetchAdaptive —");
   const sleeps: number[] = [];

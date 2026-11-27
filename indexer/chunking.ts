@@ -15,7 +15,11 @@ import { isRateLimit } from "./rate-limit";
  * - `createChunkController` holds the current range size: double after a run
  *   of successes up to a maximum, halve (never below a floor) on a refusal.
  *   A stated provider limit becomes a ceiling, so the range jumps straight to
- *   it and never grows back into a refusal.
+ *   it and never grows back into a refusal. A timeout makes the halved range
+ *   a ceiling too, lifted after a long run of successes: on a node that times
+ *   out by range size (HyperEVM's public RPC scans ~2 blocks/s and aborts at
+ *   5 s), growing back into the timed-out size cost a 5–7 s timeout plus a
+ *   backoff every few ranges.
  * - `fetchAdaptive` runs one range with that controller. Any failure that is
  *   not a rate limit or the node being unreachable halves the range and
  *   retries (with a growing wait after timeouts), and gives up at the floor.
@@ -108,16 +112,28 @@ export type ChunkOptions = {
   initial?: number;
   /** Doublings happen after this many consecutive successes. */
   growAfter?: number;
+  /**
+   * A timeout lowers the ceiling to the halved range, so the range does not
+   * grow straight back into the size that timed out. After this many
+   * consecutive successes the timeout ceiling is lifted and growth resumes
+   * (a timeout can be a slow moment of the node, not its limit). Default 500.
+   */
+  relaxAfter?: number;
 };
 
 export function createChunkController(options: ChunkOptions) {
   const min = Math.max(1, Math.floor(options.min));
   const max = Math.max(min, Math.floor(options.max));
   const growAfter = Math.max(1, options.growAfter ?? 3);
+  const relaxAfter = Math.max(1, options.relaxAfter ?? 500);
   let size = Math.min(max, Math.max(min, Math.floor(options.initial ?? max)));
   /** A limit the provider stated: the range never grows above it. */
-  let ceiling = max;
+  let stated = max;
+  /** Lowered by timeouts; lifted after `relaxAfter` successes in a row. */
+  let soft = max;
   let streak = 0;
+  let sinceTimeout = 0;
+  const ceilingNow = () => Math.min(stated, soft);
 
   return {
     get size() {
@@ -129,28 +145,37 @@ export function createChunkController(options: ChunkOptions) {
     get max() {
       return max;
     },
-    /** max, or the provider's stated limit once one was seen. */
+    /** max, the provider's stated limit once one was seen, or lower after a recent timeout. */
     get ceiling() {
-      return ceiling;
+      return ceilingNow();
     },
     /** The range worked: after `growAfter` in a row, doubles (up to the ceiling). */
     success(): void {
-      if (++streak >= growAfter && size < ceiling) {
-        size = Math.min(ceiling, size * 2);
+      if (soft < max && ++sinceTimeout >= relaxAfter) {
+        soft = max;
+        sinceTimeout = 0;
+      }
+      if (++streak >= growAfter && size < ceilingNow()) {
+        size = Math.min(ceilingNow(), size * 2);
         streak = 0;
       }
     },
     /**
      * The range was refused. With the provider's stated limit, jumps to it and
-     * keeps it as the ceiling; otherwise halves the range that was tried. Never
-     * below min. Returns the new size.
+     * keeps it as the ceiling; otherwise halves the range that was tried. After
+     * a timeout the halved range is also the ceiling until `relaxAfter`
+     * successes. Never below min. Returns the new size.
      */
-    refused(attempted: number = size, statedLimit: number | null = null): number {
+    refused(attempted: number = size, statedLimit: number | null = null, timedOut = false): number {
       if (statedLimit !== null && statedLimit < attempted) {
-        ceiling = Math.max(min, Math.min(ceiling, statedLimit));
-        size = ceiling;
+        stated = Math.max(min, Math.min(stated, statedLimit));
+        size = ceilingNow();
       } else {
         size = Math.max(min, Math.floor(Math.min(attempted, size) / 2));
+        if (timedOut) {
+          soft = Math.max(min, Math.min(soft, size));
+          sinceTimeout = 0;
+        }
       }
       streak = 0;
       return size;
@@ -191,7 +216,7 @@ export async function fetchAdaptive<T>(
     } catch (error) {
       const span = to - from + 1;
       if (isRateLimit(error) || isUnreachable(error) || span <= opts.controller.min) throw error;
-      const next = opts.controller.refused(span, providerRangeLimit(error));
+      const next = opts.controller.refused(span, providerRangeLimit(error), isTimeout(error));
       const reason = (error as { shortMessage?: string }).shortMessage ?? (error as Error).message;
       console.warn(
         `[indexer] ${opts.label}: ${from}–${to} ${isRangeRefusal(error) ? "refused" : "failed with an unrecognized error"} (${reason}); trying ${next} blocks`,

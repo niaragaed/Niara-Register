@@ -232,9 +232,12 @@ export const config = {
       address: "0x5627857ee73f37d6da96530ed08c07339dd9d93a",
       // block 66500325 = 0x3f6b6e5; same address as the other networks (same wallet, nonce 0).
       deployBlock: 66500325,
-      // The official RPC limits eth_getLogs to 50 blocks and has a tight
-      // per-IP rate limit: chunks of 50, up to 30 per cycle, 1 s between them.
-      chunk: 50,
+      // The official RPC limits eth_getLogs to 50 blocks, has a tight per-IP
+      // rate limit, and scans uncached blocks at ~2 blocks/s: on 2026-11-27,
+      // 5 blocks took ~2.6 s, 10 blocks ~4.7 s, and 15–50 blocks hit its 5 s
+      // limit (-32000 execution aborted). Chunks of 10 (halved on a timeout),
+      // up to 30 per cycle, 1 s between them.
+      chunk: 10,
       confirmations: 2,
       maxChunksPerCycle: 30,
       chunkIntervalMs: 1000,
@@ -307,7 +310,8 @@ export const config = {
         prefix: "HYPEREVM",
         chainId: 998,
         rpcUrl: process.env.HYPEREVM_RPC_URL ?? "https://rpc.hyperliquid-testnet.xyz/evm",
-        chunk: 50,
+        // Same RPC as v1: 10 blocks per eth_getLogs (see hyperevm-testnet above).
+        chunk: 10,
         confirmations: 2,
         maxChunksPerCycle: 30,
         chunkIntervalMs: 1000,
