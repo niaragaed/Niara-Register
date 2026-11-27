@@ -54,9 +54,16 @@ export type EvmExchangeConfig = {
    */
   finality: "finalized" | "depth";
   confirmations: number;
-  /** Largest eth_getLogs range tried; halved when the RPC refuses a range. */
+  /** Largest eth_getLogs range tried; halved when the RPC refuses a range, doubled back after successes. */
   maxBlockRange: number;
+  /** Floor of the adaptive range: never halved below it. */
+  minBlockRange: number;
+  /** One cycle keeps fetching ranges until this much time has passed (a range in flight finishes). */
+  cycleBudgetMs: number;
+  /** Optional hard cap of ranges per cycle (default: none, the budget decides). */
   maxRangesPerCycle: number;
+  /** A progress line (block, head, blocks/s, ETA) every N ranges; 0 turns it off. */
+  progressEveryChunks: number;
   rangeIntervalMs: number;
   pollIntervalMs: number;
 };
@@ -136,7 +143,10 @@ function evmNetwork(
     finality,
     confirmations: num(env, `${p}_CONFIRMATIONS`, base.confirmations),
     maxBlockRange: Math.max(1, num(env, `${p}_MAX_BLOCK_RANGE`, base.maxBlockRange)),
-    maxRangesPerCycle: Math.max(1, num(env, `${p}_RANGES_PER_CYCLE`, base.maxRangesPerCycle ?? 20)),
+    minBlockRange: Math.max(1, num(env, `${p}_MIN_BLOCK_RANGE`, 1)),
+    cycleBudgetMs: Math.max(1000, num(env, `${p}_CYCLE_BUDGET_MS`, num(env, "EXCHANGE_CYCLE_BUDGET_MS", 45_000))),
+    maxRangesPerCycle: Math.max(1, num(env, `${p}_RANGES_PER_CYCLE`, base.maxRangesPerCycle ?? Number.MAX_SAFE_INTEGER)),
+    progressEveryChunks: Math.floor(num(env, `${p}_PROGRESS_EVERY_CHUNKS`, num(env, "EXCHANGE_PROGRESS_EVERY_CHUNKS", 50))),
     rangeIntervalMs: num(env, `${p}_RANGE_INTERVAL_MS`, base.rangeIntervalMs ?? 0),
     pollIntervalMs: num(env, `${p}_POLL_INTERVAL_MS`, num(env, "EXCHANGE_POLL_INTERVAL_MS", 30_000)),
   };
@@ -166,9 +176,9 @@ export function loadExchangeConfig(env: Env = process.env) {
   const sources: ExchangeSourceConfig[] = [
     solana,
     // Base Sepolia: OP Stack, `finalized` tag supported.
-    evmNetwork(env, { network: "base-sepolia", prefix: "BASE_SEPOLIA", chainId: 84532, defaultEnabled: true, confirmations: 10, maxBlockRange: 2000 }),
+    evmNetwork(env, { network: "base-sepolia", prefix: "BASE_SEPOLIA", chainId: 84532, defaultEnabled: true, confirmations: 10, maxBlockRange: 10000 }),
     // Robinhood Chain testnet: Arbitrum Orbit (~250 ms blocks), `finalized` tag supported.
-    evmNetwork(env, { network: "robinhood-testnet", prefix: "ROBINHOOD", chainId: 46630, defaultEnabled: true, confirmations: 40, maxBlockRange: 5000 }),
+    evmNetwork(env, { network: "robinhood-testnet", prefix: "ROBINHOOD", chainId: 46630, defaultEnabled: true, confirmations: 40, maxBlockRange: 20000 }),
     // Tempo testnet (Moderato): deterministic finality, `finalized` tag supported.
     evmNetwork(env, { network: "tempo-testnet", prefix: "TEMPO", chainId: 42431, defaultEnabled: true, confirmations: 2, maxBlockRange: 10000 }),
     // HyperEVM testnet: in the list, OFF until NiaraSettlement is deployed there
@@ -181,7 +191,6 @@ export function loadExchangeConfig(env: Env = process.env) {
       defaultEnabled: false,
       confirmations: 2,
       maxBlockRange: 50,
-      maxRangesPerCycle: 30,
       rangeIntervalMs: 1000,
     }),
   ];

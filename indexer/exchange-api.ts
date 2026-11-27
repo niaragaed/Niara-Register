@@ -8,7 +8,7 @@ import type { ExchangeDbClient, StoredSettlement } from "./exchange-db";
  *
  *   GET /v1/settlements?network=&limit=&cursor=   newest first, keyset pagination
  *   GET /v1/settlements/{network}/{tx}            every settlement of one transaction
- *   GET /v1/networks                              per network: configured, contract, last synced block/slot
+ *   GET /v1/networks                              per network: configured, contract, last synced block/slot, chain head and lag
  *   GET /health
  *
  * CORS: only the origins in API_CORS_ORIGINS get Access-Control-Allow-Origin
@@ -21,6 +21,8 @@ export type ApiResponse = { status: number; headers: Record<string, string>; bod
 type Deps = {
   cfg: ExchangeConfig;
   db: Pick<ExchangeDbClient, "listSettlements" | "settlementsOfTx" | "readCursors">;
+  /** Chain head of a network (the block/slot the indexer scans up to), or null if unknown. Optional: without it head and lag are null. */
+  head?: (network: ExchangeNetwork) => Promise<number | null>;
 };
 
 const EVM_TX = /^0x[0-9a-fA-F]{64}$/;
@@ -113,16 +115,22 @@ export function createApiHandler(deps: Deps) {
       if (parts[0] === "v1" && parts[1] === "networks" && parts.length === 2) {
         const sources = deps.cfg.sources;
         const cursors = await deps.db.readCursors(sources.map((s) => s.source));
-        const networks = EXCHANGE_NETWORKS.map((network) => {
+        const heads = await Promise.all(EXCHANGE_NETWORKS.map((network) => (deps.head ? deps.head(network).catch(() => null) : null)));
+        const networks = EXCHANGE_NETWORKS.map((network, i) => {
           const s = sources.find((x) => x.network === network)!;
           const c = cursors.get(s.source);
           const active = deps.cfg.indexerEnabled && s.enabled && s.missing.length === 0;
+          const head = active ? heads[i] : null;
           return {
             network,
             indexed: active,
             contract: s.missing.length === 0 ? (s.kind === "solana" ? s.programId : s.settlement) : null,
             unit: s.kind === "solana" ? "slot" : "block",
             lastSynced: c ? c.value : null,
+            /** Block/slot the indexer scans up to (finalized), or null if unknown. */
+            head,
+            /** Units still to scan: head − lastSynced, never negative; null if either is unknown. */
+            lag: head !== null && c ? Math.max(0, head - c.value) : null,
             syncedAt: c ? new Date(c.updatedAt).toISOString() : null,
           };
         });

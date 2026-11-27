@@ -10,6 +10,7 @@ import {
   type RawLog,
 } from "./exchange-decode";
 import type { JsonRpc } from "./exchange-rpc";
+import { createChunkController, fetchAdaptive } from "./chunking";
 import { isRateLimit, withBackoff, type BackoffOptions } from "./rate-limit";
 
 /**
@@ -22,12 +23,39 @@ import { isRateLimit, withBackoff, type BackoffOptions } from "./rate-limit";
  * (topic0 OR filter, both addresses). The cursor is saved after each range, so
  * a stop in the middle resumes there.
  *
- * Adaptive ranges: when the RPC refuses a range (block-range limit, too many
- * results, timeout), the range is halved and retried, down to one block; after
- * a run of successes it doubles again, up to maxBlockRange.
+ * Backfill throughput: one cycle keeps fetching ranges until the cursor is
+ * within the finality depth of the head, `cycleBudgetMs` is spent, or the
+ * optional `maxRangesPerCycle` cap is reached (not one range per poll).
+ *
+ * Adaptive ranges (chunking.ts): the range doubles after a run of successes up
+ * to maxBlockRange, and is halved (never below minBlockRange) when the RPC
+ * refuses it: block-range cap, too many results, response size or a provider
+ * timeout. Every N ranges the source logs the cursor, the head, blocks/s and
+ * an ETA.
  */
 
-const GROW_AFTER = 5;
+/** Doublings happen after this many consecutive successful ranges. */
+const GROW_AFTER = 3;
+
+/** Safe head: the RPC's `finalized` block, or latest − confirmations. Shared with the API's lag figure. */
+export async function readSafeHead(
+  cfg: Pick<EvmExchangeConfig, "finality" | "confirmations" | "network">,
+  rpc: JsonRpc,
+  net: <T>(fn: () => Promise<T>, context: string) => Promise<T> = (fn) => fn(),
+  onNoFinalizedTag?: () => void,
+): Promise<number> {
+  if (cfg.finality === "finalized") {
+    try {
+      const block = await net(() => rpc<{ number: string } | null>("eth_getBlockByNumber", ["finalized", false]), "finalized block");
+      if (block?.number) return Number(BigInt(block.number));
+    } catch (error) {
+      if (isRateLimit(error)) throw error;
+    }
+    onNoFinalizedTag?.();
+  }
+  const latest = Number(BigInt(await net(() => rpc<string>("eth_blockNumber", []), "eth_blockNumber")));
+  return latest - cfg.confirmations;
+}
 
 export function createEvmSettlementSource(deps: {
   cfg: EvmExchangeConfig;
@@ -35,15 +63,20 @@ export function createEvmSettlementSource(deps: {
   db: ExchangeDb;
   backoff: Omit<BackoffOptions, "sleep">;
   sleep: (ms: number) => Promise<void>;
+  /** Clock in ms; injectable for the time budget and the blocks/s figure. */
+  now?: () => number;
 }) {
   const { cfg, rpc, db } = deps;
+  const now = deps.now ?? Date.now;
   const options: BackoffOptions = { ...deps.backoff, sleep: deps.sleep };
   const net = <T,>(fn: () => Promise<T>, context: string) => withBackoff(fn, `exchange ${cfg.network}: ${context}`, options);
   const hex = (n: number) => `0x${n.toString(16)}`;
 
   let cursor = 0;
-  let range = cfg.maxBlockRange;
-  let streak = 0;
+  let lastHead = 0;
+  const controller = createChunkController({ min: cfg.minBlockRange, max: cfg.maxBlockRange, growAfter: GROW_AFTER });
+  let chunks = 0;
+  let progressAt = { time: 0, block: 0 };
   let warnedNoFinalizedTag = false;
   const tokens = new Map<string, { symbol: string | null; decimals: number }>();
 
@@ -51,23 +84,13 @@ export function createEvmSettlementSource(deps: {
     cursor = await db.readCursor(cfg.source, cfg.startBlock - 1);
   }
 
-  async function safeHead(): Promise<number> {
-    if (cfg.finality === "finalized") {
-      try {
-        const block = await net(() => rpc<{ number: string } | null>("eth_getBlockByNumber", ["finalized", false]), "finalized block");
-        if (block?.number) return Number(BigInt(block.number));
-      } catch (error) {
-        if (isRateLimit(error)) throw error;
-      }
-      if (!warnedNoFinalizedTag) {
-        console.warn(`[exchange] ${cfg.network}: the RPC did not return a finalized block; using latest − ${cfg.confirmations}`);
-        warnedNoFinalizedTag = true;
-      }
-    }
-    const latest = Number(BigInt(await net(() => rpc<string>("eth_blockNumber", []), "eth_blockNumber")));
-    return latest - cfg.confirmations;
+  function safeHead(): Promise<number> {
+    return readSafeHead(cfg, rpc, net, () => {
+      if (warnedNoFinalizedTag) return;
+      console.warn(`[exchange] ${cfg.network}: the RPC did not return a finalized block; using latest − ${cfg.confirmations}`);
+      warnedNoFinalizedTag = true;
+    });
   }
-
   async function token(address: string): Promise<{ symbol: string | null; decimals: number }> {
     const cached = tokens.get(address);
     if (cached) return cached;
@@ -131,20 +154,37 @@ export function createEvmSettlementSource(deps: {
     return rows;
   }
 
-  /** Throws on error; every range already done stays saved in the cursor. */
+  function logProgress(head: number): void {
+    const t = now();
+    const elapsedS = (t - progressAt.time) / 1000;
+    const rate = elapsedS > 0 ? (cursor - progressAt.block) / elapsedS : 0;
+    const remaining = Math.max(0, head - cursor);
+    const eta = rate > 0 ? formatDuration(remaining / rate) : "unknown";
+    console.log(
+      `[exchange] ${cfg.network}: progress — block ${cursor} of ${head} (${remaining} behind), ${rate.toFixed(0)} blocks/s, range ${controller.size}, ETA ${eta}`,
+    );
+    progressAt = { time: t, block: cursor };
+  }
+
+  /**
+   * Throws on error; every range already done stays saved in the cursor.
+   * Keeps fetching ranges until the safe head, the time budget or the optional
+   * range cap, whichever comes first.
+   */
   async function cycle(): Promise<{ saved: number; upToDate: boolean }> {
+    const startedAt = now();
     const head = await safeHead();
+    lastHead = head;
+    if (progressAt.time === 0) progressAt = { time: startedAt, block: cursor };
     let saved = 0;
-    for (let i = 0; i < cfg.maxRangesPerCycle && cursor < head; i++) {
+    for (let i = 0; cursor < head && i < cfg.maxRangesPerCycle; i++) {
+      if (i > 0 && now() - startedAt >= cfg.cycleBudgetMs) break;
       if (i > 0 && cfg.rangeIntervalMs) await deps.sleep(cfg.rangeIntervalMs);
-      const from = cursor + 1;
-      let to = Math.min(cursor + range, head);
-      let logs: RawLog[];
-      // A refused range is halved and retried at once (at most log2(range) times).
-      for (;;) {
-        try {
-          const toBlock = to;
-          logs = await net(
+      const { to, result: logs } = await fetchAdaptive(
+        cursor + 1,
+        head,
+        (from, toBlock) =>
+          net(
             () =>
               rpc<RawLog[]>("eth_getLogs", [
                 {
@@ -155,16 +195,9 @@ export function createEvmSettlementSource(deps: {
                 },
               ]),
             `eth_getLogs ${from}–${toBlock}`,
-          );
-          break;
-        } catch (error) {
-          if (isRateLimit(error) || to === from) throw error;
-          range = Math.max(1, Math.floor((to - from + 1) / 2));
-          streak = 0;
-          console.warn(`[exchange] ${cfg.network}: eth_getLogs ${from}–${to} refused (${(error as Error).message}); trying ${range} blocks`);
-          to = from + range - 1;
-        }
-      }
+          ),
+        { controller, timeoutBackoff: { baseMs: deps.backoff.baseMs, capMs: deps.backoff.capMs }, sleep: deps.sleep, label: `exchange ${cfg.network}: eth_getLogs` },
+      );
       const rows = await rowsFor(logs);
       await db.saveSettlements(rows);
       await db.saveCursor(cfg.source, to);
@@ -173,10 +206,7 @@ export function createEvmSettlementSource(deps: {
       for (const r of rows) {
         console.log(`[exchange] ${cfg.network}: settlement ${r.match_id} — ${r.lots} ${r.asset_symbol ?? r.asset_address} — block ${r.block_number} — ${r.tx_hash}`);
       }
-      if (++streak >= GROW_AFTER && range < cfg.maxBlockRange) {
-        range = Math.min(cfg.maxBlockRange, range * 2);
-        streak = 0;
-      }
+      if (cfg.progressEveryChunks > 0 && ++chunks % cfg.progressEveryChunks === 0 && cursor < head) logProgress(head);
     }
     return { saved, upToDate: cursor >= head };
   }
@@ -188,7 +218,19 @@ export function createEvmSettlementSource(deps: {
       return cursor;
     },
     get range() {
-      return range;
+      return controller.size;
+    },
+    /** Safe head seen by the last cycle (0 before the first). */
+    get head() {
+      return lastHead;
     },
   };
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds)) return "unknown";
+  if (seconds < 90) return `${Math.round(seconds)}s`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)}min`;
+  if (seconds < 172800) return `${(seconds / 3600).toFixed(1)}h`;
+  return `${(seconds / 86400).toFixed(1)}d`;
 }

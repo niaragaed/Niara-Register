@@ -30,6 +30,7 @@ import { createEvmSettlementSource } from "../exchange-evm";
 import { createSolanaSettlementSource } from "../exchange-solana";
 import { createApiHandler, decodeCursor, encodeCursor } from "../exchange-api";
 import { RpcError, type JsonRpc } from "../exchange-rpc";
+import { createHeadReader } from "../exchange-head";
 
 let failures = 0;
 function check(c: boolean, d: string) {
@@ -234,7 +235,7 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
   check(evm.cursor === 62175999, "starts at START_BLOCK − 1");
   let r = await evm.cycle();
   // The first range is clipped to the finalized head (401 blocks): refused, halved once to 200, accepted.
-  check(evm.range === 200 && calls.filter((c) => c === "eth_getLogs").length === 4, `range over 200 refused → halved to ${evm.range}, then 200 + 200 + 1 blocks`);
+  check(evm.range === 400 && calls.filter((c) => c === "eth_getLogs").length === 4, `range over 200 refused → halved to 200, then 200 + 200 + 1 blocks; doubled after 3 successes (${evm.range})`);
   check(r.upToDate && evm.cursor === FINALIZED, `scanned up to the finalized block, not latest (${evm.cursor})`);
   check(m1.cursors.get("exchange-base-sepolia") === FINALIZED, "cursor saved");
   const row = [...m1.rows.values()][0];
@@ -258,6 +259,45 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
   await limited.start();
   r = await limited.cycle();
   check(!r.upToDate && limited.cursor === 62176199, "at most RANGES_PER_CYCLE ranges per cycle, cursor after each");
+
+  // A cycle keeps fetching ranges until the head (no per-poll cap) and stops at the time budget.
+  const m5 = memory();
+  const many = createEvmSettlementSource({ cfg: { ...baseCfg, maxBlockRange: 10, minBlockRange: 10 }, rpc: evmRpc, db: m5.db, backoff, sleep });
+  await many.start();
+  r = await many.cycle();
+  check(r.upToDate && many.cursor === FINALIZED && many.head === FINALIZED, "one cycle drains 400 blocks in ranges of 10, up to the head");
+  let clock = 0;
+  const m6 = memory();
+  const ticking: JsonRpc = async <T,>(method: string, params: unknown[]): Promise<T> => {
+    if (method === "eth_getLogs") clock += 1000;
+    return evmRpc<T>(method, params);
+  };
+  const budgetedSource = createEvmSettlementSource({
+    cfg: { ...baseCfg, maxBlockRange: 10, minBlockRange: 10, cycleBudgetMs: 5000 },
+    rpc: ticking,
+    db: m6.db,
+    backoff,
+    sleep,
+    now: () => clock,
+  });
+  await budgetedSource.start();
+  r = await budgetedSource.cycle();
+  check(!r.upToDate && budgetedSource.cursor === 62175999 + 50, `time budget: 5 s at 1 s per range stops after 5 ranges (cursor +${budgetedSource.cursor - 62175999})`);
+  r = await budgetedSource.cycle();
+  check(budgetedSource.cursor === 62175999 + 100, "the next cycle resumes from the cursor");
+  // A provider timeout halves the range (with a floor) instead of retrying the same one.
+  const timeoutRpc: JsonRpc = async <T,>(method: string, params: unknown[]): Promise<T> => {
+    if (method === "eth_getLogs") {
+      const [f] = params as [{ fromBlock: string; toBlock: string }];
+      if (Number(f.toBlock) - Number(f.fromBlock) + 1 > 25) throw new RpcError(method, -32000, "execution aborted (timeout = 5s)");
+    }
+    return evmRpc<T>(method, params);
+  };
+  const m7 = memory();
+  const slow = createEvmSettlementSource({ cfg: { ...baseCfg, maxBlockRange: 400 }, rpc: timeoutRpc, db: m7.db, backoff, sleep });
+  await slow.start();
+  r = await slow.cycle();
+  check(r.upToDate && slow.cursor === FINALIZED && slow.range <= 25 * 2, `provider timeouts halve the range until it fits (${slow.range}) and the source moves on`);
 
   // ── Solana loop ─────────────────────────────────────────────────────────────────
   console.log("\n— Solana source loop —");
@@ -344,6 +384,36 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
   check((await handle("POST", "/v1/settlements", undefined)).status === 405, "POST: 405");
   const pre = await handle("OPTIONS", "/v1/settlements", OK_ORIGIN);
   check(pre.status === 204 && pre.headers["access-control-allow-methods"] === "GET, OPTIONS", "preflight");
+  const handleWithHead = createApiHandler({
+    cfg,
+    db: { listSettlements: async () => [], settlementsOfTx: async () => [], readCursors: async () => new Map([["exchange-base-sepolia", { value: FINALIZED - 5000, updatedAt: "2026-11-25T00:00:00Z" }]]) },
+    head: async (n) => (n === "base-sepolia" ? FINALIZED : null),
+  });
+  const withHead = JSON.parse((await handleWithHead("GET", "/v1/networks", undefined)).body).networks;
+  const baseHead = withHead.find((n: { network: string }) => n.network === "base-sepolia");
+  check(baseHead.head === FINALIZED && baseHead.lag === 5000, "networks: head and lag (head − last synced)");
+  check(withHead.find((n: { network: string }) => n.network === "tempo-testnet").lag === null, "networks: unknown head → lag null");
+  // Head reader: cached, shared between callers, stale value kept when the RPC fails.
+  let headCalls = 0;
+  let headFails = false;
+  let headClock = 0;
+  const reader = createHeadReader(cfg, {
+    ttlMs: 30_000,
+    now: () => headClock,
+    rpcFor: () => (async <T,>(method: string): Promise<T> => {
+      headCalls++;
+      if (headFails) throw new RpcError(method, 0, "timeout");
+      return { number: `0x${FINALIZED.toString(16)}` } as T;
+    }) as JsonRpc,
+  });
+  const [h1, h2] = await Promise.all([reader("base-sepolia"), reader("base-sepolia")]);
+  check(h1 === FINALIZED && h2 === FINALIZED && headCalls === 1, "head reader: concurrent calls share one RPC request");
+  await reader("base-sepolia");
+  check(headCalls === 1, "head reader: cached within the ttl");
+  headClock = 31_000;
+  headFails = true;
+  check((await reader("base-sepolia")) === FINALIZED, "head reader: stale value kept when the RPC fails");
+  check((await reader("hyperevm-testnet")) === null, "head reader: a network that is not indexed has no head");
   const nets = JSON.parse((await handle("GET", "/v1/networks", undefined)).body).networks;
   const baseNet = nets.find((n: { network: string }) => n.network === "base-sepolia");
   const hyper = nets.find((n: { network: string }) => n.network === "hyperevm-testnet");
