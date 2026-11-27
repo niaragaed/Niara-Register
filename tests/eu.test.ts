@@ -32,6 +32,7 @@ import { inspectPdfSignatures } from "../lib/pades/inspect";
 import { signedBytes } from "../lib/pades/pdf-incremental";
 import { OID } from "../lib/pades/cms";
 import { normalizeName, qcDeclaration, type EuTrustList } from "../lib/pades/eu-trust";
+import { derFromContents } from "./contents-der";
 
 const fixtures = join(__dirname, "fixtures");
 const work = mkdtempSync(join(tmpdir(), "eu-"));
@@ -85,8 +86,7 @@ function trustListWith(caPem: string, usages: ("esig" | "eseal" | "web")[]): EuT
 
 async function signatureAttributes(pdf: Uint8Array, byteRange: number[]) {
   const [, b, c] = byteRange;
-  const h = new TextDecoder("latin1").decode(pdf.subarray(b + 1, c - 1)).replace(/0+$/, "");
-  const der = Uint8Array.from((h.length % 2 ? h + "0" : h).match(/../g)!.map((x) => parseInt(x, 16)));
+  const der = derFromContents(new TextDecoder("latin1").decode(pdf.subarray(b + 1, c - 1)));
   const sd = new pkijs.SignedData({ schema: pkijs.ContentInfo.fromBER(der.buffer).content });
   return (sd.signerInfos[0].signedAttrs?.attributes ?? []).map((a) => a.type).sort();
 }

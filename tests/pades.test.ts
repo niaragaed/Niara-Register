@@ -25,6 +25,7 @@ import { signPdf } from "../lib/pades/sign";
 import { inspectPdfSignatures } from "../lib/pades/inspect";
 import { signedBytes } from "../lib/pades/pdf-incremental";
 import { ICP_BRASIL_PADES_AD_RB_V1_3, OID } from "../lib/pades/cms";
+import { derFromContents } from "./contents-der";
 
 const fixtures = join(__dirname, "fixtures");
 const work = mkdtempSync(join(tmpdir(), "pades-"));
@@ -91,8 +92,7 @@ async function main() {
 
     // Signed attributes: exactly the four the policy requires, no signingTime.
     const [, b, c] = second.byteRange;
-    const hex = new TextDecoder("latin1").decode(twice.subarray(b + 1, c - 1)).replace(/0+$/, "");
-    const der = Uint8Array.from((hex.length % 2 ? hex + "0" : hex).match(/../g)!.map((h) => parseInt(h, 16)));
+    const der = derFromContents(new TextDecoder("latin1").decode(twice.subarray(b + 1, c - 1)));
     const info = pkijs.ContentInfo.fromBER(der.buffer);
     const sd = new pkijs.SignedData({ schema: info.content });
     const types = (sd.signerInfos[0].signedAttrs?.attributes ?? []).map((a) => a.type).sort();
