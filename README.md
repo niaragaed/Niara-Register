@@ -2,7 +2,7 @@
 
 **The record and trust layer of Niara: on-chain proof of existence and authorship for documents, plus a public ledger of real on-chain transactions across six networks.**
 
-- **Live app:** [niara-register.vercel.app](https://niara-register.vercel.app)
+- **Live app:** [register.niaraglobal.com](https://register.niaraglobal.com) (also served at [niara-register.vercel.app](https://niara-register.vercel.app))
 - **Product demo (3 min):** [youtube.com/watch?v=ZNhbzGMrvZo](https://www.youtube.com/watch?v=ZNhbzGMrvZo)
 - **Try it:** [niara-register.vercel.app/signatures](https://niara-register.vercel.app/signatures). Pick a network, drop a file and sign with your own wallet.
 
@@ -20,7 +20,7 @@ The app has three areas:
 |---|---|---|
 | **Document signing** | [`/signatures`](https://niara-register.vercel.app/signatures) | The user selects a file and the browser computes its **SHA-256 hash locally**, so the file is never uploaded. The user connects a **self-custody wallet**, checks whether that hash is already on-chain, and signs a transaction that records the hash, the signer, a timestamp, and the document's name and type. Below the form is a ledger of every recorded document, from all six networks. |
 | **SME Registry** | [`/sme-registry`](https://niara-register.vercel.app/sme-registry) | A mirror of the real investment transactions of [Niara SMEs](https://niara-pmes.vercel.app) (offerings created, investments, closings, share redemptions, fund releases, refunds) on **Ethereum Sepolia** and **Solana devnet**. Each entry links to its transaction on the block explorer. |
-| **Global Registry** | [`/global-registry`](https://niara-register.vercel.app/global-registry) | Reserved for Niara Exchange. It is **intentionally empty** until the Exchange runs real transactions, because simulated data is never shown as real. |
+| **Global Registry** | [`/global-registry`](https://register.niaraglobal.com/global-registry) | An independent on-chain record of **Niara Exchange settlements** on Solana devnet, Base Sepolia, Robinhood Chain testnet and Tempo testnet (HyperEVM testnet once the contracts are deployed there). The Register indexer reads each network directly (finalized data only) and serves the rows through its own read API; nothing is copied from the Exchange's database. Testnet only, test tokens. Deep link: `/global-registry/{network}/{tx}`. |
 
 There is also an `/explorer` route that reads transactions and addresses live from the official RPC. It exists for **HyperEVM Testnet**, which has no working public block explorer, and it shows the `curl` calls so anyone can repeat the query.
 
@@ -139,7 +139,7 @@ program) after `supabase/migrations_014_v3_commit_reveal_orb.sql` and
 
 ## Running locally
 
-Web app: create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and, optionally, `NEXT_PUBLIC_SOLANA_RPC_URL`, `NIARA_VC_PRIVATE_JWK` (from `node scripts/generate-vc-key.mjs`; keep it in the host's secret store), `NIARA_DID_DOMAIN`, `NIARA_VC_X5C`, `NEXT_PUBLIC_WEBPKI_LICENSE` and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free, from dashboard.reown.com, with the site's domains in the project's allowlist; without it the WalletConnect option is hidden). Then:
+Web app: create `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and, optionally, `NEXT_PUBLIC_SOLANA_RPC_URL`, `NIARA_VC_PRIVATE_JWK` (from `node scripts/generate-vc-key.mjs`; keep it in the host's secret store), `NIARA_DID_DOMAIN`, `NIARA_VC_X5C`, `NEXT_PUBLIC_WEBPKI_LICENSE` `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free, from dashboard.reown.com, with the site's domains in the project's allowlist; without it the WalletConnect option is hidden), `NEXT_PUBLIC_GLOBAL_REGISTRY_API_URL` (public origin of the Register backend on Railway, which serves the Global Registry API; without it `/global-registry` says the API is not connected), `NEXT_PUBLIC_SITE_URL` (canonical domain; default `https://register.niaraglobal.com`) and `CSP_REPORT_ONLY=1` (sends the `connect-src` policy from `next.config.ts` as report-only). Every origin the browser fetches from must be in that policy: add it there when a new RPC or service is used. Then:
 
 ```bash
 npm install
@@ -175,7 +175,7 @@ Niara has 8 repositories at [github.com/niaragaed](https://github.com/niaragaed)
 | [niara-PMEs](https://github.com/niaragaed/niara-PMEs) | Niara SMEs web app: companies create offerings, investors invest with self-custody wallets |
 | [niara-contracts-PMEs](https://github.com/niaragaed/niara-contracts-PMEs) | Solidity contracts for SME fundraising under Brazil's CVM Resolution 88, on Sepolia (315 tests) |
 | [niara-pmes-solana](https://github.com/niaragaed/niara-pmes-solana) | Solana port of the SME fundraising flow, with an on-chain escrow, on devnet |
-| [niara-contracts](https://github.com/niaragaed/niara-contracts) | Base contracts for Niara Exchange: asset tokens backed by attested custody, atomic settlement, issuer cashback (tested locally, not deployed) |
+| [niara-contracts](https://github.com/niaragaed/niara-contracts) | EVM contracts of Niara Exchange: asset tokens, listing registry, atomic settlement, issuer cashback, P2P escrow; deployed on Base Sepolia, Robinhood Chain testnet and Tempo testnet |
 | [niara-site](https://github.com/niaragaed/niara-site) | Niara Exchange front-end prototype: trading terminal, order book, portfolio (simulated data) |
 
 ---

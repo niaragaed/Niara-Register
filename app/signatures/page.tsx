@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { RegisterV2 } from "./register-v2";
 import { SignatureEntry } from "@/components/signature-entry";
 import { SignatureV2Entry } from "@/components/signature-v2-entry";
@@ -7,6 +8,9 @@ import { dictionaries } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/get-locale";
 import { SOLANA_PROGRAM_ID, solanaExplorerLink } from "@/lib/register-solana";
 import { EVM_NETWORKS, evmAddressLink } from "@/lib/register-contract";
+
+// Canonical URL on the production domain (metadataBase in app/layout.tsx).
+export const metadata: Metadata = { alternates: { canonical: "/signatures" } };
 export const dynamic = "force-dynamic";
 export default async function SignaturesPage() {
   const locale = await getLocale();
