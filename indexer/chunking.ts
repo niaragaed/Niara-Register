@@ -229,3 +229,38 @@ export async function fetchAdaptive<T>(
     }
   }
 }
+
+/**
+ * How many eth_getLogs ranges run at once. Halves on a rate limit or a
+ * timeout (the node is struggling), grows by one after `growAfter` clean
+ * rounds in a row, never above `max`.
+ */
+export function createConcurrencyController(options: { max: number; growAfter?: number }) {
+  const max = Math.max(1, Math.floor(options.max));
+  const growAfter = Math.max(1, options.growAfter ?? 3);
+  let size = max;
+  let clean = 0;
+  return {
+    get size() {
+      return size;
+    },
+    get max() {
+      return max;
+    },
+    /** A round finished with no rate limit and no timeout. */
+    ok(): void {
+      if (++clean >= growAfter && size < max) {
+        size++;
+        clean = 0;
+      }
+    },
+    /** A rate limit or a timeout: halves (never below 1). Returns the new size. */
+    stepDown(): number {
+      size = Math.max(1, Math.floor(size / 2));
+      clean = 0;
+      return size;
+    },
+  };
+}
+
+export type ConcurrencyController = ReturnType<typeof createConcurrencyController>;

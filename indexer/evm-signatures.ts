@@ -1,7 +1,8 @@
 import { ethers } from "ethers";
 import { REGISTRO_ASSINATURAS_ABI } from "./abi";
 import type { NewSignature } from "./db";
-import { createChunkController, fetchAdaptive } from "./chunking";
+import { createChunkController, createConcurrencyController, fetchAdaptive } from "./chunking";
+import { backfillLine, createChainRate, scanParallel } from "./parallel-scan";
 import { withBackoff, type BackoffOptions } from "./rate-limit";
 
 /**
@@ -53,6 +54,8 @@ export function createEvmSignatureIndexer(deps: {
   chunk: number;
   /** Floor of the adaptive chunk (default 1). */
   minChunk?: number;
+  /** Ranges read at once (default 1: one at a time). Above 1: parallel-scan.ts. */
+  concurrency?: number;
   maxChunksPerCycle: number;
   /** Margin of blocks behind the tip, against reorgs. */
   confirmations: number;
@@ -68,6 +71,8 @@ export function createEvmSignatureIndexer(deps: {
     withBackoff(fn, `${deps.network}: ${context}`, options);
 
   const controller = createChunkController({ min: deps.minChunk ?? 1, max: deps.chunk, growAfter: 10 });
+  const concurrency = createConcurrencyController({ max: deps.concurrency ?? 1 });
+  const chainRate = createChainRate();
   let checkpoint = 0;
 
   async function start(): Promise<void> {
@@ -104,10 +109,39 @@ export function createEvmSignatureIndexer(deps: {
     return true;
   }
 
+  /** Rows of one range, then its checkpoint. */
+  async function handleRange(logs: ethers.Log[], to: number): Promise<number> {
+    const sorted = [...logs].sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
+    let saved = 0;
+    for (const log of sorted) if (await processLog(log)) saved++;
+    await db.saveCheckpoints([deps.source], to);
+    checkpoint = to;
+    return saved;
+  }
+
   /** Throws on error; whatever was already processed stays saved in the checkpoint. */
   async function cycle(): Promise<{ saved: number; upToDate: boolean }> {
     const tip = (await net(() => rpc.getBlockNumber(), "getBlockNumber")) - deps.confirmations;
     let saved = 0;
+    if (concurrency.max > 1) {
+      const r = await scanParallel({
+        checkpoint,
+        tip,
+        controller,
+        concurrency,
+        maxRanges: deps.maxChunksPerCycle,
+        intervalMs: deps.chunkIntervalMs ?? 0,
+        fetchRange: (from, to) => rpc.getLogs({ address: [address], fromBlock: from, toBlock: to }),
+        handle: async (to, logs) => {
+          saved += await handleRange(logs, to);
+        },
+        sleep: deps.sleep,
+        backoff: deps.backoff,
+        label: deps.network,
+      });
+      if (checkpoint < tip) console.log(backfillLine(deps.network, r, tip, chainRate(tip)));
+      return { saved, upToDate: checkpoint >= tip };
+    }
     for (let i = 0; i < deps.maxChunksPerCycle && checkpoint < tip; i++) {
       if (i > 0 && deps.chunkIntervalMs) await deps.sleep(deps.chunkIntervalMs);
       const { to, result: logs } = await fetchAdaptive(
@@ -116,10 +150,7 @@ export function createEvmSignatureIndexer(deps: {
         (from, toBlock) => net(() => rpc.getLogs({ address: [address], fromBlock: from, toBlock }), `getLogs ${from}–${toBlock}`),
         { controller, timeoutBackoff: { baseMs: deps.backoff.baseMs, capMs: deps.backoff.capMs }, sleep: deps.sleep, label: `${deps.network}: getLogs` },
       );
-      const sorted = [...logs].sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
-      for (const log of sorted) if (await processLog(log)) saved++;
-      await db.saveCheckpoints([deps.source], to);
-      checkpoint = to;
+      saved += await handleRange(logs, to);
     }
     return { saved, upToDate: checkpoint >= tip };
   }
@@ -132,6 +163,9 @@ export function createEvmSignatureIndexer(deps: {
     },
     get chunk() {
       return controller.size;
+    },
+    get concurrency() {
+      return concurrency.size;
     },
   };
 }

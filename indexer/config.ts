@@ -20,6 +20,15 @@ function required(name: string): string {
 export type { TrackedOffering } from "./offerings";
 
 /** Configuration of an additional EVM network, with per-network env overrides. */
+/**
+ * Ranges read at once: <PREFIX>_GETLOGS_CONCURRENCY (HYPEREVM_GETLOGS_CONCURRENCY
+ * defaults to 4), shared by the v1 and v2 sources of a network. 1 = one at a time.
+ */
+function getLogsConcurrency(prefix: string, fallback = 1): number {
+  const n = Number(process.env[`${prefix}_GETLOGS_CONCURRENCY`] ?? fallback);
+  return Number.isInteger(n) && n >= 1 ? n : fallback;
+}
+
 function extraEvmNetwork(base: {
   network: "base-sepolia" | "robinhood-testnet" | "hyperevm-testnet" | "tempo-testnet";
   prefix: string;
@@ -31,6 +40,8 @@ function extraEvmNetwork(base: {
   confirmations: number;
   maxChunksPerCycle?: number;
   chunkIntervalMs?: number;
+  /** Default for <PREFIX>_GETLOGS_CONCURRENCY. */
+  getLogsConcurrency?: number;
 }) {
   const env = (name: string) => process.env[`${base.prefix}_${name}`];
   return {
@@ -43,6 +54,7 @@ function extraEvmNetwork(base: {
     deployBlock: Number(env("START_BLOCK") ?? base.deployBlock),
     chunk: Number(env("BLOCK_RANGE_CHUNK") ?? base.chunk),
     minChunk: Number(env("MIN_BLOCK_RANGE_CHUNK") ?? process.env.MIN_BLOCK_RANGE_CHUNK ?? 1),
+    concurrency: getLogsConcurrency(base.prefix, base.getLogsConcurrency),
     maxChunksPerCycle: Number(env("PEDACOS_POR_CICLO") ?? base.maxChunksPerCycle ?? 20),
     chunkIntervalMs: Number(env("INTERVALO_PEDACOS_MS") ?? base.chunkIntervalMs ?? 0),
     confirmations: Number(env("CONFIRMACOES") ?? base.confirmations),
@@ -73,6 +85,8 @@ function v2EvmNetwork(base: {
   confirmations: number;
   maxChunksPerCycle?: number;
   chunkIntervalMs?: number;
+  /** Default for <PREFIX>_GETLOGS_CONCURRENCY. */
+  getLogsConcurrency?: number;
   /** SignatureRegistryV3 on this network and the timestamp of its deploy block (= v2 retirement). */
   registryV3?: string;
   v2RetiredAt?: number;
@@ -98,6 +112,7 @@ function v2EvmNetwork(base: {
     deployBlock: Number(env("START_BLOCK") ?? base.deployBlock),
     chunk: base.chunk,
     minChunk: Number(env("MIN_BLOCK_RANGE_CHUNK") ?? process.env.MIN_BLOCK_RANGE_CHUNK ?? 1),
+    concurrency: getLogsConcurrency(base.prefix, base.getLogsConcurrency),
     maxChunksPerCycle: base.maxChunksPerCycle ?? 20,
     chunkIntervalMs: base.chunkIntervalMs ?? 0,
     confirmations: base.confirmations,
@@ -241,6 +256,8 @@ export const config = {
       confirmations: 2,
       maxChunksPerCycle: 30,
       chunkIntervalMs: 1000,
+      // Parallel ranges: one 10-block range takes ~4.7 s and the chain makes ~1 block/s.
+      getLogsConcurrency: 4,
     }),
     extraEvmNetwork({
       network: "tempo-testnet",
@@ -315,6 +332,7 @@ export const config = {
         confirmations: 2,
         maxChunksPerCycle: 30,
         chunkIntervalMs: 1000,
+        getLogsConcurrency: 4,
       }),
       v2EvmNetwork({
         network: "tempo-testnet",

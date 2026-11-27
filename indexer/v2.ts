@@ -2,7 +2,8 @@ import { ethers } from "ethers";
 import { PublicKey } from "@solana/web3.js";
 import { SIGNATURE_REGISTRY_V2_ABI, SIGNATURE_REGISTRY_V3_ABI, TRANSFERABLE_RECORD_ABI } from "./abi";
 import { BorshReader, programDataPayloads, type SolanaRpc } from "./solana";
-import { createChunkController, fetchAdaptive } from "./chunking";
+import { createChunkController, createConcurrencyController, fetchAdaptive } from "./chunking";
+import { backfillLine, createChainRate, scanParallel } from "./parallel-scan";
 import { withBackoff, type BackoffOptions } from "./rate-limit";
 
 /**
@@ -215,6 +216,8 @@ export function createEvmV2Indexer(deps: {
   chunk: number;
   /** Floor of the adaptive chunk (default 1). */
   minChunk?: number;
+  /** Ranges read at once (default 1: one at a time). Above 1: parallel-scan.ts. */
+  concurrency?: number;
   maxChunksPerCycle: number;
   confirmations: number;
   chunkIntervalMs?: number;
@@ -226,15 +229,70 @@ export function createEvmV2Indexer(deps: {
   const addresses = [deps.registry, deps.registryV3, deps.etr].filter((a): a is string => Boolean(a)).map((a) => a.toLowerCase());
   const options: BackoffOptions = { ...deps.backoff, sleep: deps.sleep };
   const net = <T,>(fn: () => Promise<T>, context: string) => withBackoff(fn, `${deps.network}-v2: ${context}`, options);
+  const concurrency = createConcurrencyController({ max: deps.concurrency ?? 1 });
+  const chainRate = createChainRate();
   let checkpoint = 0;
 
   async function start() {
     checkpoint = await db.readCheckpoint(deps.source, deps.deployBlock - 1);
   }
 
+  /** Rows of one range, then its checkpoint. */
+  async function handleRange(logs: ethers.Log[], to: number): Promise<number> {
+    let saved = 0;
+    const sorted = [...logs].sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
+    const times = new Map<number, number | null>();
+    for (const log of sorted) {
+      if (!addresses.includes(log.address.toLowerCase())) continue;
+      let blockTime: number | null = null;
+      if (deps.etr && log.address.toLowerCase() === deps.etr.toLowerCase()) {
+        if (!times.has(log.blockNumber)) {
+          const b = await net(() => rpc.getBlock(log.blockNumber), `getBlock ${log.blockNumber}`);
+          times.set(log.blockNumber, b ? Number(b.timestamp) : null);
+        }
+        blockTime = times.get(log.blockNumber) ?? null;
+      }
+      const decoded = decodeEvmV2Log(
+        log,
+        deps.network,
+        { registry: deps.registry, registryV3: deps.registryV3, etr: deps.etr, v2RetiredAt: deps.v2RetiredAt },
+        blockTime,
+      );
+      if (decoded?.signature) {
+        await db.saveSignatureV2(decoded.signature);
+        saved++;
+      } else if (decoded?.etr) {
+        await db.saveEtrEvent(decoded.etr);
+        saved++;
+      }
+    }
+    await db.saveCheckpoints([deps.source], to);
+    checkpoint = to;
+    return saved;
+  }
+
   async function cycle(): Promise<{ saved: number; upToDate: boolean }> {
     const tip = (await net(() => rpc.getBlockNumber(), "getBlockNumber")) - deps.confirmations;
     let saved = 0;
+    if (concurrency.max > 1) {
+      const r = await scanParallel({
+        checkpoint,
+        tip,
+        controller,
+        concurrency,
+        maxRanges: deps.maxChunksPerCycle,
+        intervalMs: deps.chunkIntervalMs ?? 0,
+        fetchRange: (from, to) => rpc.getLogs({ address: addresses, fromBlock: from, toBlock: to }),
+        handle: async (to, logs) => {
+          saved += await handleRange(logs, to);
+        },
+        sleep: deps.sleep,
+        backoff: deps.backoff,
+        label: `${deps.network}-v2`,
+      });
+      if (checkpoint < tip) console.log(backfillLine(`${deps.network}-v2`, r, tip, chainRate(tip)));
+      return { saved, upToDate: checkpoint >= tip };
+    }
     for (let i = 0; i < deps.maxChunksPerCycle && checkpoint < tip; i++) {
       if (i > 0 && deps.chunkIntervalMs) await deps.sleep(deps.chunkIntervalMs);
       const { to, result: logs } = await fetchAdaptive(
@@ -243,34 +301,7 @@ export function createEvmV2Indexer(deps: {
         (from, toBlock) => net(() => rpc.getLogs({ address: addresses, fromBlock: from, toBlock }), `getLogs ${from}–${toBlock}`),
         { controller, timeoutBackoff: { baseMs: deps.backoff.baseMs, capMs: deps.backoff.capMs }, sleep: deps.sleep, label: `${deps.network}-v2: getLogs` },
       );
-      const sorted = [...logs].sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
-      const times = new Map<number, number | null>();
-      for (const log of sorted) {
-        if (!addresses.includes(log.address.toLowerCase())) continue;
-        let blockTime: number | null = null;
-        if (deps.etr && log.address.toLowerCase() === deps.etr.toLowerCase()) {
-          if (!times.has(log.blockNumber)) {
-            const b = await net(() => rpc.getBlock(log.blockNumber), `getBlock ${log.blockNumber}`);
-            times.set(log.blockNumber, b ? Number(b.timestamp) : null);
-          }
-          blockTime = times.get(log.blockNumber) ?? null;
-        }
-        const decoded = decodeEvmV2Log(
-          log,
-          deps.network,
-          { registry: deps.registry, registryV3: deps.registryV3, etr: deps.etr, v2RetiredAt: deps.v2RetiredAt },
-          blockTime,
-        );
-        if (decoded?.signature) {
-          await db.saveSignatureV2(decoded.signature);
-          saved++;
-        } else if (decoded?.etr) {
-          await db.saveEtrEvent(decoded.etr);
-          saved++;
-        }
-      }
-      await db.saveCheckpoints([deps.source], to);
-      checkpoint = to;
+      saved += await handleRange(logs, to);
     }
     return { saved, upToDate: checkpoint >= tip };
   }
