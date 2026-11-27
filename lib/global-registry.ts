@@ -1,7 +1,7 @@
 import type { Locale } from "./i18n/locale";
 
 /**
- * Global Registry: Niara Exchange settlements as read from each network by the
+ * Exchange Registry (the /global-registry routes; formerly "Global Registry"): Niara Exchange settlements as read from each network by the
  * Register indexer (indexer/exchange-*.ts) and served by its read API
  * (indexer/exchange-api.ts). Nothing here comes from the Exchange's own
  * database or API.

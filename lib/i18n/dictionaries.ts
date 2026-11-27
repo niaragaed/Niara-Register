@@ -15,7 +15,7 @@ export const en = {
     brand: "Niara",
     product: "Register",
     pmes: "SME Registry",
-    global: "Global Registry",
+    global: "Exchange Registry",
     signing: "Document Signing",
     verify: "Verify",
     transferable: "Transferable Records",
@@ -41,7 +41,7 @@ export const en = {
         text: "Actual transactions from the SME offerings, indexed directly from the contracts on Sepolia and the program on Solana Devnet.",
       },
       global: {
-        title: "Global Registry",
+        title: "Exchange Registry",
         text: "Niara Exchange settlements, read directly from each network by the Register's own indexer. Testnets only, test tokens.",
       },
       signing: {
@@ -64,7 +64,7 @@ export const en = {
   },
 
   global: {
-    eyebrow: "Global Registry",
+    eyebrow: "Exchange Registry",
     title: "Niara Exchange settlements",
     lede:
       "An independent on-chain record of every Niara Exchange settlement on Solana Devnet, Base Sepolia, Robinhood Chain Testnet and Tempo Testnet, most recent first. Each row links to its transaction on the network's own explorer.",
@@ -104,7 +104,7 @@ export const en = {
     loading: "Loading…",
     loadError: "Could not load more settlements. Try again.",
     // Deep link /global-registry/{network}/{tx}
-    txEyebrow: "Global Registry · settlement",
+    txEyebrow: "Exchange Registry · settlement",
     txTitle: "Settlement on",
     txNotIndexedTitle: "Not indexed yet",
     txNotIndexedText:
@@ -667,7 +667,7 @@ export const pt: Dictionary = {
     brand: "Niara",
     product: "Register",
     pmes: "Registro PMEs",
-    global: "Registro Global",
+    global: "Registro da Exchange",
     signing: "Assinatura",
     verify: "Verificar",
     transferable: "Registros Transferíveis",
@@ -693,7 +693,7 @@ export const pt: Dictionary = {
         text: "Transações reais da captação de PMEs, indexadas diretamente dos contratos na Sepolia e do programa na Solana Devnet.",
       },
       global: {
-        title: "Registro Global",
+        title: "Registro da Exchange",
         text: "Liquidações da Niara Exchange, lidas diretamente de cada rede pelo indexador do próprio Register. Apenas redes de teste, tokens de teste.",
       },
       signing: {
@@ -716,7 +716,7 @@ export const pt: Dictionary = {
   },
 
   global: {
-    eyebrow: "Registro Global",
+    eyebrow: "Registro da Exchange",
     title: "Liquidações da Niara Exchange",
     lede:
       "Um registro on-chain independente de cada liquidação da Niara Exchange na Solana Devnet, Base Sepolia, Robinhood Chain Testnet e Tempo Testnet, da mais recente para a mais antiga. Cada linha aponta para a transação no explorador da própria rede.",
@@ -755,7 +755,7 @@ export const pt: Dictionary = {
     loadMore: "Carregar mais",
     loading: "Carregando…",
     loadError: "Não foi possível carregar mais liquidações. Tente novamente.",
-    txEyebrow: "Registro Global · liquidação",
+    txEyebrow: "Registro da Exchange · liquidação",
     txTitle: "Liquidação na",
     txNotIndexedTitle: "Ainda não indexada",
     txNotIndexedText:
