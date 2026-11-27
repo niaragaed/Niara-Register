@@ -57,7 +57,7 @@ const rpc: LightEvmRpc = {
   async getLogs({ address, fromBlock, toBlock }) {
     if (failNextGetLogs) {
       failNextGetLogs = false;
-      throw new Error("RPC went down");
+      throw new TypeError("fetch failed"); // the node is down: a smaller range would not help
     }
     if (toBlock - fromBlock + 1 > 500) throw new Error(`range too large: ${fromBlock}-${toBlock}`);
     return logs.filter(

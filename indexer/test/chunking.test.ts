@@ -5,7 +5,8 @@
  * budget of the Exchange cycle is tested in exchange.test.ts.
  */
 import { ethers } from "ethers";
-import { createChunkController, fetchAdaptive, isRangeRefusal, isTimeout } from "../chunking";
+import { createChunkController, fetchAdaptive, isRangeRefusal, isTimeout, isUnreachable, providerRangeLimit } from "../chunking";
+import { createJsonRpc, RpcError as JsonRpcError } from "../exchange-rpc";
 import { RpcError } from "../exchange-rpc";
 
 let failures = 0;
@@ -58,6 +59,11 @@ function check(c: boolean, d: string) {
   c.refused();
   check(c.size === 4, "never below the floor");
   check(createChunkController({ min: 1, max: 10 }).size === 10, "initial defaults to max");
+  const capped = createChunkController({ min: 1, max: 10000, growAfter: 3 });
+  check(capped.refused(10000, 10) === 10 && capped.ceiling === 10, "a stated provider limit: jumps straight to it (10000 → 10)");
+  for (let i = 0; i < 30; i++) capped.success();
+  check(capped.size === 10, "and never grows back into the refusal");
+  check(capped.refused(10, 10) === 5, "a refusal at the stated limit itself halves");
   check(createChunkController({ min: 20, max: 10 }).size === 20, "max below min is lifted to min");
 
   console.log("\n— fetchAdaptive —");
@@ -107,16 +113,27 @@ function check(c: boolean, d: string) {
   }
   check(floored.size === 8 && attempts === 4, `floor of 8: 64 → 32 → 16 → 8, then gives up (${attempts} attempts)`);
 
-  let other = 0;
+  let down = 0;
   try {
     await fetchAdaptive(1, 100, async () => {
-      other++;
-      throw new Error("invalid argument");
+      down++;
+      throw new TypeError("fetch failed");
     }, opts(createChunkController({ min: 1, max: 50 })));
   } catch {
     /* expected */
   }
-  check(other === 1, "an error that is not a range refusal is not retried");
+  check(down === 1, "an unreachable node is not retried with smaller ranges");
+
+  // An unrecognized error still shrinks the range: an identical retry can never succeed.
+  const unknown = createChunkController({ min: 1, max: 40 });
+  const seen: number[] = [];
+  const r2 = await fetchAdaptive(1, 1000, async (f, t) => {
+    seen.push(t - f + 1);
+    if (t - f + 1 > 10) throw new RpcError("eth_getLogs", 400, "something new from a provider", 400);
+    return "ok";
+  }, opts(unknown));
+  check(r2.to === 10 && seen.join() === "40,20,10", `unrecognized error: 40 → 20 → 10, then accepted (${seen.join()})`);
+
 
   const clipped = await fetchAdaptive(90, 100, async (f, t) => [f, t], opts(createChunkController({ min: 1, max: 50 })));
   check(clipped.to === 100 && clipped.result.join() === "90,100", "the range is clipped to the limit");

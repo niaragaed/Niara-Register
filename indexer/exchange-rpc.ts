@@ -10,12 +10,15 @@
  */
 
 export class RpcError extends Error {
-  /** JSON-RPC error object, or { code: httpStatus } for an HTTP failure (read by isRateLimit). */
+  /** JSON-RPC error object, or { code: httpStatus } for an HTTP failure with no JSON-RPC body (read by isRateLimit). */
   readonly error: { code: number; message: string };
-  constructor(method: string, code: number, message: string) {
-    super(`${method}: ${code} ${message}`);
+  /** HTTP status when the response was not 2xx (0 for no response). */
+  readonly httpStatus?: number;
+  constructor(method: string, code: number, message: string, httpStatus?: number) {
+    super(`${method}: ${httpStatus && httpStatus !== code ? `HTTP ${httpStatus} ` : ""}${code} ${message}`);
     this.name = "RpcError";
     this.error = { code, message };
+    this.httpStatus = httpStatus;
   }
 }
 
@@ -40,7 +43,17 @@ export function createJsonRpc(url: string, options: { timeoutMs?: number } = {})
       clearTimeout(timer);
     }
     if (!response.ok) {
-      throw new RpcError(method, response.status, response.status === 429 ? "Too Many Requests" : `HTTP ${response.status}`);
+      // Providers put the reason in a JSON-RPC body on 4xx/5xx (Alchemy: HTTP 400
+      // "-32600 ... up to a 10 block range"; Base: HTTP 413 "-32614 eth_getLogs is
+      // limited to a 200 range"). Read it, or the range limit is invisible.
+      const rpcError = await response
+        .json()
+        .then((b: { error?: { code?: unknown; message?: unknown } }) => b?.error)
+        .catch(() => undefined);
+      const message = typeof rpcError?.message === "string" ? rpcError.message : response.status === 429 ? "Too Many Requests" : `HTTP ${response.status}`;
+      // A 429 stays code 429 whatever the body says, so isRateLimit sees it.
+      const code = response.status !== 429 && typeof rpcError?.code === "number" ? rpcError.code : response.status;
+      throw new RpcError(method, code, message, response.status);
     }
     const body = (await response.json()) as { result?: T; error?: { code: number; message: string } };
     if (body.error) throw new RpcError(method, body.error.code, body.error.message);

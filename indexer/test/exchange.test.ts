@@ -285,6 +285,52 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
   check(!r.upToDate && budgetedSource.cursor === 62175999 + 50, `time budget: 5 s at 1 s per range stops after 5 ranges (cursor +${budgetedSource.cursor - 62175999})`);
   r = await budgetedSource.cycle();
   check(budgetedSource.cursor === 62175999 + 100, "the next cycle resumes from the cursor");
+  // Regression, production 2026-11-27: Alchemy's free tier answers any eth_getLogs
+  // over 10 blocks with HTTP 400 and a JSON-RPC body. The source used to see a bare
+  // "HTTP 400", never shrink the range and never save the cursor again.
+  const alchemyRpc: JsonRpc = async <T,>(method: string, params: unknown[]): Promise<T> => {
+    if (method === "eth_getLogs") {
+      const [f] = params as [{ fromBlock: string; toBlock: string }];
+      const from = Number(f.fromBlock);
+      if (Number(f.toBlock) - from + 1 > 10) {
+        throw new RpcError(
+          method,
+          -32600,
+          `Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range. Based on your parameters, this block range should work: [0x${from.toString(16)}, 0x${(from + 9).toString(16)}]. Upgrade to PAYG for expanded block range.`,
+          400,
+        );
+      }
+    }
+    return evmRpc<T>(method, params);
+  };
+  const m8 = memory();
+  const saves: number[] = [];
+  const db8: ExchangeDb = { ...m8.db, saveCursor: async (src, v) => { saves.push(v); await m8.db.saveCursor(src, v); } };
+  const alchemyCfg = { ...baseCfg, maxBlockRange: 10000 };
+  const viaAlchemy = createEvmSettlementSource({ cfg: alchemyCfg, rpc: alchemyRpc, db: db8, backoff, sleep });
+  await viaAlchemy.start();
+  r = await viaAlchemy.cycle();
+  check(r.upToDate && viaAlchemy.cursor === FINALIZED && viaAlchemy.range === 10, `Alchemy 10-block cap: 10000 → 10 at once, scanned to the head (range ${viaAlchemy.range})`);
+  check(saves.length === 41 && saves[0] === 62176009 && saves.every((v, i) => i === 0 || v - saves[i - 1] <= 10), `cursor saved after every successful range (${saves.length} saves)`);
+  check(m8.rows.size === 1, "the settlement inside the scanned blocks is stored");
+  // A later failure in the same cycle keeps every range already done.
+  let okRanges = 0;
+  const dying: JsonRpc = async <T,>(method: string, params: unknown[]): Promise<T> => {
+    if (method === "eth_getLogs" && ++okRanges > 3) throw new TypeError("fetch failed");
+    return alchemyRpc<T>(method, params);
+  };
+  const m9 = memory();
+  const viaDying = createEvmSettlementSource({ cfg: alchemyCfg, rpc: dying, db: m9.db, backoff, sleep });
+  await viaDying.start();
+  let died = false;
+  try {
+    await viaDying.cycle();
+  } catch {
+    died = true;
+  }
+  // Calls: 1 refused (10000) + 2 accepted, then the node dies.
+  check(died && m9.cursors.get("exchange-base-sepolia") === 62175999 + 20, `node dies mid-cycle: the 2 ranges done stay saved (${m9.cursors.get("exchange-base-sepolia")})`);
+
   // A provider timeout halves the range (with a floor) instead of retrying the same one.
   const timeoutRpc: JsonRpc = async <T,>(method: string, params: unknown[]): Promise<T> => {
     if (method === "eth_getLogs") {

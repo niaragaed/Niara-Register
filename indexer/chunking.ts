@@ -9,11 +9,20 @@ import { isRateLimit } from "./rate-limit";
  *   cap, or a server-side timeout (HyperEVM's `-32000 execution aborted
  *   (timeout = 5s)`). Retrying the same range can never help, so the caller
  *   halves it.
+ * - `providerRangeLimit` reads the limit a provider states in its refusal
+ *   (Alchemy: "up to a 10 block range ... should work: [a, b]"; Base:
+ *   "eth_getLogs is limited to a 200 range").
  * - `createChunkController` holds the current range size: double after a run
  *   of successes up to a maximum, halve (never below a floor) on a refusal.
- * - `fetchAdaptive` runs one range with that controller: on a refusal it
- *   halves and retries (with a growing wait after timeouts), and gives up at
- *   the floor.
+ *   A stated provider limit becomes a ceiling, so the range jumps straight to
+ *   it and never grows back into a refusal.
+ * - `fetchAdaptive` runs one range with that controller. Any failure that is
+ *   not a rate limit or the node being unreachable halves the range and
+ *   retries (with a growing wait after timeouts), and gives up at the floor.
+ *   Unrecognized errors halve too: retrying an identical range can never
+ *   succeed, and an unknown provider message must not stop a source
+ *   (2026-11-27: Alchemy's HTTP 400 was not recognized and the Exchange EVM
+ *   sources retried the same range forever).
  *
  * A rate limit (429) is not a range problem: it keeps going through
  * withBackoff, and `isRangeRefusal` is false for it.
@@ -51,9 +60,43 @@ export function isRangeRefusal(error: unknown): boolean {
   if (isTimeout(error)) return true;
   const code = errorCode(error);
   if (code === 413) return true;
+  if (providerRangeLimit(error) !== null) return true;
   return /block range|range (is )?too (large|wide|big)|exceed(s|ed)? (the )?(max|maximum|limit|range)|query returned more than|too many (results|logs)|more than \d+ results|response size|limit exceeded|payload too large|\b413\b|ranges? (over|larger|greater)|max(imum)? (block )?range|eth_getlogs is limited|up to a \d+ block range|invalid block range/i.test(
     errorText(error),
   );
+}
+
+/** The node could not be reached at all: a smaller range would not help. */
+export function isUnreachable(error: unknown): boolean {
+  if (isTimeout(error)) return false;
+  const e = error as { code?: unknown; error?: { code?: number; message?: string }; httpStatus?: number };
+  if (e?.code === "NETWORK_ERROR") return true;
+  if (e?.error?.code === 0 && e.error.message === "network error") return true;
+  if (e?.httpStatus === 502 || e?.httpStatus === 503) return true;
+  return /fetch failed|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|socket hang up|getaddrinfo/i.test(errorText(error));
+}
+
+/**
+ * The largest range the provider says it accepts, or null:
+ * "should work: [0x3d38a92, 0x3d38a9b]" (Alchemy, inclusive) → 10;
+ * "up to a 10 block range" → 10; "limited to a 200 range" → 200.
+ */
+export function providerRangeLimit(error: unknown): number | null {
+  const text = errorText(error);
+  const pair = /should work:?\s*\[\s*(0x[0-9a-f]+|\d+)\s*,\s*(0x[0-9a-f]+|\d+)\s*\]/i.exec(text);
+  if (pair) {
+    const span = Number(BigInt(pair[2])) - Number(BigInt(pair[1])) + 1;
+    if (span >= 1) return span;
+  }
+  // "up to a 10 block range", "limited to a 200 range", "up to a 2K block range", "maximum block range is 5000".
+  const stated =
+    /(?:up to (?:a )?|limited to (?:a )?)([\d,]+)(k?)[ -]*(?:block )?range/i.exec(text) ??
+    /max(?:imum)? (?:block )?range (?:is |of )?([\d,]+)(k?)\b/i.exec(text);
+  if (stated) {
+    const n = Number(stated[1].replace(/,/g, "")) * (stated[2] ? 1000 : 1);
+    if (Number.isSafeInteger(n) && n >= 1) return n;
+  }
+  return null;
 }
 
 export type ChunkOptions = {
@@ -72,6 +115,8 @@ export function createChunkController(options: ChunkOptions) {
   const max = Math.max(min, Math.floor(options.max));
   const growAfter = Math.max(1, options.growAfter ?? 3);
   let size = Math.min(max, Math.max(min, Math.floor(options.initial ?? max)));
+  /** A limit the provider stated: the range never grows above it. */
+  let ceiling = max;
   let streak = 0;
 
   return {
@@ -84,16 +129,29 @@ export function createChunkController(options: ChunkOptions) {
     get max() {
       return max;
     },
-    /** The range worked: after `growAfter` in a row, doubles (up to max). */
+    /** max, or the provider's stated limit once one was seen. */
+    get ceiling() {
+      return ceiling;
+    },
+    /** The range worked: after `growAfter` in a row, doubles (up to the ceiling). */
     success(): void {
-      if (++streak >= growAfter && size < max) {
-        size = Math.min(max, size * 2);
+      if (++streak >= growAfter && size < ceiling) {
+        size = Math.min(ceiling, size * 2);
         streak = 0;
       }
     },
-    /** The range was refused: halves the one that was tried (never below min). Returns the new size. */
-    refused(attempted: number = size): number {
-      size = Math.max(min, Math.floor(Math.min(attempted, size) / 2));
+    /**
+     * The range was refused. With the provider's stated limit, jumps to it and
+     * keeps it as the ceiling; otherwise halves the range that was tried. Never
+     * below min. Returns the new size.
+     */
+    refused(attempted: number = size, statedLimit: number | null = null): number {
+      if (statedLimit !== null && statedLimit < attempted) {
+        ceiling = Math.max(min, Math.min(ceiling, statedLimit));
+        size = ceiling;
+      } else {
+        size = Math.max(min, Math.floor(Math.min(attempted, size) / 2));
+      }
       streak = 0;
       return size;
     },
@@ -112,9 +170,10 @@ export type AdaptiveOptions = {
 };
 
 /**
- * Fetches [from, min(from + size − 1, limit)]. A refused range is halved and
+ * Fetches [from, min(from + size − 1, limit)]. A failed range is shrunk and
  * retried until it succeeds or the floor is reached (then the error goes up).
- * Returns the last block of the range that worked.
+ * Rate limits (already retried by withBackoff) and an unreachable node go up
+ * at once. Returns the last block of the range that worked.
  */
 export async function fetchAdaptive<T>(
   from: number,
@@ -131,9 +190,12 @@ export async function fetchAdaptive<T>(
       return { to, result };
     } catch (error) {
       const span = to - from + 1;
-      if (!isRangeRefusal(error) || span <= opts.controller.min) throw error;
-      const next = opts.controller.refused(span);
-      console.warn(`[indexer] ${opts.label}: ${from}–${to} refused (${(error as { shortMessage?: string }).shortMessage ?? (error as Error).message}); trying ${next} blocks`);
+      if (isRateLimit(error) || isUnreachable(error) || span <= opts.controller.min) throw error;
+      const next = opts.controller.refused(span, providerRangeLimit(error));
+      const reason = (error as { shortMessage?: string }).shortMessage ?? (error as Error).message;
+      console.warn(
+        `[indexer] ${opts.label}: ${from}–${to} ${isRangeRefusal(error) ? "refused" : "failed with an unrecognized error"} (${reason}); trying ${next} blocks`,
+      );
       if (isTimeout(error)) {
         const wait = Math.min(opts.timeoutBackoff.baseMs * 2 ** timeouts, opts.timeoutBackoff.capMs);
         timeouts++;
