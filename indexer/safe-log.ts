@@ -17,8 +17,18 @@ import { formatWithOptions } from "node:util";
 
 const URL_WITH_KEY = /\/v2\/[A-Za-z0-9_-]+/g;
 
+// Other providers' keys: Infura /v3/<key>, QuickNode <host>.quiknode.pro/<token>,
+// Helius and others ?api-key=<key> / ?apikey= / ?token=.
+const INFURA_KEY = /\/v3\/[A-Za-z0-9_-]{16,}/g;
+const QUICKNODE_TOKEN = /(\.quiknode\.pro)\/[A-Za-z0-9_-]+/g;
+const QUERY_KEY = /([?&](?:api[-_]?key|key|token|access[-_]?token)=)[^&\s"'\\]+/gi;
+
 export function maskSecrets(text: string): string {
-  let masked = text.replace(URL_WITH_KEY, "/v2/***");
+  let masked = text
+    .replace(URL_WITH_KEY, "/v2/***")
+    .replace(INFURA_KEY, "/v3/***")
+    .replace(QUICKNODE_TOKEN, "$1/***")
+    .replace(QUERY_KEY, "$1***");
   // Also the bare key, in case it shows up outside a URL. Read on every call
   // because dotenv may load after this module.
   const key = process.env.ALCHEMY_API_KEY;

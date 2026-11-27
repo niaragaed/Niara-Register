@@ -15,6 +15,7 @@ import { createExchangeDb } from "./exchange-db";
 import { startExchangeIndexer } from "./exchange";
 import { startApiServer } from "./exchange-api";
 import { createHeadReader } from "./exchange-head";
+import { logRpcSources, redactRpcUrl } from "./rpc-sources";
 
 // Entry point: wires the core (indexer.ts) to the real dependencies (Alchemy
 // RPC, Supabase, the real clock) and runs the loop.
@@ -273,11 +274,12 @@ async function pmesSolanaLoop(): Promise<void> {
 }
 
 async function loop(): Promise<void> {
+  logRpcSources();
   await indexer.start();
   if (solanaIndexer) {
     await solanaIndexer.start();
     console.log(
-      `[indexer] Solana: program ${config.solana.programId} at ${config.solana.rpcUrl} — checkpoint (${SOURCE_SOLANA}) slot ${solanaIndexer.checkpoint}`,
+      `[indexer] Solana: program ${config.solana.programId} at ${redactRpcUrl(config.solana.rpcUrl)} — checkpoint (${SOURCE_SOLANA}) slot ${solanaIndexer.checkpoint}`,
     );
   } else {
     console.log("[indexer] Solana: disabled (SOLANA_DESATIVADO=1)");
@@ -289,7 +291,7 @@ async function loop(): Promise<void> {
   for (const extra of extraEvmIndexers) {
     await extra.idx.start();
     console.log(
-      `[indexer] ${extra.cfg.network}: RegistroAssinaturas at ${extra.cfg.address} via ${extra.cfg.rpcUrl} — checkpoint (${extra.cfg.source}) block ${extra.idx.checkpoint}`,
+      `[indexer] ${extra.cfg.network}: RegistroAssinaturas at ${extra.cfg.address} via ${redactRpcUrl(extra.cfg.rpcUrl)} — checkpoint (${extra.cfg.source}) block ${extra.idx.checkpoint}`,
     );
     if (config.dryRun) {
       const r = await extra.idx.cycle();

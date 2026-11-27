@@ -148,6 +148,26 @@ Expected backfill time is bounded by the provider, not by this code: it is the r
 
 Optional: `<PREFIX>FINALITY` (`finalized`, the default, or `depth`), `<PREFIX>CONFIRMATIONS` (depth mode, and the fallback when an RPC rejects the `finalized` tag), `<PREFIX>MAX_BLOCK_RANGE`, `<PREFIX>MIN_BLOCK_RANGE`, `<PREFIX>CYCLE_BUDGET_MS`, `<PREFIX>PROGRESS_EVERY_CHUNKS`, `<PREFIX>RANGES_PER_CYCLE`, `<PREFIX>RANGE_INTERVAL_MS`, `<PREFIX>POLL_INTERVAL_MS`, `<PREFIX>DISABLED=1`; `EXCHANGE_SOLANA_POLL_INTERVAL_MS`, `EXCHANGE_SOLANA_DISABLED=1`; `EXCHANGE_POLL_INTERVAL_MS` (all networks, default 30 s); `EXCHANGE_INDEXER_DISABLED=1` (every settlement source off; the API keeps running); `EXCHANGE_LEASE_TTL_SECONDS` (default 90).
 
+## RPC variables
+
+Each source reads exactly one variable for its RPC. At startup the indexer prints one line per row below (`[indexer] RPC — …`) with the URL redacted (scheme and host only; path and query hidden), and warns about any `*_RPC_URL` variable that nothing reads: a misspelt name is otherwise ignored and the source silently uses its default (or stays off). `rpc-sources.ts` holds the table; `test/rpc-sources.test.ts` checks it against the config.
+
+| Sources | Variable | When not set |
+|---|---|---|
+| Ethereum Sepolia v1 (`pmes`, `orquestrador`, `assinaturas`) and `sepolia-v2` | `ALCHEMY_API_KEY` (the key; the URL is `eth-sepolia.g.alchemy.com/v2/<key>`) | required |
+| `base-sepolia-assinaturas`, `base-sepolia-v2` | `BASE_SEPOLIA_RPC_URL` | `https://sepolia.base.org` |
+| `robinhood-testnet-assinaturas`, `robinhood-testnet-v2` | `ROBINHOOD_RPC_URL` | `https://rpc.testnet.chain.robinhood.com` |
+| `hyperevm-testnet-assinaturas`, `hyperevm-testnet-v2` | `HYPEREVM_RPC_URL` | `https://rpc.hyperliquid-testnet.xyz/evm` |
+| `tempo-testnet-assinaturas`, `tempo-testnet-v2` | `TEMPO_RPC_URL` | `https://rpc.moderato.tempo.xyz` |
+| `solana`, `solana-v2`, `pmes-solana` | `SOLANA_RPC_URL` | `https://api.devnet.solana.com` |
+| `exchange-solana-devnet` | `EXCHANGE_SOLANA_RPC_URL` | source not configured |
+| `exchange-base-sepolia` | `EXCHANGE_BASE_SEPOLIA_RPC_URL` | source not configured |
+| `exchange-robinhood-testnet` | `EXCHANGE_ROBINHOOD_RPC_URL` | source not configured |
+| `exchange-tempo-testnet` | `EXCHANGE_TEMPO_RPC_URL` | source not configured |
+| `exchange-hyperevm-testnet` | `EXCHANGE_HYPEREVM_RPC_URL` (not `EXCHANGE_HYPERLIQUID_…`) | source not configured |
+
+`SEPOLIA_RPC_URL` is read only by `scripts/verify-integrity.ts`. The log mask (`safe-log.ts`) hides Alchemy `/v2/<key>`, Infura `/v3/<key>`, QuickNode tokens and `?api-key=` / `?key=` / `?token=` query values.
+
 ## Tests
 
 `npm test` runs `test/backlog.test.ts`, `test/solana.test.ts`, `test/evm-signatures.test.ts` and `test/pmes-solana.test.ts`.
